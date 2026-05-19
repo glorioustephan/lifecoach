@@ -2,7 +2,8 @@
 import path from "node:path";
 import dotenv from "dotenv";
 import { findWorkspaceRoot } from "@lifecoach/core";
-dotenv.config({ path: path.join(findWorkspaceRoot(), ".env") });
+// `override: true` so .env wins over shadow shell values.
+dotenv.config({ path: path.join(findWorkspaceRoot(), ".env"), override: true });
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";

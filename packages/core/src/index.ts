@@ -3,6 +3,7 @@ import { createStorage, type Storage } from "./storage/index.js";
 import { createEmbedder, type Embedder } from "./embeddings/index.js";
 import { createMemory, type Memory } from "./memory/index.js";
 import { AgentRuntime } from "./agent/index.js";
+import { AnthropicExtractor, type Extractor } from "./ingest/index.js";
 
 export interface Lifecoach {
   config: LifecoachConfig;
@@ -10,6 +11,8 @@ export interface Lifecoach {
   embedder: Embedder;
   memory: Memory;
   agent: AgentRuntime;
+  /** Available when ANTHROPIC_API_KEY is set. Used by IngestPipeline for fact + measurement extraction. */
+  extractor: Extractor | null;
   close: () => void;
 }
 
@@ -22,7 +25,13 @@ export const createLifecoach = (overrides?: Partial<LifecoachConfig>): Lifecoach
   const storage = createStorage(config);
   const embedder = createEmbedder(config);
   const memory = createMemory(storage, embedder);
-  const agent = new AgentRuntime({ config, memory, storage, embedder });
+  const extractor = config.anthropicApiKey
+    ? new AnthropicExtractor({
+        apiKey: config.anthropicApiKey,
+        model: config.extractionModel,
+      })
+    : null;
+  const agent = new AgentRuntime({ config, memory, storage, embedder, extractor });
 
   return {
     config,
@@ -30,6 +39,7 @@ export const createLifecoach = (overrides?: Partial<LifecoachConfig>): Lifecoach
     embedder,
     memory,
     agent,
+    extractor,
     close: () => storage.close(),
   };
 };

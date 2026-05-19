@@ -1,6 +1,7 @@
 import type { Memory } from "../../memory/index.js";
 import type { Storage } from "../../storage/index.js";
 import type { Embedder } from "../../embeddings/index.js";
+import type { Extractor } from "../../ingest/index.js";
 import { buildProfileTools } from "./profile.js";
 import { buildRecallTool } from "./recall.js";
 import { buildRememberTools } from "./remember.js";
@@ -13,6 +14,7 @@ export interface ToolDeps {
   memory: Memory;
   storage: Storage;
   embedder: Embedder;
+  extractor: Extractor | null;
 }
 
 /**
@@ -25,7 +27,12 @@ export const buildAllTools = (deps: ToolDeps) => [
   ...buildEpisodicTools(deps.memory),
   ...buildMeasurementTools(deps.memory),
   ...buildReflectionTools(deps.memory),
-  ...buildIngestTools({ storage: deps.storage, embedder: deps.embedder }),
+  ...buildIngestTools({
+    storage: deps.storage,
+    embedder: deps.embedder,
+    memory: deps.memory,
+    extractor: deps.extractor,
+  }),
 ];
 
 export type LifecoachTool = ReturnType<typeof buildAllTools>[number];

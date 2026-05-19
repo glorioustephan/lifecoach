@@ -3,15 +3,20 @@ import path from "node:path";
 import type { Document } from "@lifecoach/schemas";
 import type { Storage } from "../storage/index.js";
 import type { Embedder } from "../embeddings/index.js";
+import type { Memory } from "../memory/index.js";
 import { LifecoachError } from "../util/errors.js";
 import { parseMarkdown, type ParsedDocument } from "./parsers/markdown.js";
 import { parseCsv } from "./parsers/csv.js";
 import { parsePdf } from "./parsers/pdf.js";
 import { chunkText, type Chunk } from "./chunker.js";
+import type { Extractor, ExtractionResult } from "./extractor.js";
 
 export interface IngestPipelineDeps {
   storage: Storage;
   embedder: Embedder;
+  memory: Memory;
+  /** Optional. When present, ingestion runs LLM-assisted fact + measurement extraction. */
+  extractor?: Extractor;
 }
 
 export type IngestType = "pdf" | "csv" | "markdown" | "auto";
@@ -26,6 +31,8 @@ export interface IngestOptions {
   chunkOverlap?: number;
   /** Voyage embed batch size. Default 64. */
   batchSize?: number;
+  /** Run LLM-assisted fact/measurement extraction (default true if extractor is configured). */
+  extract?: boolean;
   /** Optional progress callback for UI feedback. */
   onProgress?: (event: IngestProgressEvent) => void;
 }
@@ -35,12 +42,18 @@ export type IngestProgressEvent =
   | { phase: "chunk"; count: number }
   | { phase: "embed"; batch: number; totalBatches: number }
   | { phase: "persist"; documentId: string }
+  | { phase: "extract" }
+  | { phase: "extract-result"; factsExtracted: number; measurementsExtracted: number; notes?: string }
   | { phase: "done"; documentId: string; chunkCount: number };
 
 export interface IngestResult {
   document: Document;
   chunkCount: number;
   embedded: boolean;
+  factsExtracted: number;
+  measurementsExtracted: number;
+  extractionError?: string;
+  extractionNotes?: string;
 }
 
 const MAX_BODY_CHARS = 2_000_000; // ~2 MB of text, ~250 pages of typical prose
@@ -139,8 +152,78 @@ export class IngestPipeline {
       }
     }
 
+    let factsExtracted = 0;
+    let measurementsExtracted = 0;
+    let extractionError: string | undefined;
+    let extractionNotes: string | undefined;
+
+    const shouldExtract = (opts.extract ?? true) && this.deps.extractor != null && body.length > 0;
+    if (shouldExtract && this.deps.extractor) {
+      opts.onProgress?.({ phase: "extract" });
+      try {
+        const result = await this.deps.extractor.extract(body, {
+          identityProfile: this.deps.memory.identity.render(),
+          ...(parsed.title ? { documentTitle: parsed.title } : {}),
+          documentSource: opts.source ?? "file-drop",
+        });
+        const persisted = await this.persistExtraction(document.id, result);
+        factsExtracted = persisted.factsExtracted;
+        measurementsExtracted = persisted.measurementsExtracted;
+        if (result.notes) extractionNotes = result.notes;
+        opts.onProgress?.({
+          phase: "extract-result",
+          factsExtracted,
+          measurementsExtracted,
+          ...(extractionNotes ? { notes: extractionNotes } : {}),
+        });
+      } catch (err) {
+        // Extraction failure is non-fatal — the document + chunks are already
+        // persisted and searchable. Surface the error for the caller.
+        extractionError = err instanceof Error ? err.message : String(err);
+      }
+    }
+
     opts.onProgress?.({ phase: "done", documentId: document.id, chunkCount: chunks.length });
-    return { document, chunkCount: chunks.length, embedded };
+    return {
+      document,
+      chunkCount: chunks.length,
+      embedded,
+      factsExtracted,
+      measurementsExtracted,
+      ...(extractionError ? { extractionError } : {}),
+      ...(extractionNotes ? { extractionNotes } : {}),
+    };
+  }
+
+  private async persistExtraction(
+    documentId: string,
+    extraction: ExtractionResult,
+  ): Promise<{ factsExtracted: number; measurementsExtracted: number }> {
+    const { storage, memory } = this.deps;
+    let factsExtracted = 0;
+    let measurementsExtracted = 0;
+
+    // Facts go through SemanticMemory.remember so they get auto-embedded into
+    // the same recall surface as user-stated facts.
+    for (const fact of extraction.facts) {
+      await memory.semantic.remember({
+        ...fact,
+        source: `document:${documentId}`,
+        data: { ...(fact.data ?? {}), sourceDocumentId: documentId },
+      });
+      factsExtracted += 1;
+    }
+
+    // Measurements go directly to the repository — they're not embedded.
+    for (const measurement of extraction.measurements) {
+      storage.measurements.create({
+        ...measurement,
+        sourceDocumentId: documentId,
+      });
+      measurementsExtracted += 1;
+    }
+
+    return { factsExtracted, measurementsExtracted };
   }
 
   private persistBatch(documentId: string, chunks: Chunk[], vectors: number[][]): void {

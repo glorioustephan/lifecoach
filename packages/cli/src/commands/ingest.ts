@@ -9,9 +9,8 @@ export const registerIngest = (program: Command): void => {
     .command("ingest <path>")
     .description("Pipe a file (Markdown, CSV, PDF) through the ingestion pipeline")
     .option("--type <type>", "Force a parser: pdf | csv | markdown | auto", "auto")
-    .action(async (filePath: string, opts: { type: string }) => {
-      // Resolve relative paths against the workspace root so `pnpm lifecoach ingest data/raw/foo.md`
-      // works regardless of which package pnpm has filtered into.
+    .option("--no-extract", "Skip LLM-assisted fact + measurement extraction")
+    .action(async (filePath: string, opts: { type: string; extract: boolean }) => {
       const resolved = path.isAbsolute(filePath)
         ? filePath
         : path.resolve(findWorkspaceRoot(), filePath);
@@ -19,9 +18,15 @@ export const registerIngest = (program: Command): void => {
       const lc = createLifecoach();
       const spinner = ora({ text: "preparing…", color: "cyan" }).start();
       try {
-        const pipeline = new IngestPipeline({ storage: lc.storage, embedder: lc.embedder });
+        const pipeline = new IngestPipeline({
+          storage: lc.storage,
+          embedder: lc.embedder,
+          memory: lc.memory,
+          ...(lc.extractor ? { extractor: lc.extractor } : {}),
+        });
         const result = await pipeline.ingest(resolved, {
           type: (opts.type as "pdf" | "csv" | "markdown" | "auto") ?? "auto",
+          extract: opts.extract,
           onProgress: (e) => {
             switch (e.phase) {
               case "parse":
@@ -36,6 +41,12 @@ export const registerIngest = (program: Command): void => {
               case "persist":
                 spinner.text = `persisting document ${e.documentId}`;
                 break;
+              case "extract":
+                spinner.text = `extracting facts and measurements…`;
+                break;
+              case "extract-result":
+                spinner.text = `extracted ${e.factsExtracted} fact${e.factsExtracted === 1 ? "" : "s"} and ${e.measurementsExtracted} measurement${e.measurementsExtracted === 1 ? "" : "s"}`;
+                break;
               case "done":
                 spinner.text = `ingested ${e.documentId} (${e.chunkCount} chunks)`;
                 break;
@@ -43,15 +54,25 @@ export const registerIngest = (program: Command): void => {
           },
         });
         spinner.succeed(`Ingested ${result.document.id}`);
-        console.log(chalk.dim(`  title:   ${result.document.title ?? "(none)"}`));
-        console.log(chalk.dim(`  mime:    ${result.document.mime ?? "(unknown)"}`));
-        console.log(chalk.dim(`  body:    ${result.document.body.length} chars`));
-        console.log(chalk.dim(`  chunks:  ${result.chunkCount}`));
+        console.log(chalk.dim(`  title:        ${result.document.title ?? "(none)"}`));
+        console.log(chalk.dim(`  mime:         ${result.document.mime ?? "(unknown)"}`));
+        console.log(chalk.dim(`  body:         ${result.document.body.length} chars`));
+        console.log(chalk.dim(`  chunks:       ${result.chunkCount}`));
         console.log(
           chalk.dim(
-            `  embedded: ${result.embedded ? "yes (semantically recallable)" : "no (embedder disabled — only keyword recall)"}`,
+            `  embedded:     ${result.embedded ? "yes" : "no (embedder disabled)"}`,
           ),
         );
+        console.log(chalk.dim(`  facts:        ${result.factsExtracted}`));
+        console.log(chalk.dim(`  measurements: ${result.measurementsExtracted}`));
+        if (result.extractionNotes) {
+          console.log(chalk.dim(`  notes:        ${result.extractionNotes}`));
+        }
+        if (result.extractionError) {
+          console.log(
+            chalk.yellow(`  extraction warning: ${result.extractionError}`),
+          );
+        }
       } catch (err) {
         spinner.fail("ingest failed");
         console.error(chalk.red(err instanceof Error ? err.message : String(err)));

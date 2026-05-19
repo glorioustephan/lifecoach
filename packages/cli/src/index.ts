@@ -2,7 +2,10 @@
 import path from "node:path";
 import dotenv from "dotenv";
 import { findWorkspaceRoot } from "@lifecoach/core";
-dotenv.config({ path: path.join(findWorkspaceRoot(), ".env") });
+// `override: true` so .env wins over shadow shell values (e.g., a stray empty
+// ANTHROPIC_API_KEY="" exported in shell config that would otherwise mask the
+// real key in .env).
+dotenv.config({ path: path.join(findWorkspaceRoot(), ".env"), override: true });
 
 import { Command } from "commander";
 import { registerInit } from "./commands/init.js";

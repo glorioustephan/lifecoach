@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.13",
+    "@anthropic-ai/sdk": "^0.96.0",
     "@lifecoach/schemas": "workspace:*",
     "better-sqlite3": "^11.7.0",
     "gray-matter": "^4.0.3",

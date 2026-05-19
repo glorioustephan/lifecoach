@@ -9,11 +9,15 @@ export interface LifecoachConfig {
   snapshotsDir: string;
   anthropicApiKey: string | undefined;
   voyageApiKey: string | undefined;
+  /** Model used by the conversational agent. */
   model: string;
+  /** Model used by the ingest extractor. Defaults to Sonnet for accuracy at low cost. */
+  extractionModel: string;
   embeddingDim: number;
 }
 
 const DEFAULT_MODEL = "claude-opus-4-7";
+const DEFAULT_EXTRACTION_MODEL = "claude-sonnet-4-6";
 const DEFAULT_EMBEDDING_DIM = 1024;
 
 /**
@@ -54,6 +58,10 @@ export const loadConfig = (overrides: Partial<LifecoachConfig> = {}): LifecoachC
     anthropicApiKey: overrides.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY,
     voyageApiKey: overrides.voyageApiKey ?? process.env.VOYAGE_API_KEY,
     model: overrides.model ?? process.env.LIFECOACH_MODEL ?? DEFAULT_MODEL,
+    extractionModel:
+      overrides.extractionModel
+      ?? process.env.LIFECOACH_EXTRACTION_MODEL
+      ?? DEFAULT_EXTRACTION_MODEL,
     embeddingDim:
       overrides.embeddingDim
       ?? (process.env.LIFECOACH_EMBEDDING_DIM ? Number(process.env.LIFECOACH_EMBEDDING_DIM) : DEFAULT_EMBEDDING_DIM),
