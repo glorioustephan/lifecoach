@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { sendChat, type ChatEvent } from "~/lib/chat-stream";
 import { useSetAgentState } from "./agent-state";
 import { Message } from "./Message";
@@ -19,7 +18,6 @@ const newClientId = (): string =>
   globalThis.crypto?.randomUUID?.() ?? `c-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => {
-  const navigate = useNavigate();
   const setAgentState = useSetAgentState();
   const [items, setItems] = useState<ChatItem[]>(() =>
     (initialMessages ?? [])
@@ -72,9 +70,13 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
 
       const onEvent = (event: ChatEvent): void => {
         if (event.type === "session" && !activeSessionId) {
+          // Just track the session ID in component state. We intentionally do NOT
+          // update the URL during streaming: any URL change (TanStack's navigate
+          // OR history.replaceState) causes TanStack Router to remount the route
+          // and lose the in-flight stream's React state. We'll update the URL
+          // on the "done" event instead, where it's safe to re-mount because
+          // the assistant message is now persisted server-side.
           setActiveSessionId(event.sessionId);
-          // Navigate to /c/$id without page reload so deep links + history survive.
-          void navigate({ to: "/c/$sessionId", params: { sessionId: event.sessionId } });
           return;
         }
         if (event.type === "text-delta") {
@@ -174,7 +176,7 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
         setAgentState("idle");
       }
     },
-    [streaming, activeSessionId, setAgentState, navigate],
+    [streaming, activeSessionId, setAgentState],
   );
 
   return (
