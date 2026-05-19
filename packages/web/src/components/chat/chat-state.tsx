@@ -1,0 +1,97 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import type { ToolCallState } from "./ToolCallDisclosure";
+
+export type ChatItem =
+  | {
+      kind: "message";
+      id: string;
+      role: "user" | "assistant";
+      content: string;
+      streaming?: boolean;
+    }
+  | { kind: "tool"; id: string; state: ToolCallState };
+
+interface ChatState {
+  sessionId: string | undefined;
+  items: ChatItem[];
+  streaming: boolean;
+}
+
+interface ChatActions {
+  /** Replace the entire chat state — used when loading a specific session by URL. */
+  reset: (next: { sessionId: string | undefined; items: ChatItem[] }) => void;
+  /** Append items at the end (e.g. user message + assistant placeholder on submit). */
+  append: (items: ChatItem[]) => void;
+  /** Update items via a reducer. Use for streaming text appends, tool state changes, etc. */
+  update: (fn: (items: ChatItem[]) => ChatItem[]) => void;
+  setSessionId: (id: string | undefined) => void;
+  setStreaming: (s: boolean) => void;
+}
+
+const StateCtx = createContext<ChatState | null>(null);
+const ActionsCtx = createContext<ChatActions | null>(null);
+
+/**
+ * Lives at the router root. The root component never unmounts on route
+ * changes, so this context preserves chat state when the user navigates
+ * to Memory / Inbox / Tasks / etc. and returns to Chat.
+ */
+export const ChatStateProvider = ({ children }: { children: ReactNode }): JSX.Element => {
+  const [sessionId, setSessionId] = useState<string | undefined>(undefined);
+  const [items, setItems] = useState<ChatItem[]>([]);
+  const [streaming, setStreaming] = useState(false);
+
+  // Stable refs for setters so the actions object doesn't change identity.
+  const setItemsRef = useRef(setItems);
+  setItemsRef.current = setItems;
+
+  const reset = useCallback(
+    (next: { sessionId: string | undefined; items: ChatItem[] }) => {
+      setSessionId(next.sessionId);
+      setItems(next.items);
+      setStreaming(false);
+    },
+    [],
+  );
+  const append = useCallback((newItems: ChatItem[]) => {
+    setItemsRef.current((prev) => [...prev, ...newItems]);
+  }, []);
+  const update = useCallback((fn: (items: ChatItem[]) => ChatItem[]) => {
+    setItemsRef.current((prev) => fn(prev));
+  }, []);
+
+  const state = useMemo<ChatState>(
+    () => ({ sessionId, items, streaming }),
+    [sessionId, items, streaming],
+  );
+  const actions = useMemo<ChatActions>(
+    () => ({ reset, append, update, setSessionId, setStreaming }),
+    [reset, append, update],
+  );
+
+  return (
+    <StateCtx.Provider value={state}>
+      <ActionsCtx.Provider value={actions}>{children}</ActionsCtx.Provider>
+    </StateCtx.Provider>
+  );
+};
+
+export const useChatState = (): ChatState => {
+  const ctx = useContext(StateCtx);
+  if (!ctx) throw new Error("useChatState must be used inside ChatStateProvider");
+  return ctx;
+};
+
+export const useChatActions = (): ChatActions => {
+  const ctx = useContext(ActionsCtx);
+  if (!ctx) throw new Error("useChatActions must be used inside ChatStateProvider");
+  return ctx;
+};

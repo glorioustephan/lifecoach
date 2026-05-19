@@ -1,17 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { sendChat, type ChatEvent } from "~/lib/chat-stream";
 import { useSetAgentState } from "./agent-state";
 import { Message } from "./Message";
 import { ToolCallDisclosure, type ToolCallState } from "./ToolCallDisclosure";
 import { Composer } from "./Composer";
-
-type ChatItem =
-  | { kind: "message"; id: string; role: "user" | "assistant"; content: string; streaming?: boolean }
-  | { kind: "tool"; id: string; state: ToolCallState };
+import { useChatActions, useChatState, type ChatItem } from "./chat-state";
 
 interface Props {
+  /** When set, this ChatView is bound to a specific session (the /c/$id route).
+   *  On mount it resets the shared chat state to this session's loaded messages. */
   sessionId?: string;
-  initialMessages?: Array<{ id: string; role: "user" | "assistant" | "system" | "tool"; content: string }>;
+  initialMessages?: Array<{
+    id: string;
+    role: "user" | "assistant" | "system" | "tool";
+    content: string;
+  }>;
 }
 
 const newClientId = (): string =>
@@ -19,34 +22,28 @@ const newClientId = (): string =>
 
 export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => {
   const setAgentState = useSetAgentState();
-  const [items, setItems] = useState<ChatItem[]>(() =>
-    (initialMessages ?? [])
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({
-        kind: "message" as const,
-        id: m.id,
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
-  );
-  const [streaming, setStreaming] = useState(false);
-  const [activeSessionId, setActiveSessionId] = useState<string | undefined>(sessionId);
+  const { items, streaming, sessionId: ctxSessionId } = useChatState();
+  const { reset, append, update, setSessionId, setStreaming } = useChatActions();
   const scrollerRef = useRef<HTMLDivElement>(null);
 
-  // Reset state when session changes via route navigation.
+  // When the route hands us a specific session that differs from the one in
+  // context, replace context with the loaded messages. (No-op when we're on
+  // the fresh-session route — props are undefined and we keep ctx state.)
   useEffect(() => {
-    setItems(
-      (initialMessages ?? [])
+    if (!sessionId) return;
+    if (sessionId === ctxSessionId) return;
+    reset({
+      sessionId,
+      items: (initialMessages ?? [])
         .filter((m) => m.role === "user" || m.role === "assistant")
         .map((m) => ({
-          kind: "message" as const,
+          kind: "message",
           id: m.id,
           role: m.role as "user" | "assistant",
           content: m.content,
         })),
-    );
-    setActiveSessionId(sessionId);
-  }, [sessionId, initialMessages]);
+    });
+  }, [sessionId, initialMessages, ctxSessionId, reset]);
 
   // Scroll to bottom on new content.
   useEffect(() => {
@@ -60,8 +57,7 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
       if (streaming) return;
       const userId = newClientId();
       const assistantId = newClientId();
-      setItems((prev) => [
-        ...prev,
+      append([
         { kind: "message", id: userId, role: "user", content: text },
         { kind: "message", id: assistantId, role: "assistant", content: "", streaming: true },
       ]);
@@ -69,18 +65,16 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
       setAgentState("thinking");
 
       const onEvent = (event: ChatEvent): void => {
-        if (event.type === "session" && !activeSessionId) {
-          // Just track the session ID in component state. We intentionally do NOT
-          // update the URL during streaming: any URL change (TanStack's navigate
-          // OR history.replaceState) causes TanStack Router to remount the route
-          // and lose the in-flight stream's React state. We'll update the URL
-          // on the "done" event instead, where it's safe to re-mount because
-          // the assistant message is now persisted server-side.
-          setActiveSessionId(event.sessionId);
+        if (event.type === "session" && !ctxSessionId) {
+          // Server-assigned session ID for a fresh conversation. Stored in
+          // context so subsequent turns continue the same session. We do NOT
+          // touch the URL here — that would cause TanStack Router to remount
+          // and lose the in-flight stream.
+          setSessionId(event.sessionId);
           return;
         }
         if (event.type === "text-delta") {
-          setItems((prev) =>
+          update((prev) =>
             prev.map((it) =>
               it.kind === "message" && it.id === assistantId
                 ? { ...it, content: it.content + event.text }
@@ -98,8 +92,7 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
             status: "running",
             startedAt: Date.now(),
           };
-          // Insert before the streaming assistant message.
-          setItems((prev) => {
+          update((prev) => {
             const next = [...prev];
             const idx = next.findIndex(
               (it) => it.kind === "message" && it.id === assistantId,
@@ -113,7 +106,7 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
         }
         if (event.type === "tool-result") {
           setAgentState("thinking");
-          setItems((prev) =>
+          update((prev) =>
             prev.map((it) =>
               it.kind === "tool" && it.state.toolUseId === event.toolUseId
                 ? {
@@ -132,7 +125,7 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
           return;
         }
         if (event.type === "done") {
-          setItems((prev) =>
+          update((prev) =>
             prev.map((it) =>
               it.kind === "message" && it.id === assistantId
                 ? { ...it, streaming: false }
@@ -142,7 +135,7 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
           return;
         }
         if (event.type === "error") {
-          setItems((prev) =>
+          update((prev) =>
             prev.map((it) =>
               it.kind === "message" && it.id === assistantId
                 ? {
@@ -159,12 +152,12 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
       try {
         await sendChat({
           message: text,
-          ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+          ...(ctxSessionId ? { sessionId: ctxSessionId } : {}),
           onEvent,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        setItems((prev) =>
+        update((prev) =>
           prev.map((it) =>
             it.kind === "message" && it.id === assistantId
               ? { ...it, content: it.content + `\n\n[error: ${message}]`, streaming: false }
@@ -176,14 +169,14 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
         setAgentState("idle");
       }
     },
-    [streaming, activeSessionId, setAgentState],
+    [streaming, ctxSessionId, append, update, setSessionId, setStreaming, setAgentState],
   );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex h-12 items-center justify-between border-b border-border px-4">
         <h1 className="text-sm font-medium text-fg-muted">
-          {activeSessionId ? "Conversation" : "New conversation"}
+          {ctxSessionId ? "Conversation" : "New conversation"}
         </h1>
       </header>
 
@@ -199,7 +192,8 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
             <div className="mt-12 flex flex-col items-center gap-2 text-center">
               <div className="text-sm text-fg-muted">Good morning, James.</div>
               <div className="max-w-sm text-xs text-fg-faint">
-                Type below to start a new conversation, or ask the coach what they noticed.
+                Type below to start a new conversation, or ask the coach what they
+                noticed.
               </div>
             </div>
           )}

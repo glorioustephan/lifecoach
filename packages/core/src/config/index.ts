@@ -17,7 +17,11 @@ export interface LifecoachConfig {
   embeddingDim: number;
 }
 
-const DEFAULT_MODEL = "claude-opus-4-7";
+// Sonnet 4.6 is the chat default — supports tool use like every other Claude
+// model, but at ~5x lower per-token cost than Opus. Override with LIFECOACH_MODEL
+// in .env if you want Opus 4.7 for harder reasoning, or Haiku 4.5 for even
+// cheaper turns.
+const DEFAULT_MODEL = "claude-sonnet-4-6";
 const DEFAULT_EXTRACTION_MODEL = "claude-sonnet-4-6";
 const DEFAULT_EMBEDDING_DIM = 1024;
 
