@@ -15,6 +15,7 @@ import { formatRelative } from "~/lib/time";
 import { cn } from "~/lib/cn";
 import { Markdown } from "~/components/chat/Markdown";
 import { useChatActions } from "~/components/chat/chat-state";
+import { BriefingPanel } from "~/components/inbox/BriefingPanel";
 
 export const Route = createFileRoute("/inbox")({
   component: InboxRoute,
@@ -99,7 +100,9 @@ function InboxRoute(): JSX.Element {
       )}
 
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl px-4 py-4 md:px-6">
+        <div className="mx-auto max-w-2xl space-y-4 px-4 py-4 md:px-6">
+          {filter === "active" && <BriefingPanel />}
+
           {isLoading && (
             <div className="space-y-3">
               {Array.from({ length: 3 }).map((_, i) => (

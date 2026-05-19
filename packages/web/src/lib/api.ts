@@ -171,6 +171,39 @@ export const api = {
     patchJson<{ goal: GoalRow }>(`/api/goals/${encodeURIComponent(id)}`, patch),
   createProject: (body: { title: string; body?: string; targetDate?: number }) =>
     postJson<{ project: ProjectRow }>("/api/goals/projects", body),
+  briefing: () =>
+    get<{
+      generatedAt: number;
+      tasks: {
+        overdue: Array<{
+          id: string;
+          content: string;
+          dueAt: number | null;
+          dueString: string | null;
+          projectName: string | null;
+          priority: number | null;
+        }>;
+        dueToday: Array<{
+          id: string;
+          content: string;
+          dueAt: number | null;
+          dueString: string | null;
+          projectName: string | null;
+          priority: number | null;
+        }>;
+        totalActive: number;
+      };
+      goals: { active: GoalRow[]; totalActive: number };
+      insights: InsightRow[];
+      reflection: {
+        id: string;
+        kind: string;
+        period_start: number;
+        period_end: number;
+        body: string;
+        created_at: number;
+      } | null;
+    }>("/api/briefing"),
   recentSessions: () =>
     get<{
       sessions: Array<{
