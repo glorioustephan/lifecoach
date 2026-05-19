@@ -46,7 +46,7 @@ export const registerMemoryTools = (server: McpServer, memory: Memory): void => 
     "Semantic search across the user's memory.",
     {
       query: z.string().min(1),
-      scope: z.enum(["facts", "documents", "messages", "reflections", "all"]).optional(),
+      scope: z.enum(["facts", "documents", "messages", "reflections", "tasks", "all"]).optional(),
       limit: z.number().int().min(1).max(50).optional(),
     },
     async ({ query, scope, limit }) => {

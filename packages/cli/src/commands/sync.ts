@@ -28,9 +28,9 @@ export const registerSync = (program: Command): void => {
       }
       const spinner = ora({ text: "syncing Todoist…", color: "cyan" }).start();
       try {
-        const result = await syncTodoist(lc.todoist, lc.storage);
+        const result = await syncTodoist(lc.todoist, lc.storage, lc.embedder);
         spinner.succeed(
-          `Todoist sync complete — ${result.fetched} active tasks fetched, ${result.upserted} upserted, ${result.newlyCompleted} newly marked completed`,
+          `Todoist sync — ${result.fetched} fetched, ${result.upserted} upserted, ${result.newlyCompleted} newly completed, ${result.embedded} embedded`,
         );
       } catch (err) {
         spinner.fail("sync failed");

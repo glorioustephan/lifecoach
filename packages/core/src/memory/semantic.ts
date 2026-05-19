@@ -95,6 +95,8 @@ export class SemanticMemory {
         return "message";
       case "reflections":
         return "reflection";
+      case "tasks":
+        return "task";
       case "all":
       default:
         return undefined;

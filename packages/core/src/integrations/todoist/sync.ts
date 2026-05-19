@@ -1,5 +1,7 @@
-import type { NewTask, TaskPriority } from "@lifecoach/schemas";
+import type { NewTask, Task, TaskPriority } from "@lifecoach/schemas";
 import type { Storage } from "../../storage/index.js";
+import type { Embedder } from "../../embeddings/index.js";
+import { indexTasks } from "../../memory/task-indexer.js";
 import { TodoistClient, type TodoistProject, type TodoistTask } from "./client.js";
 
 const SOURCE = "todoist";
@@ -8,6 +10,7 @@ export interface TodoistSyncResult {
   fetched: number;
   upserted: number;
   newlyCompleted: number;
+  embedded: number;
 }
 
 const parseDueAt = (task: TodoistTask): number | null => {
@@ -41,6 +44,7 @@ const mapTask = (task: TodoistTask, projects: Map<string, TodoistProject>): NewT
 export const syncTodoist = async (
   client: TodoistClient,
   storage: Storage,
+  embedder: Embedder,
 ): Promise<TodoistSyncResult> => {
   const [projects, tasks] = await Promise.all([
     client.listProjects(),
@@ -48,18 +52,22 @@ export const syncTodoist = async (
   ]);
   const projectMap = new Map(projects.map((p) => [p.id, p]));
 
-  let upserted = 0;
+  const upsertedTasks: Task[] = [];
   for (const task of tasks) {
-    storage.tasks.upsertByExternal(mapTask(task, projectMap));
-    upserted += 1;
+    const persisted = storage.tasks.upsertByExternal(mapTask(task, projectMap));
+    upsertedTasks.push(persisted);
   }
 
   const activeIds = new Set(tasks.map((t) => t.id));
   const newlyCompleted = storage.tasks.reconcileActiveSet(SOURCE, activeIds);
 
+  // Embed in one batched Voyage call so a 200-task sync is one API request.
+  await indexTasks(storage, embedder, upsertedTasks);
+
   return {
     fetched: tasks.length,
-    upserted,
+    upserted: upsertedTasks.length,
     newlyCompleted,
+    embedded: embedder.enabled ? upsertedTasks.length : 0,
   };
 };

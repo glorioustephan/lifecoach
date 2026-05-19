@@ -1,8 +1,10 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type { Storage } from "../../storage/index.js";
+import type { Embedder } from "../../embeddings/index.js";
 import type { Task, TaskPriority } from "@lifecoach/schemas";
 import type { TodoistClient } from "../../integrations/index.js";
+import { indexTask } from "../../memory/task-indexer.js";
 import { LifecoachError } from "../../util/errors.js";
 
 const PRIORITY_LABELS: Record<number, string> = {
@@ -33,6 +35,7 @@ const renderTask = (task: Task): string => {
 
 export interface TaskToolDeps {
   storage: Storage;
+  embedder: Embedder;
   todoist: TodoistClient | null;
 }
 
@@ -159,6 +162,7 @@ export const buildTaskTools = (deps: TaskToolDeps) => [
         completedAt: null,
         url: created.url ?? null,
       });
+      await indexTask(deps.storage, deps.embedder, task);
       return {
         content: [
           { type: "text", text: `Created task ${task.id} → ${task.content}` },
@@ -209,7 +213,7 @@ export const buildTaskTools = (deps: TaskToolDeps) => [
       const task = requireTodoistTask(deps.storage, id);
       const client = requireTodoist(deps.todoist);
       const updated = await client.updateTask(task.externalId!, { dueString });
-      deps.storage.tasks.upsertByExternal({
+      const persisted = deps.storage.tasks.upsertByExternal({
         externalId: updated.id,
         externalSource: "todoist",
         content: updated.content,
@@ -223,6 +227,7 @@ export const buildTaskTools = (deps: TaskToolDeps) => [
         completedAt: null,
         url: updated.url ?? null,
       });
+      await indexTask(deps.storage, deps.embedder, persisted);
       return {
         content: [
           {
@@ -258,7 +263,7 @@ export const buildTaskTools = (deps: TaskToolDeps) => [
         return { content: [{ type: "text", text: "No-op: no fields specified." }] };
       }
       const updated = await client.updateTask(task.externalId!, patch);
-      deps.storage.tasks.upsertByExternal({
+      const persisted = deps.storage.tasks.upsertByExternal({
         externalId: updated.id,
         externalSource: "todoist",
         content: updated.content,
@@ -272,6 +277,7 @@ export const buildTaskTools = (deps: TaskToolDeps) => [
         completedAt: null,
         url: updated.url ?? null,
       });
+      await indexTask(deps.storage, deps.embedder, persisted);
       return {
         content: [
           { type: "text", text: `Updated ${updated.id}: ${Object.keys(patch).join(", ")}` },

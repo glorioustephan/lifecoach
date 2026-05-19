@@ -2,7 +2,7 @@ import type { Database } from "better-sqlite3";
 import type { RecallHit } from "@lifecoach/schemas";
 import { now } from "../../util/ids.js";
 
-export type RefType = "fact" | "document" | "message" | "reflection";
+export type RefType = "fact" | "document" | "message" | "reflection" | "task";
 
 export interface EmbeddingInsert {
   refType: RefType;

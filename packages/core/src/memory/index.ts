@@ -31,3 +31,4 @@ export { EpisodicMemory } from "./episodic.js";
 export { SemanticMemory } from "./semantic.js";
 export { ReflectionMemory } from "./reflections.js";
 export { ContextBuilder } from "./context-builder.js";
+export { indexTask, indexTasks } from "./task-indexer.js";
