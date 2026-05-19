@@ -36,7 +36,7 @@ export const buildAllTools = (deps: ToolDeps) => [
     memory: deps.memory,
     extractor: deps.extractor,
   }),
-  ...buildTaskTools({ storage: deps.storage }),
+  ...buildTaskTools({ storage: deps.storage, todoist: deps.todoist }),
 ];
 
 export type LifecoachTool = ReturnType<typeof buildAllTools>[number];
