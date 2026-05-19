@@ -1,0 +1,48 @@
+@import "./theme.css";
+
+/* Base resets that aren't quite Tailwind defaults */
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Focus-visible across the app: 2px accent ring with offset. Use focus-visible
+   not focus so clicks don't show it. */
+*:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Scrollbar in dark mode — keep it quiet */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-700);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--color-neutral-600); background-clip: padding-box; }
+
+/* Composer's upward shadow — applied via a JS-controlled class when content
+   scrolls beneath. */
+.composer-elevated {
+  box-shadow: var(--shadow-composer);
+}
+
+/* Agent ambient glow on the rail footer (laptop only). Driven by
+   --agent-glow-opacity from a React context. */
+.rail-footer {
+  box-shadow: 0 0 40px 0 oklch(52% 0.14 175 / var(--agent-glow-opacity, 0));
+  transition: box-shadow 500ms ease-out;
+}
+
+/* Safe-area padding on iOS PWAs */
+.safe-pb { padding-bottom: env(safe-area-inset-bottom); }
+.safe-pt { padding-top: env(safe-area-inset-top); }

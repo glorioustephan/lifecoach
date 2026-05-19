@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+/* ─── Custom variant for dark mode ─── */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* ─── Neutral axis (warm gray, slightly blue-leaning) ─── */
+  --color-neutral-950: oklch(10% 0.008 260);
+  --color-neutral-900: oklch(13% 0.010 260);
+  --color-neutral-850: oklch(16% 0.010 260);
+  --color-neutral-800: oklch(20% 0.011 260);
+  --color-neutral-700: oklch(28% 0.012 260);
+  --color-neutral-600: oklch(40% 0.010 255);
+  --color-neutral-500: oklch(54% 0.009 255);
+  --color-neutral-400: oklch(68% 0.008 255);
+  --color-neutral-300: oklch(80% 0.007 255);
+  --color-neutral-100: oklch(93% 0.005 255);
+  --color-neutral-50:  oklch(97% 0.003 255);
+
+  /* ─── Accent: teal-green (calm, health-adjacent) ─── */
+  --color-accent-600: oklch(40% 0.12 175);
+  --color-accent-500: oklch(52% 0.14 175);
+  --color-accent-400: oklch(65% 0.13 175);
+  --color-accent-200: oklch(82% 0.08 175);
+  --color-accent-100: oklch(90% 0.05 175);
+
+  /* ─── Semantic status ─── */
+  --color-success-500: oklch(58% 0.16 150);
+  --color-success-200: oklch(83% 0.10 150);
+  --color-warning-500: oklch(68% 0.16 65);
+  --color-warning-200: oklch(87% 0.10 65);
+  --color-destructive-500: oklch(55% 0.20 20);
+  --color-destructive-300: oklch(72% 0.16 20);
+  --color-destructive-100: oklch(88% 0.08 20);
+
+  /* ─── Semantic aliases (dark-mode default) ─── */
+  --color-bg:               var(--color-neutral-900);
+  --color-surface:          var(--color-neutral-850);
+  --color-surface-elevated: var(--color-neutral-800);
+  --color-border:           var(--color-neutral-700);
+  --color-border-subtle:    oklch(22% 0.010 260 / 0.6);
+  --color-fg:               var(--color-neutral-100);
+  --color-fg-muted:         var(--color-neutral-400);
+  --color-fg-faint:         var(--color-neutral-500);
+  --color-accent:           var(--color-accent-500);
+  --color-accent-fg:        var(--color-neutral-50);
+
+  /* ─── Typography ─── */
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ─── Layout constants ─── */
+  --tab-bar-height: 56px;
+  --composer-height: 64px;
+  --chat-bottom-offset: calc(var(--tab-bar-height) + var(--composer-height));
+
+  /* ─── Motion tokens ─── */
+  --ease-out-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-smooth:  cubic-bezier(0.4, 0, 1, 1);
+
+  /* ─── Composer shadow (applied when content scrolls beneath it) ─── */
+  --shadow-composer: 0 -1px 0 0 var(--color-border), 0 -8px 24px 0 oklch(0% 0 0 / 0.4);
+}
+
+/* Light-mode override — applied only when the user explicitly toggles or
+   .light is on <html>. The default is dark (set on <html class="dark"> in index.html). */
+.light {
+  --color-bg:               oklch(97% 0.004 260);
+  --color-surface:          oklch(100% 0 0);
+  --color-surface-elevated: oklch(96% 0.004 260);
+  --color-border:           oklch(88% 0.006 260);
+  --color-border-subtle:    oklch(92% 0.005 260 / 0.7);
+  --color-fg:               oklch(15% 0.010 260);
+  --color-fg-muted:         oklch(45% 0.009 260);
+  --color-fg-faint:         oklch(60% 0.008 260);
+  --color-accent:           var(--color-accent-600);
+}

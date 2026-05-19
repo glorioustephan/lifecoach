@@ -10,6 +10,11 @@
   "scripts": {
     "lifecoach": "pnpm --filter @lifecoach/cli start",
     "mcp": "pnpm --filter @lifecoach/mcp-server start",
+    "server": "pnpm --filter @lifecoach/server start",
+    "web:dev": "pnpm --filter @lifecoach/web dev",
+    "web:build": "pnpm --filter @lifecoach/web build",
+    "dev": "pnpm --parallel --filter @lifecoach/server --filter @lifecoach/web run dev",
+    "start": "pnpm web:build && pnpm server",
     "typecheck": "pnpm -r typecheck",
     "build": "pnpm -r build",
     "test": "pnpm -r test"
