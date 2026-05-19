@@ -1,0 +1,28 @@
+node_modules/
+dist/
+.turbo/
+.tsbuildinfo
+*.tsbuildinfo
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Lifecoach data (personal — never commit)
+data/lifecoach.db
+data/lifecoach.db-*
+data/raw/*
+!data/raw/.gitkeep
+data/snapshots/*
+!data/snapshots/.gitkeep
+
+# Editor
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
