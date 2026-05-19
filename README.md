@@ -62,15 +62,22 @@ pnpm lifecoach chat
 
 ## Status
 
-**Iteration 1 (current scaffold):** Identity + episodic + basic semantic memory wired end-to-end. Conversation history persists. The agent has tools to read/write the profile, remember facts, and recall them.
+**Now working end-to-end:**
+- Chat with streaming + tool calls + markdown rendering + copy-to-clipboard
+- Past-conversations sheet with semantic search
+- Identity, episodic, semantic memory + reflections + insights + goals + projects
+- File ingestion (drag-drop, paperclip, watcher, CLI) for PDF/CSV/MD with LLM-assisted fact + measurement extraction
+- Forget flow: delete a document + everything derived from it in one transaction
+- Todoist read + write + embedded for cross-source recall
+- Background intelligence:
+  - Daily / weekly / monthly reflections (CLI + agent tool + Memory > Reflections)
+  - Insight loop (agent reviews recent data, surfaces ranked observations in the Inbox)
+  - Composed morning briefing at the top of the Inbox
+- launchd cron schedule for daily reflection + daily insight pass + weekly reflection (see `docs/cron-setup.md`)
 
-**Stubbed (interface present, throws `NotImplementedError`):**
-- Connectors (Todoist, Google Calendar, file-drop watcher)
-- Ingest parsers (PDF/CSV/MD)
-- Measurement and reflection tools
-- Local embedder fallback
-
-Each stub points to the file where the implementation should land.
+**Stubbed:**
+- Google Calendar / Gmail / Capacities / Apple Health connectors (planned)
+- Local embedder fallback (Voyage is the default)
 
 ## Privacy
 
