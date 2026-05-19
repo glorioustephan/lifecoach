@@ -64,6 +64,13 @@ export async function* streamChatTurn(
 
   let assistantText = "";
   let toolCallCount = 0;
+  // Tracks whether the most recent event was a tool call (or its result). When
+  // text resumes after that, we need to inject paragraph spacing — otherwise
+  // the text block immediately preceding the tool ("Logging this…") concats
+  // straight into the post-tool text block ("Got it — here's what…") with no
+  // separator. The Anthropic SDK emits these as distinct content blocks, but
+  // delta-level streaming doesn't expose the boundary.
+  let pendingTextSeparator = false;
 
   try {
     for await (const event of query({ prompt: input.userMessage, options })) {
@@ -71,8 +78,18 @@ export async function* streamChatTurn(
         // Streaming text delta from the assistant.
         const delta = event.event;
         if (delta?.type === "content_block_delta" && delta.delta?.type === "text_delta") {
-          const text = delta.delta.text ?? "";
+          let text = delta.delta.text ?? "";
           if (text.length > 0) {
+            if (pendingTextSeparator) {
+              // Only inject if the accumulated text doesn't already end in
+              // whitespace and the incoming delta doesn't start with it.
+              const needsSep =
+                assistantText.length > 0 &&
+                !/\s$/.test(assistantText) &&
+                !/^\s/.test(text);
+              if (needsSep) text = "\n\n" + text;
+              pendingTextSeparator = false;
+            }
             assistantText += text;
             yield { type: "text-delta", text };
           }
@@ -84,6 +101,9 @@ export async function* streamChatTurn(
         for (const block of blocks) {
           if (block.type === "tool_use") {
             toolCallCount += 1;
+            // After a tool use, the next text block should be visually
+            // separated from the prior text block.
+            pendingTextSeparator = true;
             yield {
               type: "tool-start",
               toolUseId: block.id,
