@@ -13,6 +13,7 @@ import { registerChat } from "./commands/chat.js";
 import { registerQuery } from "./commands/query.js";
 import { registerStatus } from "./commands/status.js";
 import { registerIngest } from "./commands/ingest.js";
+import { registerWatch } from "./commands/watch.js";
 
 const program = new Command();
 
@@ -26,6 +27,7 @@ registerChat(program);
 registerQuery(program);
 registerStatus(program);
 registerIngest(program);
+registerWatch(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : err);

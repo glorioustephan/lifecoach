@@ -10,6 +10,7 @@ import {
   ReflectionRepository,
   InsightRepository,
   EmbeddingRepository,
+  IngestedFileRepository,
 } from "./repositories/index.js";
 
 export interface Storage {
@@ -23,6 +24,7 @@ export interface Storage {
   reflections: ReflectionRepository;
   insights: InsightRepository;
   embeddings: EmbeddingRepository;
+  ingestedFiles: IngestedFileRepository;
   close: () => void;
 }
 
@@ -40,6 +42,7 @@ export const createStorage = (config: LifecoachConfig): Storage => {
     reflections: new ReflectionRepository(db),
     insights: new InsightRepository(db),
     embeddings: new EmbeddingRepository(db, embeddingDim),
+    ingestedFiles: new IngestedFileRepository(db),
     close: handle.close,
   };
 };

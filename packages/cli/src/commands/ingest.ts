@@ -10,7 +10,8 @@ export const registerIngest = (program: Command): void => {
     .description("Pipe a file (Markdown, CSV, PDF) through the ingestion pipeline")
     .option("--type <type>", "Force a parser: pdf | csv | markdown | auto", "auto")
     .option("--no-extract", "Skip LLM-assisted fact + measurement extraction")
-    .action(async (filePath: string, opts: { type: string; extract: boolean }) => {
+    .option("--force", "Re-ingest even if the file hash has been seen before")
+    .action(async (filePath: string, opts: { type: string; extract: boolean; force: boolean }) => {
       const resolved = path.isAbsolute(filePath)
         ? filePath
         : path.resolve(findWorkspaceRoot(), filePath);
@@ -27,6 +28,7 @@ export const registerIngest = (program: Command): void => {
         const result = await pipeline.ingest(resolved, {
           type: (opts.type as "pdf" | "csv" | "markdown" | "auto") ?? "auto",
           extract: opts.extract,
+          force: opts.force,
           onProgress: (e) => {
             switch (e.phase) {
               case "parse":
@@ -53,6 +55,10 @@ export const registerIngest = (program: Command): void => {
             }
           },
         });
+        if (result.skipped) {
+          spinner.info(`Already ingested (${result.document.id}) — pass --force to re-ingest`);
+          return;
+        }
         spinner.succeed(`Ingested ${result.document.id}`);
         console.log(chalk.dim(`  title:        ${result.document.title ?? "(none)"}`));
         console.log(chalk.dim(`  mime:         ${result.document.mime ?? "(unknown)"}`));

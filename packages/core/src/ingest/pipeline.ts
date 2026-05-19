@@ -5,6 +5,7 @@ import type { Storage } from "../storage/index.js";
 import type { Embedder } from "../embeddings/index.js";
 import type { Memory } from "../memory/index.js";
 import { LifecoachError } from "../util/errors.js";
+import { sha256File } from "../util/hash.js";
 import { parseMarkdown, type ParsedDocument } from "./parsers/markdown.js";
 import { parseCsv } from "./parsers/csv.js";
 import { parsePdf } from "./parsers/pdf.js";
@@ -33,6 +34,8 @@ export interface IngestOptions {
   batchSize?: number;
   /** Run LLM-assisted fact/measurement extraction (default true if extractor is configured). */
   extract?: boolean;
+  /** Skip dedup check on file hash. Default false. */
+  force?: boolean;
   /** Optional progress callback for UI feedback. */
   onProgress?: (event: IngestProgressEvent) => void;
 }
@@ -44,6 +47,7 @@ export type IngestProgressEvent =
   | { phase: "persist"; documentId: string }
   | { phase: "extract" }
   | { phase: "extract-result"; factsExtracted: number; measurementsExtracted: number; notes?: string }
+  | { phase: "skipped"; documentId: string; reason: "duplicate" }
   | { phase: "done"; documentId: string; chunkCount: number };
 
 export interface IngestResult {
@@ -52,6 +56,8 @@ export interface IngestResult {
   embedded: boolean;
   factsExtracted: number;
   measurementsExtracted: number;
+  /** True when an identical-hash file had already been ingested and we returned the existing document. */
+  skipped: boolean;
   extractionError?: string;
   extractionNotes?: string;
 }
@@ -103,6 +109,27 @@ export class IngestPipeline {
     const stat = await fs.stat(absPath);
     if (!stat.isFile()) {
       throw new LifecoachError(`Not a file: ${absPath}`, "INGEST_NOT_A_FILE");
+    }
+
+    // Dedup: hash the file and look it up. If we've seen this exact content
+    // before, return the existing document without re-processing.
+    if (!opts.force) {
+      const hash = await sha256File(absPath);
+      const existing = storage.ingestedFiles.getByHash(hash);
+      if (existing) {
+        const doc = storage.documents.get(existing.documentId);
+        if (doc) {
+          opts.onProgress?.({ phase: "skipped", documentId: doc.id, reason: "duplicate" });
+          return {
+            document: doc,
+            chunkCount: 0,
+            embedded: false,
+            factsExtracted: 0,
+            measurementsExtracted: 0,
+            skipped: true,
+          };
+        }
+      }
     }
 
     opts.onProgress?.({ phase: "parse", path: absPath });
@@ -183,6 +210,20 @@ export class IngestPipeline {
       }
     }
 
+    // Record the file hash so future ingests of the same content are skipped.
+    // Computed late so parse failures don't poison the dedup table.
+    try {
+      const hash = await sha256File(absPath);
+      storage.ingestedFiles.record({
+        hash,
+        path: absPath,
+        documentId: document.id,
+        sizeBytes: stat.size,
+      });
+    } catch {
+      // Non-fatal — the document is persisted regardless.
+    }
+
     opts.onProgress?.({ phase: "done", documentId: document.id, chunkCount: chunks.length });
     return {
       document,
@@ -190,6 +231,7 @@ export class IngestPipeline {
       embedded,
       factsExtracted,
       measurementsExtracted,
+      skipped: false,
       ...(extractionError ? { extractionError } : {}),
       ...(extractionNotes ? { extractionNotes } : {}),
     };
