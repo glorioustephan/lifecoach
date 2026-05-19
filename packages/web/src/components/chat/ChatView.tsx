@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { Menu, Plus } from "lucide-react";
 import { sendChat, type ChatEvent } from "~/lib/chat-stream";
 import { useSetAgentState } from "./agent-state";
 import { Message } from "./Message";
 import { ToolCallDisclosure, type ToolCallState } from "./ToolCallDisclosure";
 import { Composer } from "./Composer";
 import { useChatActions, useChatState, type ChatItem } from "./chat-state";
+import { SessionListSheet } from "./SessionListSheet";
 
 interface Props {
   /** When set, this ChatView is bound to a specific session (the /c/$id route).
@@ -22,9 +25,20 @@ const newClientId = (): string =>
 
 export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => {
   const setAgentState = useSetAgentState();
+  const navigate = useNavigate();
   const { items, streaming, sessionId: ctxSessionId } = useChatState();
   const { reset, append, update, setSessionId, setStreaming } = useChatActions();
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const handleNewConversation = useCallback((): void => {
+    reset({ sessionId: undefined, items: [] });
+    if (sessionId) {
+      // We were on /c/$id — navigate home so the URL no longer pins us to
+      // the old session. State is already cleared in context.
+      void navigate({ to: "/" });
+    }
+  }, [reset, sessionId, navigate]);
 
   // When the route hands us a specific session that differs from the one in
   // context, replace context with the loaded messages. (No-op when we're on
@@ -174,11 +188,34 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex h-12 items-center justify-between border-b border-border px-4">
-        <h1 className="text-sm font-medium text-fg-muted">
+      <header className="relative flex h-12 items-center justify-between border-b border-border px-2">
+        <button
+          type="button"
+          onClick={() => setHistoryOpen(true)}
+          aria-label="Open conversation history"
+          className="flex size-9 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg"
+        >
+          <Menu className="size-4" strokeWidth={1.75} />
+        </button>
+        <h1 className="absolute left-1/2 -translate-x-1/2 text-sm font-medium text-fg-muted">
           {ctxSessionId ? "Conversation" : "New conversation"}
         </h1>
+        <button
+          type="button"
+          onClick={handleNewConversation}
+          aria-label="New conversation"
+          className="flex h-9 items-center gap-1 rounded-md px-2.5 text-xs text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg"
+        >
+          <Plus className="size-4" strokeWidth={1.75} />
+          <span className="hidden md:inline">New</span>
+        </button>
       </header>
+
+      <SessionListSheet
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        {...(ctxSessionId ? { activeSessionId: ctxSessionId } : {})}
+      />
 
       <div
         ref={scrollerRef}

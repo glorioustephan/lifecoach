@@ -12,11 +12,25 @@ const sendSchema = z.object({
 export const chatRoutes = (lc: Lifecoach) => {
   const app = new Hono();
 
-  // List recent sessions for the past-conversations sheet.
+  // List recent sessions for the past-conversations sheet. Each session is
+  // enriched with a short preview (the first user message, truncated) and
+  // a message count so the sheet can render meaningful row labels.
   app.get("/sessions", (c) => {
     const limit = Number(c.req.query("limit") ?? "30");
     const sessions = lc.memory.episodic.recentSessions(limit);
-    return c.json({ sessions });
+    const rows = sessions.map((session) => {
+      const messages = lc.memory.episodic.forSession(session.id);
+      const firstUser = messages.find((m) => m.role === "user");
+      const preview = firstUser
+        ? firstUser.content.replace(/\s+/g, " ").trim().slice(0, 140)
+        : null;
+      return {
+        ...session,
+        messageCount: messages.length,
+        preview,
+      };
+    });
+    return c.json({ sessions: rows });
   });
 
   // Fetch a specific session's full message list.

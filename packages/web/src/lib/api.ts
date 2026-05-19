@@ -28,7 +28,17 @@ const get = async <T>(path: string): Promise<T> => {
 export const api = {
   status: () => get<StatusResponse>("/api/status"),
   profile: () => get<{ profile: { key: string; value: unknown; updatedAt: number }[] }>("/api/profile"),
-  recentSessions: () => get<{ sessions: { id: string; startedAt: number; summary: string | null }[] }>("/api/chat/sessions"),
+  recentSessions: () =>
+    get<{
+      sessions: Array<{
+        id: string;
+        startedAt: number;
+        endedAt: number | null;
+        summary: string | null;
+        messageCount: number;
+        preview: string | null;
+      }>;
+    }>("/api/chat/sessions?limit=50"),
   session: (id: string) =>
     get<{
       session: { id: string; startedAt: number };
