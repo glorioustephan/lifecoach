@@ -52,12 +52,37 @@ export interface ForgetDocumentResult {
   ingestedFilesRemoved: number;
 }
 
+export interface ReflectionRow {
+  id: string;
+  kind: "daily" | "weekly" | "monthly";
+  period_start: number;
+  period_end: number;
+  body: string;
+  created_at: number;
+}
+
+const postJson = async <T>(path: string, body: unknown): Promise<T> => {
+  const resp = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = (await resp.json().catch(() => ({}))) as { error?: string } | T;
+  if (!resp.ok) {
+    throw new Error(("error" in (data as { error?: string }) && (data as { error: string }).error) || `${path}: ${resp.status}`);
+  }
+  return data as T;
+};
+
 export const api = {
   status: () => get<StatusResponse>("/api/status"),
   profile: () => get<{ profile: { key: string; value: unknown; updatedAt: number }[] }>("/api/profile"),
   documents: () => get<{ documents: DocumentRow[] }>("/api/memory/documents"),
   forgetDocument: (id: string) =>
     del<{ result: ForgetDocumentResult }>(`/api/memory/documents/${encodeURIComponent(id)}`),
+  reflections: () => get<{ reflections: ReflectionRow[] }>("/api/memory/reflections"),
+  generateReflection: (kind: "daily" | "weekly" | "monthly") =>
+    postJson<{ reflection: ReflectionRow }>("/api/memory/reflections/generate", { kind }),
   recentSessions: () =>
     get<{
       sessions: Array<{

@@ -5,6 +5,7 @@ import { createMemory, type Memory } from "./memory/index.js";
 import { AgentRuntime } from "./agent/index.js";
 import { AnthropicExtractor, type Extractor } from "./ingest/index.js";
 import { TodoistClient } from "./integrations/index.js";
+import { Reflector } from "./memory/reflector.js";
 
 export interface Lifecoach {
   config: LifecoachConfig;
@@ -14,6 +15,8 @@ export interface Lifecoach {
   agent: AgentRuntime;
   /** Available when ANTHROPIC_API_KEY is set. Used by IngestPipeline for fact + measurement extraction. */
   extractor: Extractor | null;
+  /** Available when ANTHROPIC_API_KEY is set. Generates structured reflections. */
+  reflector: Reflector | null;
   /** Available when TODOIST_API_TOKEN is set. */
   todoist: TodoistClient | null;
   close: () => void;
@@ -35,7 +38,18 @@ export const createLifecoach = (overrides?: Partial<LifecoachConfig>): Lifecoach
       })
     : null;
   const todoist = config.todoistApiToken ? new TodoistClient(config.todoistApiToken) : null;
-  const agent = new AgentRuntime({ config, memory, storage, embedder, extractor, todoist });
+  const reflector = config.anthropicApiKey
+    ? new Reflector({ apiKey: config.anthropicApiKey, model: config.extractionModel })
+    : null;
+  const agent = new AgentRuntime({
+    config,
+    memory,
+    storage,
+    embedder,
+    extractor,
+    todoist,
+    reflector,
+  });
 
   return {
     config,
@@ -44,6 +58,7 @@ export const createLifecoach = (overrides?: Partial<LifecoachConfig>): Lifecoach
     memory,
     agent,
     extractor,
+    reflector,
     todoist,
     close: () => storage.close(),
   };
@@ -64,4 +79,5 @@ export {
   type TodoistSyncResult,
 } from "./integrations/index.js";
 export { forgetDocument, type ForgetDocumentResult } from "./memory/forget.js";
+export { Reflector, kindWindow, type ReflectionPayload } from "./memory/reflector.js";
 export { NotImplementedError, LifecoachError } from "./util/errors.js";

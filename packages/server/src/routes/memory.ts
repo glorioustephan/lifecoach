@@ -1,7 +1,13 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Lifecoach } from "@lifecoach/core";
-import { forgetDocument } from "@lifecoach/core";
+import { forgetDocument, kindWindow } from "@lifecoach/core";
+
+const reflectSchema = z.object({
+  kind: z.enum(["daily", "weekly", "monthly"]),
+  from: z.number().int().optional(),
+  to: z.number().int().optional(),
+});
 
 const recallSchema = z.object({
   query: z.string().min(1),
@@ -74,7 +80,7 @@ export const memoryRoutes = (lc: Lifecoach) => {
     });
   });
 
-  // Reflections.
+  // Reflections — list (newest first).
   app.get("/reflections", (c) => {
     const rows = lc.storage.handle.db
       .prepare(
@@ -82,6 +88,37 @@ export const memoryRoutes = (lc: Lifecoach) => {
       )
       .all();
     return c.json({ reflections: rows });
+  });
+
+  // Reflections — generate a new one over a period. Falls back to the spec's
+  // default window for the kind if from/to aren't provided.
+  app.post("/reflections/generate", async (c) => {
+    if (!lc.reflector) {
+      return c.json({ error: "anthropic_not_configured" }, 400);
+    }
+    const body = await c.req.json().catch(() => null);
+    const parsed = reflectSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+    }
+    const defaults = kindWindow(parsed.data.kind);
+    const from = parsed.data.from ?? defaults.from;
+    const to = parsed.data.to ?? defaults.to;
+    try {
+      const reflection = await lc.reflector.generate(
+        lc.storage,
+        lc.memory.identity,
+        parsed.data.kind,
+        from,
+        to,
+      );
+      return c.json({ reflection });
+    } catch (err) {
+      return c.json(
+        { error: err instanceof Error ? err.message : String(err) },
+        500,
+      );
+    }
   });
 
   // Cross-scope semantic search.

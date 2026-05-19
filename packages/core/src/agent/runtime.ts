@@ -9,6 +9,7 @@ import type { Storage } from "../storage/index.js";
 import type { Embedder } from "../embeddings/index.js";
 import type { Extractor } from "../ingest/index.js";
 import type { TodoistClient } from "../integrations/index.js";
+import type { Reflector } from "../memory/reflector.js";
 import type { Session } from "@lifecoach/schemas";
 import { buildAllTools } from "./tools/index.js";
 import { buildSystemPrompt } from "./system-prompt.js";
@@ -21,6 +22,7 @@ export interface AgentRuntimeDeps {
   embedder: Embedder;
   extractor: Extractor | null;
   todoist: TodoistClient | null;
+  reflector: Reflector | null;
 }
 
 export interface ChatTurnInput {
@@ -67,7 +69,7 @@ export class AgentRuntime {
 
   async chat(input: ChatTurnInput): Promise<ChatTurnOutput> {
     this.assertApiKey();
-    const { memory, storage, embedder, extractor, todoist, config } = this.deps;
+    const { memory, storage, embedder, extractor, todoist, reflector, config } = this.deps;
 
     memory.episodic.appendMessage({
       sessionId: input.sessionId,
@@ -75,7 +77,7 @@ export class AgentRuntime {
       content: input.userMessage,
     });
 
-    const tools = buildAllTools({ memory, storage, embedder, extractor, todoist });
+    const tools = buildAllTools({ memory, storage, embedder, extractor, todoist, reflector });
     const mcpServer = createSdkMcpServer({
       name: "lifecoach-memory",
       version: "0.0.1",

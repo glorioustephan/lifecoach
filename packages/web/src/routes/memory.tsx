@@ -1,17 +1,18 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { Trash2, Sparkles } from "lucide-react";
 import { ViewHeader } from "~/components/ui/ViewHeader";
-import { api, type DocumentRow } from "~/lib/api";
+import { api, type DocumentRow, type ReflectionRow } from "~/lib/api";
 import { formatRelative } from "~/lib/time";
 import { cn } from "~/lib/cn";
+import { Markdown } from "~/components/chat/Markdown";
 
 export const Route = createFileRoute("/memory")({
   component: MemoryRoute,
 });
 
-type Tab = "facts" | "documents";
+type Tab = "facts" | "documents" | "reflections";
 
 interface FactRow {
   id: string;
@@ -38,10 +39,15 @@ function MemoryRoute(): JSX.Element {
         <TabButton active={tab === "documents"} onClick={() => setTab("documents")}>
           Documents
         </TabButton>
+        <TabButton active={tab === "reflections"} onClick={() => setTab("reflections")}>
+          Reflections
+        </TabButton>
       </nav>
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl px-4 py-4 md:px-6">
-          {tab === "facts" ? <FactsTab /> : <DocumentsTab />}
+        <div className="mx-auto max-w-3xl px-4 py-4 md:px-6">
+          {tab === "facts" && <FactsTab />}
+          {tab === "documents" && <DocumentsTab />}
+          {tab === "reflections" && <ReflectionsTab />}
         </div>
       </div>
     </div>
@@ -269,5 +275,119 @@ function ConfirmForgetDialog({
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Reflections ─────────────────────────────────────────────────────────────
+
+const KIND_LABEL: Record<ReflectionRow["kind"], string> = {
+  daily: "Daily",
+  weekly: "Weekly",
+  monthly: "Monthly",
+};
+
+function ReflectionsTab(): JSX.Element {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ["memory", "reflections"],
+    queryFn: api.reflections,
+  });
+
+  const generate = useMutation({
+    mutationFn: (kind: "daily" | "weekly" | "monthly") => api.generateReflection(kind),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["memory", "reflections"] });
+      void qc.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-surface px-4 py-3">
+        <Sparkles className="size-4 text-accent" strokeWidth={1.75} />
+        <span className="mr-auto text-sm font-medium text-fg">Generate a reflection</span>
+        {(["daily", "weekly", "monthly"] as const).map((k) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => generate.mutate(k)}
+            disabled={generate.isPending}
+            className={cn(
+              "rounded-md border border-border-subtle px-3 py-1.5 text-xs transition-colors",
+              generate.isPending && generate.variables === k
+                ? "border-accent/40 bg-accent/10 text-accent"
+                : "text-fg-muted hover:border-accent/40 hover:bg-surface-elevated hover:text-fg",
+              generate.isPending && "cursor-not-allowed",
+            )}
+          >
+            {generate.isPending && generate.variables === k ? "reflecting…" : KIND_LABEL[k]}
+          </button>
+        ))}
+      </div>
+
+      {generate.isError && (
+        <div className="rounded-md border border-destructive-500/40 bg-destructive-500/5 px-4 py-2.5 text-xs text-destructive-300">
+          {generate.error instanceof Error ? generate.error.message : "Generation failed"}
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="space-y-3">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-40 animate-pulse rounded-md border border-border-subtle bg-surface/50"
+            />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && (data?.reflections.length ?? 0) === 0 && (
+        <p className="mt-8 text-center text-sm text-fg-muted">
+          No reflections yet. Generate one above — it'll synthesize your recent
+          conversations, completed tasks, new facts, and measurements into a
+          structured summary.
+        </p>
+      )}
+
+      {!isLoading && data && data.reflections.length > 0 && (
+        <div className="space-y-3">
+          {data.reflections.map((r) => (
+            <ReflectionCard key={r.id} reflection={r} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReflectionCard({ reflection }: { reflection: ReflectionRow }): JSX.Element {
+  const start = new Date(reflection.period_start);
+  const end = new Date(reflection.period_end);
+  const sameDay =
+    start.getFullYear() === end.getFullYear() &&
+    start.getMonth() === end.getMonth() &&
+    start.getDate() === end.getDate();
+  const rangeLabel = sameDay
+    ? start.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+    : `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} → ${end.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+
+  return (
+    <article className="rounded-md border border-border bg-surface px-5 py-4">
+      <header className="mb-3 flex items-baseline justify-between gap-3 border-b border-border-subtle pb-2">
+        <div className="flex items-center gap-2">
+          <span className="rounded-sm border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent">
+            {KIND_LABEL[reflection.kind]}
+          </span>
+          <span className="text-xs text-fg-muted">{rangeLabel}</span>
+        </div>
+        <span className="font-mono text-[10px] text-fg-faint">
+          {formatRelative(reflection.created_at)}
+        </span>
+      </header>
+      <div className="text-sm text-fg [&_h1]:text-base [&_h1]:font-semibold [&_h2]:mt-3 [&_h2]:text-xs [&_h2]:uppercase [&_h2]:tracking-wide [&_h2]:text-fg-faint">
+        <Markdown>{reflection.body}</Markdown>
+      </div>
+    </article>
   );
 }
