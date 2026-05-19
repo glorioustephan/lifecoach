@@ -14,6 +14,7 @@ import { registerQuery } from "./commands/query.js";
 import { registerStatus } from "./commands/status.js";
 import { registerIngest } from "./commands/ingest.js";
 import { registerWatch } from "./commands/watch.js";
+import { registerSync } from "./commands/sync.js";
 
 const program = new Command();
 
@@ -28,6 +29,7 @@ registerQuery(program);
 registerStatus(program);
 registerIngest(program);
 registerWatch(program);
+registerSync(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : err);

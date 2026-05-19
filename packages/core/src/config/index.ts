@@ -9,6 +9,7 @@ export interface LifecoachConfig {
   snapshotsDir: string;
   anthropicApiKey: string | undefined;
   voyageApiKey: string | undefined;
+  todoistApiToken: string | undefined;
   /** Model used by the conversational agent. */
   model: string;
   /** Model used by the ingest extractor. Defaults to Sonnet for accuracy at low cost. */
@@ -57,6 +58,7 @@ export const loadConfig = (overrides: Partial<LifecoachConfig> = {}): LifecoachC
     snapshotsDir: overrides.snapshotsDir ?? path.join(dataDir, "snapshots"),
     anthropicApiKey: overrides.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY,
     voyageApiKey: overrides.voyageApiKey ?? process.env.VOYAGE_API_KEY,
+    todoistApiToken: overrides.todoistApiToken ?? process.env.TODOIST_API_TOKEN,
     model: overrides.model ?? process.env.LIFECOACH_MODEL ?? DEFAULT_MODEL,
     extractionModel:
       overrides.extractionModel

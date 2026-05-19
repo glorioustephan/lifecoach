@@ -8,3 +8,4 @@ export { ReflectionRepository } from "./reflections.js";
 export { InsightRepository } from "./insights.js";
 export { EmbeddingRepository, type RefType, type EmbeddingInsert } from "./embeddings.js";
 export { IngestedFileRepository, type IngestedFile } from "./ingested-files.js";
+export { TaskRepository, type TaskListFilter } from "./tasks.js";

@@ -4,6 +4,7 @@ import { createEmbedder, type Embedder } from "./embeddings/index.js";
 import { createMemory, type Memory } from "./memory/index.js";
 import { AgentRuntime } from "./agent/index.js";
 import { AnthropicExtractor, type Extractor } from "./ingest/index.js";
+import { TodoistClient } from "./integrations/index.js";
 
 export interface Lifecoach {
   config: LifecoachConfig;
@@ -13,6 +14,8 @@ export interface Lifecoach {
   agent: AgentRuntime;
   /** Available when ANTHROPIC_API_KEY is set. Used by IngestPipeline for fact + measurement extraction. */
   extractor: Extractor | null;
+  /** Available when TODOIST_API_TOKEN is set. */
+  todoist: TodoistClient | null;
   close: () => void;
 }
 
@@ -31,7 +34,8 @@ export const createLifecoach = (overrides?: Partial<LifecoachConfig>): Lifecoach
         model: config.extractionModel,
       })
     : null;
-  const agent = new AgentRuntime({ config, memory, storage, embedder, extractor });
+  const todoist = config.todoistApiToken ? new TodoistClient(config.todoistApiToken) : null;
+  const agent = new AgentRuntime({ config, memory, storage, embedder, extractor, todoist });
 
   return {
     config,
@@ -40,6 +44,7 @@ export const createLifecoach = (overrides?: Partial<LifecoachConfig>): Lifecoach
     memory,
     agent,
     extractor,
+    todoist,
     close: () => storage.close(),
   };
 };
@@ -52,4 +57,10 @@ export type { Memory } from "./memory/index.js";
 export { AgentRuntime } from "./agent/index.js";
 export { IngestPipeline } from "./ingest/index.js";
 export type { IngestPipelineDeps, IngestResult } from "./ingest/index.js";
+export {
+  TodoistClient,
+  TodoistApiError,
+  syncTodoist,
+  type TodoistSyncResult,
+} from "./integrations/index.js";
 export { NotImplementedError, LifecoachError } from "./util/errors.js";
