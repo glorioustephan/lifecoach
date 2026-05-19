@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Paperclip } from "lucide-react";
 import { cn } from "~/lib/cn";
 import { placeholderForToday } from "~/lib/composer-placeholder";
+import { useIngest } from "~/components/ingest/IngestProvider";
 
 interface Props {
   disabled?: boolean;
@@ -15,7 +16,9 @@ interface Props {
 export const Composer = ({ disabled, onSubmit }: Props): JSX.Element => {
   const [value, setValue] = useState("");
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const placeholder = placeholderForToday();
+  const { openWithFile } = useIngest();
 
   // Auto-grow the textarea.
   useEffect(() => {
@@ -47,10 +50,23 @@ export const Composer = ({ disabled, onSubmit }: Props): JSX.Element => {
         <button
           type="button"
           aria-label="Attach file"
+          onClick={() => fileInputRef.current?.click()}
           className="flex size-9 shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-surface-elevated hover:text-fg-muted"
         >
           <Paperclip className="size-4" strokeWidth={1.75} />
         </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.csv,.md,.markdown,application/pdf,text/csv,text/markdown"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) openWithFile(file);
+            // Reset so picking the same file twice fires onChange the second time
+            e.target.value = "";
+          }}
+        />
         <textarea
           ref={taRef}
           value={value}
