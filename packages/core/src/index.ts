@@ -63,4 +63,5 @@ export {
   syncTodoist,
   type TodoistSyncResult,
 } from "./integrations/index.js";
+export { forgetDocument, type ForgetDocumentResult } from "./memory/forget.js";
 export { NotImplementedError, LifecoachError } from "./util/errors.js";

@@ -25,9 +25,39 @@ const get = async <T>(path: string): Promise<T> => {
   return resp.json();
 };
 
+const del = async <T>(path: string): Promise<T> => {
+  const resp = await fetch(path, { method: "DELETE" });
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({ error: resp.statusText }));
+    throw new Error(body?.error ?? `${path}: ${resp.status}`);
+  }
+  return resp.json();
+};
+
+export interface DocumentRow {
+  id: string;
+  source: string;
+  mime: string | null;
+  title: string | null;
+  body_chars: number;
+  ingested_at: number;
+}
+
+export interface ForgetDocumentResult {
+  documentId: string;
+  factsRemoved: number;
+  measurementsRemoved: number;
+  embeddingRefsRemoved: number;
+  embeddingVectorsRemoved: number;
+  ingestedFilesRemoved: number;
+}
+
 export const api = {
   status: () => get<StatusResponse>("/api/status"),
   profile: () => get<{ profile: { key: string; value: unknown; updatedAt: number }[] }>("/api/profile"),
+  documents: () => get<{ documents: DocumentRow[] }>("/api/memory/documents"),
+  forgetDocument: (id: string) =>
+    del<{ result: ForgetDocumentResult }>(`/api/memory/documents/${encodeURIComponent(id)}`),
   recentSessions: () =>
     get<{
       sessions: Array<{

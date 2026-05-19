@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Lifecoach } from "@lifecoach/core";
+import { forgetDocument } from "@lifecoach/core";
 
 const recallSchema = z.object({
   query: z.string().min(1),
@@ -43,6 +44,20 @@ export const memoryRoutes = (lc: Lifecoach) => {
       "SELECT id, source, mime, title, length(body) as body_chars, ingested_at FROM documents ORDER BY ingested_at DESC LIMIT 200",
     );
     return c.json({ documents: stmt.all() });
+  });
+
+  // Forget a document and everything derived from it. Destructive but
+  // bounded — only touches things derived from this document id.
+  app.delete("/documents/:id", (c) => {
+    const id = c.req.param("id");
+    try {
+      const result = forgetDocument(lc.storage, id);
+      return c.json({ result });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = message.startsWith("No document") ? 404 : 500;
+      return c.json({ error: message }, status);
+    }
   });
 
   // Measurements time-series for one metric.
