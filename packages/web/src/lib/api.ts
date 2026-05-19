@@ -76,6 +76,50 @@ export interface InsightRow {
 
 export type InsightState = "active" | "acted" | "dismissed" | "snoozed" | "all";
 
+export interface GoalRow {
+  id: string;
+  title: string;
+  body: string | null;
+  horizon: "this-week" | "this-month" | "this-quarter" | "this-year" | "open";
+  status: "active" | "paused" | "done" | "abandoned";
+  successCriteria: string | null;
+  parentGoalId: string | null;
+  projectId: string | null;
+  targetMetric: string | null;
+  targetValue: number | null;
+  currentProgress: number | null;
+  dueAt: number | null;
+  completedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ProjectRow {
+  id: string;
+  title: string;
+  body: string | null;
+  status: "active" | "paused" | "done" | "abandoned";
+  targetDate: number | null;
+  startedAt: number;
+  endedAt: number | null;
+}
+
+const patchJson = async <T>(path: string, body: unknown): Promise<T> => {
+  const resp = await fetch(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = (await resp.json().catch(() => ({}))) as { error?: string } | T;
+  if (!resp.ok) {
+    throw new Error(
+      ("error" in (data as { error?: string }) && (data as { error: string }).error) ||
+        `${path}: ${resp.status}`,
+    );
+  }
+  return data as T;
+};
+
 const postJson = async <T>(path: string, body: unknown): Promise<T> => {
   const resp = await fetch(path, {
     method: "POST",
@@ -109,6 +153,24 @@ export const api = {
     postJson<{ ok: true; until: number }>(`/api/inbox/${encodeURIComponent(id)}/snooze`, { until }),
   reactivateInsight: (id: string) =>
     postJson<{ ok: true }>(`/api/inbox/${encodeURIComponent(id)}/reactivate`, {}),
+  goals: (status: "active" | "paused" | "done" | "abandoned" | "all" = "active") =>
+    get<{ goals: GoalRow[] }>(`/api/goals?status=${encodeURIComponent(status)}`),
+  projects: (status: "active" | "paused" | "done" | "abandoned" | "all" = "active") =>
+    get<{ projects: ProjectRow[] }>(`/api/goals/projects?status=${encodeURIComponent(status)}`),
+  createGoal: (body: {
+    title: string;
+    body?: string;
+    horizon?: GoalRow["horizon"];
+    successCriteria?: string;
+    targetMetric?: string;
+    targetValue?: number;
+    dueAt?: number;
+    projectId?: string;
+  }) => postJson<{ goal: GoalRow }>("/api/goals", body),
+  updateGoal: (id: string, patch: Partial<{ status: GoalRow["status"]; currentProgress: number; body: string; successCriteria: string; targetValue: number }>) =>
+    patchJson<{ goal: GoalRow }>(`/api/goals/${encodeURIComponent(id)}`, patch),
+  createProject: (body: { title: string; body?: string; targetDate?: number }) =>
+    postJson<{ project: ProjectRow }>("/api/goals/projects", body),
   recentSessions: () =>
     get<{
       sessions: Array<{

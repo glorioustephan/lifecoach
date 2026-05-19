@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Radio,
   Settings,
+  Target,
   type LucideIcon,
 } from "lucide-react";
 
@@ -20,6 +21,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { id: "chat", label: "Chat", to: "/", icon: MessageCircle, inTabBar: true },
   { id: "inbox", label: "Inbox", to: "/inbox", icon: Inbox, inTabBar: true },
+  { id: "goals", label: "Goals", to: "/goals", icon: Target, inTabBar: false },
   { id: "memory", label: "Memory", to: "/memory", icon: Brain, inTabBar: true },
   { id: "tasks", label: "Tasks", to: "/tasks", icon: CheckCircle2, inTabBar: true },
   { id: "sources", label: "Sources", to: "/sources", icon: Radio, inTabBar: false },

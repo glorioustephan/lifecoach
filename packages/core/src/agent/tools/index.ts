@@ -15,6 +15,7 @@ import { buildIngestTools } from "./ingest.js";
 import { buildTaskTools } from "./tasks.js";
 import { buildForgetDocumentTools } from "./forget-document.js";
 import { buildInsightTools } from "./insights.js";
+import { buildGoalTools } from "./goals.js";
 
 export interface ToolDeps {
   memory: Memory;
@@ -53,6 +54,7 @@ export const buildAllTools = (deps: ToolDeps) => [
     memory: deps.memory,
     insighter: deps.insighter,
   }),
+  ...buildGoalTools({ storage: deps.storage }),
 ];
 
 export type LifecoachTool = ReturnType<typeof buildAllTools>[number];

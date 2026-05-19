@@ -12,6 +12,8 @@ import {
   EmbeddingRepository,
   IngestedFileRepository,
   TaskRepository,
+  GoalRepository,
+  ProjectRepository,
 } from "./repositories/index.js";
 
 export interface Storage {
@@ -27,6 +29,8 @@ export interface Storage {
   embeddings: EmbeddingRepository;
   ingestedFiles: IngestedFileRepository;
   tasks: TaskRepository;
+  goals: GoalRepository;
+  projects: ProjectRepository;
   close: () => void;
 }
 
@@ -46,6 +50,8 @@ export const createStorage = (config: LifecoachConfig): Storage => {
     embeddings: new EmbeddingRepository(db, embeddingDim),
     ingestedFiles: new IngestedFileRepository(db),
     tasks: new TaskRepository(db),
+    goals: new GoalRepository(db),
+    projects: new ProjectRepository(db),
     close: handle.close,
   };
 };

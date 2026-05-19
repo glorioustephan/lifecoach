@@ -9,3 +9,5 @@ export { InsightRepository, type InsightListFilter } from "./insights.js";
 export { EmbeddingRepository, type RefType, type EmbeddingInsert } from "./embeddings.js";
 export { IngestedFileRepository, type IngestedFile } from "./ingested-files.js";
 export { TaskRepository, type TaskListFilter } from "./tasks.js";
+export { GoalRepository, type GoalListFilter } from "./goals.js";
+export { ProjectRepository, type ProjectListFilter } from "./projects.js";
