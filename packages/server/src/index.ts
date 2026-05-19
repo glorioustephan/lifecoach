@@ -18,6 +18,7 @@ import { taskRoutes } from "./routes/tasks.js";
 import { sourceRoutes } from "./routes/sources.js";
 import { statusRoutes } from "./routes/status.js";
 import { ingestRoutes } from "./routes/ingest.js";
+import { inboxRoutes } from "./routes/inbox.js";
 import { loadAuthConfig, requireAuth } from "./middleware/auth.js";
 
 const lc = createLifecoach();
@@ -46,6 +47,7 @@ api.route("/tasks", taskRoutes(lc));
 api.route("/sources", sourceRoutes(lc));
 api.route("/status", statusRoutes(lc));
 api.route("/ingest", ingestRoutes(lc));
+api.route("/inbox", inboxRoutes(lc));
 app.route("/api", api);
 
 app.get("/health", (c) => c.text("ok"));

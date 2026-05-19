@@ -1,0 +1,333 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
+import type { Insight, InsightPriority } from "@lifecoach/schemas";
+import type { Storage } from "../storage/index.js";
+import type { IdentityMemory } from "./identity.js";
+import { withRetry } from "../util/retry.js";
+import { LifecoachError } from "../util/errors.js";
+
+const insightPayloadSchema = z.object({
+  insights: z
+    .array(
+      z.object({
+        topic: z.string().min(1),
+        body: z.string().min(1),
+        rationale: z.string().optional(),
+        priority: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(1),
+        sourceFactIds: z.array(z.string()).default([]),
+      }),
+    )
+    .max(5),
+});
+type InsightPayload = z.infer<typeof insightPayloadSchema>;
+
+const TOOL_INPUT_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    insights: {
+      type: "array",
+      maxItems: 5,
+      description:
+        "0–3 high-quality insights. Be SELECTIVE. Skip if nothing notable jumps out. The user is one person — quality over quantity.",
+      items: {
+        type: "object",
+        properties: {
+          topic: {
+            type: "string",
+            description: "Short title (3–7 words). E.g. 'Sleep onset drifting later'.",
+          },
+          body: {
+            type: "string",
+            description:
+              "1–2 paragraphs. Address the user as 'you'. Be specific (cite numbers, dates, named patterns from the data). Avoid generic advice.",
+          },
+          rationale: {
+            type: "string",
+            description:
+              "1 sentence. Why this matters NOW vs. always. Reference the trigger (a recent shift, a missed routine, a measurement change).",
+          },
+          priority: {
+            type: "integer",
+            enum: [1, 2, 3],
+            description: "1 = nice to notice, 2 = worth noticing, 3 = needs attention soon",
+          },
+          sourceFactIds: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Optional: fact IDs that anchor this insight. Use the IDs visible in the input data.",
+          },
+        },
+        required: ["topic", "body", "priority"],
+      },
+    },
+  },
+  required: ["insights"],
+};
+
+// ─── Context gathering ──────────────────────────────────────────────────────
+
+interface ContextData {
+  facts: Array<{ id: string; category: string; subject: string; body: string }>;
+  recentMessages: Array<{ role: string; content: string; createdAt: number }>;
+  activeTasks: Array<{ content: string; priority: number | null; dueAt: number | null; projectName: string | null; labels: string[] }>;
+  recentlyCompletedTasks: Array<{ content: string; completedAt: number | null }>;
+  recentMeasurements: Array<{ metric: string; value: number; unit: string | null; recordedAt: number }>;
+  latestReflections: Array<{ kind: string; body: string; periodEnd: number }>;
+  recentInsights: Array<{ topic: string; body: string; createdAt: number; state: string }>;
+}
+
+const ONE_DAY = 24 * 60 * 60 * 1000;
+
+const gather = (storage: Storage): ContextData => {
+  const db = storage.handle.db;
+  const nowMs = Date.now();
+
+  const facts = db
+    .prepare(
+      `SELECT id, category, subject, body
+       FROM facts WHERE valid_to IS NULL
+       ORDER BY created_at DESC LIMIT 50`,
+    )
+    .all() as ContextData["facts"];
+
+  const recentMessages = db
+    .prepare(
+      `SELECT role, content, created_at AS createdAt
+       FROM messages WHERE created_at >= ?
+       ORDER BY created_at DESC LIMIT 60`,
+    )
+    .all(nowMs - 7 * ONE_DAY) as ContextData["recentMessages"];
+
+  const activeTasks = storage.tasks
+    .list({ status: "active", limit: 100 })
+    .map((t) => ({
+      content: t.content,
+      priority: t.priority ?? null,
+      dueAt: t.dueAt ?? null,
+      projectName: t.projectName ?? null,
+      labels: t.labels,
+    }));
+
+  const recentlyCompletedTasks = db
+    .prepare(
+      `SELECT content, completed_at AS completedAt
+       FROM tasks WHERE completed_at IS NOT NULL AND completed_at >= ?
+       ORDER BY completed_at DESC LIMIT 40`,
+    )
+    .all(nowMs - 14 * ONE_DAY) as ContextData["recentlyCompletedTasks"];
+
+  const recentMeasurements = db
+    .prepare(
+      `SELECT metric, value, unit, recorded_at AS recordedAt
+       FROM measurements WHERE recorded_at >= ?
+       ORDER BY metric, recorded_at ASC LIMIT 200`,
+    )
+    .all(nowMs - 90 * ONE_DAY) as ContextData["recentMeasurements"];
+
+  const latestReflections = db
+    .prepare(
+      `SELECT kind, body, period_end AS periodEnd
+       FROM reflections
+       ORDER BY period_end DESC LIMIT 4`,
+    )
+    .all() as ContextData["latestReflections"];
+
+  const recentInsights = db
+    .prepare(
+      `SELECT topic, body, created_at AS createdAt,
+              CASE
+                WHEN acted_on_at IS NOT NULL THEN 'acted'
+                WHEN dismissed_at IS NOT NULL THEN 'dismissed'
+                WHEN snoozed_until IS NOT NULL AND snoozed_until > ${nowMs} THEN 'snoozed'
+                ELSE 'active'
+              END AS state
+       FROM insights WHERE created_at >= ?
+       ORDER BY created_at DESC LIMIT 20`,
+    )
+    .all(nowMs - 30 * ONE_DAY) as ContextData["recentInsights"];
+
+  return {
+    facts,
+    recentMessages,
+    activeTasks,
+    recentlyCompletedTasks,
+    recentMeasurements,
+    latestReflections,
+    recentInsights,
+  };
+};
+
+const MAX_CHARS = 80_000;
+
+const formatTimestamp = (ms: number): string =>
+  new Date(ms).toISOString().slice(0, 16).replace("T", " ");
+
+const renderContext = (data: ContextData): string => {
+  const parts: string[] = [];
+
+  if (data.latestReflections.length > 0) {
+    parts.push("## Recent reflections (newest first)");
+    for (const r of data.latestReflections) {
+      parts.push(`### ${r.kind} (ending ${formatTimestamp(r.periodEnd)})`);
+      parts.push(r.body);
+    }
+  }
+
+  if (data.facts.length > 0) {
+    parts.push("\n## Active facts (with IDs you can cite)");
+    for (const f of data.facts) {
+      parts.push(`- [id=${f.id}] [${f.category}/${f.subject}] ${f.body}`);
+    }
+  }
+
+  if (data.activeTasks.length > 0) {
+    parts.push("\n## Active tasks");
+    for (const t of data.activeTasks) {
+      const meta: string[] = [];
+      if (t.priority) meta.push(`p${5 - t.priority}`);
+      if (t.dueAt) meta.push(`due ${new Date(t.dueAt).toISOString().slice(0, 10)}`);
+      if (t.projectName) meta.push(t.projectName);
+      if (t.labels.length > 0) meta.push("#" + t.labels.join(" #"));
+      parts.push(`- ${t.content}${meta.length ? ` (${meta.join(" · ")})` : ""}`);
+    }
+  }
+
+  if (data.recentlyCompletedTasks.length > 0) {
+    parts.push("\n## Recently completed tasks (last 14d)");
+    for (const t of data.recentlyCompletedTasks) {
+      parts.push(`- ${t.content}`);
+    }
+  }
+
+  if (data.recentMeasurements.length > 0) {
+    parts.push("\n## Measurements (last 90d, grouped by metric)");
+    const byMetric = new Map<string, ContextData["recentMeasurements"]>();
+    for (const m of data.recentMeasurements) {
+      if (!byMetric.has(m.metric)) byMetric.set(m.metric, []);
+      byMetric.get(m.metric)!.push(m);
+    }
+    for (const [metric, rows] of byMetric) {
+      const series = rows
+        .map((r) => `${new Date(r.recordedAt).toISOString().slice(0, 10)}=${r.value}${r.unit ?? ""}`)
+        .join(", ");
+      parts.push(`- ${metric}: ${series}`);
+    }
+  }
+
+  if (data.recentMessages.length > 0) {
+    parts.push("\n## Recent messages (last 7d, newest first)");
+    for (const m of data.recentMessages) {
+      const content = m.content.length > 400 ? m.content.slice(0, 400) + "…" : m.content;
+      parts.push(`[${formatTimestamp(m.createdAt)}] ${m.role}: ${content}`);
+    }
+  }
+
+  if (data.recentInsights.length > 0) {
+    parts.push("\n## Prior insights (so you don't repeat yourself)");
+    for (const i of data.recentInsights) {
+      parts.push(`- [${i.state}] ${i.topic}: ${i.body.slice(0, 120)}…`);
+    }
+  }
+
+  let rendered = parts.join("\n");
+  if (rendered.length > MAX_CHARS) {
+    rendered =
+      rendered.slice(0, MAX_CHARS) +
+      `\n\n[truncated — original was ${rendered.length} chars]`;
+  }
+  return rendered;
+};
+
+const buildPrompt = (identityProfile: string, rendered: string): string =>
+  `You are a personal life/health coach surfacing insights from the user's data.
+
+## Who the user is
+${identityProfile}
+
+## Data
+${rendered}
+
+---
+
+Call \`record_insights\` with **0–3 high-quality insights**. Quality bar:
+
+1. **Specific.** Cite numbers, dates, named patterns. "Sleep onset drifted from 9:30 to 11:00 over 5 days" beats "your sleep is off."
+2. **Trigger-relevant.** Don't restate static facts. Insight = a thing that's CHANGED or that the user hasn't noticed about themselves.
+3. **Non-redundant.** Check the "Prior insights" section — if it's already been surfaced and acted/dismissed, skip it.
+4. **Honest but not alarmist.** A 12% HRV dip is worth flagging; a 2% one isn't.
+5. **Connectable.** Where possible, link the source facts/measurements by including their IDs in \`sourceFactIds\`.
+
+If genuinely nothing notable jumps out, return an empty array. That's a valid answer.`;
+
+// ─── Generator ──────────────────────────────────────────────────────────────
+
+export interface InsighterOptions {
+  apiKey: string;
+  model?: string;
+  maxRetries?: number;
+}
+
+export class Insighter {
+  private readonly client: Anthropic;
+  private readonly model: string;
+  private readonly maxRetries: number;
+
+  constructor(opts: InsighterOptions) {
+    this.client = new Anthropic({ apiKey: opts.apiKey });
+    this.model = opts.model ?? "claude-sonnet-4-6";
+    this.maxRetries = opts.maxRetries ?? 4;
+  }
+
+  async generate(storage: Storage, identity: IdentityMemory): Promise<Insight[]> {
+    const data = gather(storage);
+    const rendered = renderContext(data);
+    const prompt = buildPrompt(identity.render(), rendered);
+
+    const response = await withRetry(
+      () =>
+        this.client.messages.create({
+          model: this.model,
+          max_tokens: 4096,
+          tools: [
+            {
+              name: "record_insights",
+              description: "Record 0–3 insights about the user.",
+              input_schema: TOOL_INPUT_SCHEMA,
+            },
+          ],
+          tool_choice: { type: "tool", name: "record_insights" },
+          messages: [{ role: "user", content: prompt }],
+        }),
+      { maxAttempts: this.maxRetries },
+    );
+
+    const toolUse = response.content.find((b) => b.type === "tool_use");
+    if (!toolUse || toolUse.type !== "tool_use") {
+      throw new LifecoachError("Insighter: model didn't call record_insights", "INSIGHT_NO_TOOL_USE");
+    }
+    const parsed = insightPayloadSchema.safeParse(toolUse.input);
+    if (!parsed.success) {
+      throw new LifecoachError(
+        `Insighter: invalid payload: ${parsed.error.message}`,
+        "INSIGHT_INVALID_PAYLOAD",
+      );
+    }
+    return persist(storage, parsed.data);
+  }
+}
+
+const persist = (storage: Storage, payload: InsightPayload): Insight[] => {
+  const created: Insight[] = [];
+  for (const item of payload.insights) {
+    const ins = storage.insights.create({
+      topic: item.topic,
+      body: item.body,
+      ...(item.rationale ? { rationale: item.rationale } : {}),
+      sourceFactIds: item.sourceFactIds ?? [],
+      priority: item.priority as InsightPriority,
+    });
+    created.push(ins);
+  }
+  return created;
+};

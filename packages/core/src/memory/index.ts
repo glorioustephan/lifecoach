@@ -34,3 +34,4 @@ export { ContextBuilder } from "./context-builder.js";
 export { indexTask, indexTasks } from "./task-indexer.js";
 export { forgetDocument, type ForgetDocumentResult } from "./forget.js";
 export { Reflector, kindWindow, type ReflectorOptions, type ReflectionPayload } from "./reflector.js";
+export { Insighter, type InsighterOptions } from "./insighter.js";

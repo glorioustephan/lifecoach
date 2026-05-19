@@ -61,6 +61,21 @@ export interface ReflectionRow {
   created_at: number;
 }
 
+export interface InsightRow {
+  id: string;
+  topic: string;
+  body: string;
+  rationale?: string;
+  sourceFactIds: string[];
+  priority: 1 | 2 | 3;
+  createdAt: number;
+  actedOnAt?: number | null;
+  dismissedAt?: number | null;
+  snoozedUntil?: number | null;
+}
+
+export type InsightState = "active" | "acted" | "dismissed" | "snoozed" | "all";
+
 const postJson = async <T>(path: string, body: unknown): Promise<T> => {
   const resp = await fetch(path, {
     method: "POST",
@@ -83,6 +98,17 @@ export const api = {
   reflections: () => get<{ reflections: ReflectionRow[] }>("/api/memory/reflections"),
   generateReflection: (kind: "daily" | "weekly" | "monthly") =>
     postJson<{ reflection: ReflectionRow }>("/api/memory/reflections/generate", { kind }),
+  inbox: (state: InsightState = "active") =>
+    get<{ insights: InsightRow[] }>(`/api/inbox?state=${encodeURIComponent(state)}&limit=50`),
+  generateInsights: () => postJson<{ insights: InsightRow[] }>("/api/inbox/generate", {}),
+  actInsight: (id: string) =>
+    postJson<{ ok: true }>(`/api/inbox/${encodeURIComponent(id)}/act`, {}),
+  dismissInsight: (id: string) =>
+    postJson<{ ok: true }>(`/api/inbox/${encodeURIComponent(id)}/dismiss`, {}),
+  snoozeInsight: (id: string, until: string) =>
+    postJson<{ ok: true; until: number }>(`/api/inbox/${encodeURIComponent(id)}/snooze`, { until }),
+  reactivateInsight: (id: string) =>
+    postJson<{ ok: true }>(`/api/inbox/${encodeURIComponent(id)}/reactivate`, {}),
   recentSessions: () =>
     get<{
       sessions: Array<{

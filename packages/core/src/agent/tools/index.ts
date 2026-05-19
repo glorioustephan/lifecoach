@@ -4,6 +4,7 @@ import type { Embedder } from "../../embeddings/index.js";
 import type { Extractor } from "../../ingest/index.js";
 import type { TodoistClient } from "../../integrations/index.js";
 import type { Reflector } from "../../memory/reflector.js";
+import type { Insighter } from "../../memory/insighter.js";
 import { buildProfileTools } from "./profile.js";
 import { buildRecallTool } from "./recall.js";
 import { buildRememberTools } from "./remember.js";
@@ -13,6 +14,7 @@ import { buildReflectionTools } from "./reflections.js";
 import { buildIngestTools } from "./ingest.js";
 import { buildTaskTools } from "./tasks.js";
 import { buildForgetDocumentTools } from "./forget-document.js";
+import { buildInsightTools } from "./insights.js";
 
 export interface ToolDeps {
   memory: Memory;
@@ -21,6 +23,7 @@ export interface ToolDeps {
   extractor: Extractor | null;
   todoist: TodoistClient | null;
   reflector: Reflector | null;
+  insighter: Insighter | null;
 }
 
 /**
@@ -45,6 +48,11 @@ export const buildAllTools = (deps: ToolDeps) => [
   }),
   ...buildTaskTools({ storage: deps.storage, embedder: deps.embedder, todoist: deps.todoist }),
   ...buildForgetDocumentTools({ storage: deps.storage }),
+  ...buildInsightTools({
+    storage: deps.storage,
+    memory: deps.memory,
+    insighter: deps.insighter,
+  }),
 ];
 
 export type LifecoachTool = ReturnType<typeof buildAllTools>[number];
