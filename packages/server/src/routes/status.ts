@@ -10,6 +10,7 @@ export const statusRoutes = (lc: Lifecoach) => {
       model: lc.config.model,
       embedder: { enabled: lc.embedder.enabled, dim: lc.config.embeddingDim },
       todoist: lc.todoist != null,
+      capacities: lc.capacities != null,
       counts: {
         profileEntries: lc.memory.identity.entries().length,
         facts: lc.storage.facts.count(),

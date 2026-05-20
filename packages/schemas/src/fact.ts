@@ -8,6 +8,10 @@ export const factCategory = z.enum([
   "routine",
   "goal",
   "relationship",
+  // "person" is a relationship-of-record imported from external graphs
+  // (currently Capacities Person objects). Distinct from "relationship" which
+  // captures dynamic interactions/notes, not directory entries.
+  "person",
   "other",
 ]);
 export type FactCategory = z.infer<typeof factCategory>;

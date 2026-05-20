@@ -37,7 +37,7 @@ export async function* streamChatTurn(
   lc: Lifecoach,
   input: ChatStreamInput,
 ): AsyncGenerator<ChatEvent> {
-  const { memory, storage, embedder, extractor, todoist, reflector, insighter, config } = lc;
+  const { memory, storage, embedder, extractor, todoist, capacities, reflector, insighter, config } = lc;
 
   // Persist the user turn before kicking off the agent.
   memory.episodic.appendMessage({
@@ -52,8 +52,10 @@ export async function* streamChatTurn(
     embedder,
     extractor,
     todoist,
+    capacities,
     reflector,
     insighter,
+    capacitiesDefaultSpaceId: config.capacitiesDefaultSpaceId,
   });
   const mcpServer = createSdkMcpServer({
     name: "lifecoach-memory",

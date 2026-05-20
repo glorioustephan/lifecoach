@@ -4,7 +4,7 @@ import { createEmbedder, type Embedder } from "./embeddings/index.js";
 import { createMemory, type Memory } from "./memory/index.js";
 import { AgentRuntime } from "./agent/index.js";
 import { AnthropicExtractor, type Extractor } from "./ingest/index.js";
-import { TodoistClient } from "./integrations/index.js";
+import { TodoistClient, CapacitiesClient } from "./integrations/index.js";
 import { Reflector } from "./memory/reflector.js";
 import { Insighter } from "./memory/insighter.js";
 
@@ -22,6 +22,8 @@ export interface Lifecoach {
   insighter: Insighter | null;
   /** Available when TODOIST_API_TOKEN is set. */
   todoist: TodoistClient | null;
+  /** Available when CAPACITIES_API_TOKEN is set. */
+  capacities: CapacitiesClient | null;
   close: () => void;
 }
 
@@ -41,6 +43,9 @@ export const createLifecoach = (overrides?: Partial<LifecoachConfig>): Lifecoach
       })
     : null;
   const todoist = config.todoistApiToken ? new TodoistClient(config.todoistApiToken) : null;
+  const capacities = config.capacitiesApiToken
+    ? new CapacitiesClient(config.capacitiesApiToken)
+    : null;
   const reflector = config.anthropicApiKey
     ? new Reflector({ apiKey: config.anthropicApiKey, model: config.extractionModel })
     : null;
@@ -54,6 +59,7 @@ export const createLifecoach = (overrides?: Partial<LifecoachConfig>): Lifecoach
     embedder,
     extractor,
     todoist,
+    capacities,
     reflector,
     insighter,
   });
@@ -68,6 +74,7 @@ export const createLifecoach = (overrides?: Partial<LifecoachConfig>): Lifecoach
     reflector,
     insighter,
     todoist,
+    capacities,
     close: () => storage.close(),
   };
 };
@@ -85,6 +92,17 @@ export {
   TodoistApiError,
   syncTodoist,
   type TodoistSyncResult,
+  CapacitiesClient,
+  CapacitiesApiError,
+  syncCapacities,
+  CAPACITIES_SOURCE,
+  type CapacitiesSyncResult,
+  type CapacitiesSyncOptions,
+  type CapacitiesSpace,
+  type CapacitiesStructure,
+  type CapacitiesLookupResult,
+  pushReflectionToCapacities,
+  type ReflectionWritebackOptions,
 } from "./integrations/index.js";
 export { forgetDocument, type ForgetDocumentResult } from "./memory/forget.js";
 export { Reflector, kindWindow, type ReflectionPayload } from "./memory/reflector.js";

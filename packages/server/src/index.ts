@@ -95,6 +95,7 @@ const server = serve(
     console.log(`Lifecoach server → http://localhost:${info.port}`);
     console.log(`  auth: ${mode}`);
     console.log(`  todoist: ${lc.todoist ? "connected" : "not configured"}`);
+    console.log(`  capacities: ${lc.capacities ? "connected" : "not configured"}`);
     console.log(`  embedder: ${lc.embedder.enabled ? "on" : "off"}`);
     if (!fs.existsSync(webDist)) {
       console.log(`  web bundle: not built — run \`pnpm --filter @lifecoach/web dev\` for the dev server`);

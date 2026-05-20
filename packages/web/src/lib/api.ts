@@ -4,6 +4,7 @@ export interface StatusResponse {
   model: string;
   embedder: { enabled: boolean; dim: number };
   todoist: boolean;
+  capacities?: boolean;
   counts: {
     profileEntries: number;
     facts: number;
@@ -226,4 +227,44 @@ export const api = {
         createdAt: number;
       }[];
     }>(`/api/chat/sessions/${encodeURIComponent(id)}`),
+  sources: () =>
+    get<{
+      sources: Array<{
+        id: string;
+        name: string;
+        connected: boolean;
+        tasks?: number;
+        ingestedFiles?: number;
+        watchedPath?: string;
+        defaultSpaceId?: string | null;
+        mirroredObjects?: number;
+      }>;
+    }>("/api/sources"),
+  syncCapacities: (opts?: { pruneMissing?: boolean; searchTerms?: string[] }) =>
+    postJson<{
+      result: {
+        spacesScanned: number;
+        structuresIndexed: number;
+        objectsDiscovered: number;
+        upserted: number;
+        embedded: number;
+        removed: number;
+        factsRouted: number;
+        projectsRouted: number;
+        searchTermsUsed: number;
+      };
+    }>("/api/sources/capacities/sync", opts ?? {}),
+  capacitiesSpaces: () =>
+    get<{ spaces: Array<{ id: string; title: string; icon?: unknown }> }>(
+      "/api/sources/capacities/spaces",
+    ),
+  syncTodoist: () =>
+    postJson<{
+      result: {
+        fetched: number;
+        upserted: number;
+        newlyCompleted: number;
+        embedded: number;
+      };
+    }>("/api/sources/todoist/sync", {}),
 };

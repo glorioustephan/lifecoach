@@ -8,7 +8,7 @@ import type { Memory } from "../memory/index.js";
 import type { Storage } from "../storage/index.js";
 import type { Embedder } from "../embeddings/index.js";
 import type { Extractor } from "../ingest/index.js";
-import type { TodoistClient } from "../integrations/index.js";
+import type { TodoistClient, CapacitiesClient } from "../integrations/index.js";
 import type { Reflector } from "../memory/reflector.js";
 import type { Insighter } from "../memory/insighter.js";
 import type { Session } from "@lifecoach/schemas";
@@ -23,6 +23,7 @@ export interface AgentRuntimeDeps {
   embedder: Embedder;
   extractor: Extractor | null;
   todoist: TodoistClient | null;
+  capacities: CapacitiesClient | null;
   reflector: Reflector | null;
   insighter: Insighter | null;
 }
@@ -71,7 +72,7 @@ export class AgentRuntime {
 
   async chat(input: ChatTurnInput): Promise<ChatTurnOutput> {
     this.assertApiKey();
-    const { memory, storage, embedder, extractor, todoist, reflector, insighter, config } =
+    const { memory, storage, embedder, extractor, todoist, capacities, reflector, insighter, config } =
       this.deps;
 
     memory.episodic.appendMessage({
@@ -86,8 +87,10 @@ export class AgentRuntime {
       embedder,
       extractor,
       todoist,
+      capacities,
       reflector,
       insighter,
+      capacitiesDefaultSpaceId: config.capacitiesDefaultSpaceId,
     });
     const mcpServer = createSdkMcpServer({
       name: "lifecoach-memory",

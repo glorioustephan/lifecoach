@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { api } from "~/lib/api";
 import { ViewHeader } from "~/components/ui/ViewHeader";
+import { cn } from "~/lib/cn";
 
 export const Route = createFileRoute("/settings")({
   component: SettingsRoute,
@@ -10,6 +12,7 @@ export const Route = createFileRoute("/settings")({
 function SettingsRoute(): JSX.Element {
   const { data: status } = useQuery({ queryKey: ["status"], queryFn: api.status });
   const { data: profile } = useQuery({ queryKey: ["profile"], queryFn: api.profile });
+  const { data: sources } = useQuery({ queryKey: ["sources"], queryFn: api.sources });
 
   const formatValue = (v: unknown): string => {
     if (Array.isArray(v)) return v.join(", ");
@@ -50,6 +53,17 @@ function SettingsRoute(): JSX.Element {
 
           <section className="rounded-md border border-border bg-surface">
             <header className="border-b border-border-subtle px-4 py-3">
+              <h2 className="text-sm font-medium text-fg">Sources</h2>
+            </header>
+            <div className="divide-y divide-border-subtle">
+              {(sources?.sources ?? []).map((s) => (
+                <SourceRow key={s.id} source={s} />
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-md border border-border bg-surface">
+            <header className="border-b border-border-subtle px-4 py-3">
               <h2 className="text-sm font-medium text-fg">System</h2>
             </header>
             <dl className="divide-y divide-border-subtle">
@@ -59,6 +73,7 @@ function SettingsRoute(): JSX.Element {
                 v={`${status?.embedder.enabled ? "on" : "off"} (dim ${status?.embedder.dim ?? "—"})`}
               />
               <Row k="Todoist" v={status?.todoist ? "connected" : "not configured"} />
+              <Row k="Capacities" v={status?.capacities ? "connected" : "not configured"} />
               <Row k="Facts" v={status?.counts.facts ?? "—"} />
               <Row k="Documents" v={status?.counts.documents ?? "—"} />
               <Row k="Measurements" v={status?.counts.measurements ?? "—"} />
@@ -69,6 +84,86 @@ function SettingsRoute(): JSX.Element {
           </section>
         </div>
       </div>
+    </div>
+  );
+}
+
+type Source = NonNullable<Awaited<ReturnType<typeof api.sources>>["sources"]>[number];
+
+function SourceRow({ source }: { source: Source }): JSX.Element {
+  const qc = useQueryClient();
+  const [lastResult, setLastResult] = useState<string | null>(null);
+
+  const sync = useMutation({
+    mutationFn: async () => {
+      if (source.id === "todoist") {
+        const { result } = await api.syncTodoist();
+        return `${result.upserted} upserted · ${result.newlyCompleted} completed · ${result.embedded} embedded`;
+      }
+      if (source.id === "capacities") {
+        const { result } = await api.syncCapacities();
+        return `${result.spacesScanned} spaces · ${result.objectsDiscovered} objects · ${result.upserted} upserted · ${result.factsRouted}+${result.projectsRouted} type-routed`;
+      }
+      throw new Error(`No sync for source ${source.id}`);
+    },
+    onSuccess: (msg) => {
+      setLastResult(msg);
+      void qc.invalidateQueries({ queryKey: ["sources"] });
+      void qc.invalidateQueries({ queryKey: ["status"] });
+    },
+    onError: (err: unknown) => {
+      setLastResult(err instanceof Error ? `error: ${err.message}` : "sync failed");
+    },
+  });
+
+  const canSync =
+    source.connected && (source.id === "todoist" || source.id === "capacities");
+  const counts: string[] = [];
+  if (typeof source.tasks === "number") counts.push(`${source.tasks} tasks`);
+  if (typeof source.ingestedFiles === "number") counts.push(`${source.ingestedFiles} files`);
+  if (typeof source.mirroredObjects === "number") {
+    counts.push(`${source.mirroredObjects} mirrored`);
+  }
+
+  return (
+    <div className="px-4 py-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-fg">{source.name}</p>
+          <p
+            className={cn(
+              "mt-0.5 text-[11px] uppercase tracking-wide",
+              source.connected ? "text-success-500" : "text-fg-faint",
+            )}
+          >
+            {source.connected ? "connected" : "not configured"}
+            {counts.length > 0 ? ` · ${counts.join(" · ")}` : ""}
+          </p>
+        </div>
+        {canSync && (
+          <button
+            type="button"
+            onClick={() => sync.mutate()}
+            disabled={sync.isPending}
+            className={cn(
+              "rounded-md border border-border-subtle px-2.5 py-1 text-xs text-fg-muted",
+              "transition-colors hover:border-accent/40 hover:text-fg",
+              "disabled:cursor-not-allowed disabled:opacity-50",
+            )}
+          >
+            {sync.isPending ? "syncing…" : "Sync"}
+          </button>
+        )}
+      </div>
+      {lastResult && (
+        <p className="mt-1 font-mono text-[10px] text-fg-faint">{lastResult}</p>
+      )}
+      {source.id === "capacities" && source.connected && !source.defaultSpaceId && (
+        <p className="mt-1 text-[10px] text-fg-faint">
+          Set <code>CAPACITIES_DEFAULT_SPACE_ID</code> to enable reflection write-back and
+          save-to-daily-note tools.
+        </p>
+      )}
     </div>
   );
 }

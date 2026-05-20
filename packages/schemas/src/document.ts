@@ -8,6 +8,10 @@ export const documentSchema = z.object({
   body: z.string(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   ingestedAt: z.number().int(),
+  /** External system identifier, e.g. a Capacities object UUID. Null for locally-ingested files. */
+  externalId: z.string().nullable().optional(),
+  /** Which external system the external_id belongs to (e.g. "capacities"). */
+  externalSource: z.string().nullable().optional(),
 });
 export type Document = z.infer<typeof documentSchema>;
 

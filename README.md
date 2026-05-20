@@ -63,6 +63,7 @@ The three interaction surfaces (CLI, MCP, web UI) all drive the **same agent run
 
 **Integrations:**
 - Todoist (v1 API): bidirectional sync, dual-write tools, embedded for semantic recall
+- Capacities: sweep-based directory mirror (titles + types + URLs embedded for recall), type-aware routing (Person → fact, Project → projects table, Recipe → fact), agent tools for live lookup + save-to-daily-note + save-as-Weblink, automatic write-back of daily/weekly reflections into the user's Capacities daily note
 
 **Background intelligence:**
 - Reflection generator (daily / weekly / monthly) with structured payload (themes, wins, open threads, concerns)
@@ -131,6 +132,7 @@ pnpm lifecoach watch                  Auto-ingest files dropped into data/raw/
 pnpm lifecoach forget document <id>   Remove a doc and everything derived from it
 
 pnpm lifecoach sync todoist           Pull active Todoist tasks
+pnpm lifecoach sync capacities        Sweep Capacities spaces — mirror objects as documents, route Person/Project/Recipe to first-class entities
 pnpm lifecoach reflect daily          Generate a daily reflection
 pnpm lifecoach reflect weekly         Generate a weekly reflection
 pnpm lifecoach insights generate      Run the insight loop now

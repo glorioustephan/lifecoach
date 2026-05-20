@@ -29,3 +29,11 @@ data/snapshots/*
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# SSH keys / secrets (e.g. macmini, macmini.pub used to set up the Mac mini deploy)
+*.pub
+*_rsa
+*_ed25519
+macmini
+id_rsa*
+id_ed25519*

@@ -10,6 +10,12 @@ export interface LifecoachConfig {
   anthropicApiKey: string | undefined;
   voyageApiKey: string | undefined;
   todoistApiToken: string | undefined;
+  capacitiesApiToken: string | undefined;
+  /**
+   * Default space id for Capacities write-back (reflections, save-to-daily-note).
+   * When unset, write-back tools fail unless the agent specifies a spaceId.
+   */
+  capacitiesDefaultSpaceId: string | undefined;
   /** Model used by the conversational agent. */
   model: string;
   /** Model used by the ingest extractor. Defaults to Sonnet for accuracy at low cost. */
@@ -63,6 +69,9 @@ export const loadConfig = (overrides: Partial<LifecoachConfig> = {}): LifecoachC
     anthropicApiKey: overrides.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY,
     voyageApiKey: overrides.voyageApiKey ?? process.env.VOYAGE_API_KEY,
     todoistApiToken: overrides.todoistApiToken ?? process.env.TODOIST_API_TOKEN,
+    capacitiesApiToken: overrides.capacitiesApiToken ?? process.env.CAPACITIES_API_TOKEN,
+    capacitiesDefaultSpaceId:
+      overrides.capacitiesDefaultSpaceId ?? process.env.CAPACITIES_DEFAULT_SPACE_ID,
     model: overrides.model ?? process.env.LIFECOACH_MODEL ?? DEFAULT_MODEL,
     extractionModel:
       overrides.extractionModel
