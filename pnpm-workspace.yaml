@@ -1,2 +1,11 @@
 packages:
   - "packages/*"
+
+# pnpm 11 moved settings from the `pnpm` field in package.json to this file.
+# This list is the allow-list of dependencies whose install/postinstall scripts
+# are permitted to run during `pnpm install`. Without this, pnpm 11 silently
+# skips them and native modules (better-sqlite3) never download prebuilds —
+# leaving you with an installed-but-unloadable package.
+onlyBuiltDependencies:
+  - better-sqlite3
+  - esbuild
