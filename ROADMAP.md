@@ -1,14 +1,14 @@
 # Lifecoach Roadmap
 
-A personal life/health coach built on the Claude Agent SDK with local SQLite memory. Started 2026-05. Single user (James).
+A personal life/health coach built on the Claude Agent SDK with local SQLite memory. Single-user.
 
-## Architectural decisions (locked in 2026-05-18)
+## Architectural decisions
 
-- **Deployment**: Mac Mini, accessed via Tailscale (private mesh, free, auto-HTTPS at `https://lifecoach.<tailnet>.ts.net`). No public exposure.
-- **Topology**: Embedded core in a Next.js app for the web UI. The CLI and MCP server keep working off the same `@lifecoach/core` package. Single process per service.
-- **Data storage**: SQLite + sqlite-vec, file lives at `data/lifecoach.db` on the Mac Mini. Encrypted snapshots to a backup target (TBD: Backblaze B2 or local NAS).
-- **Auth (web UI)**: NextAuth with Google OAuth, allow-list of `jamesleebaker@gmail.com` only.
-- **Secrets**: `.env` on the Mac Mini for now; consider 1Password CLI later.
+- **Deployment**: home server (e.g. Mac Mini), accessed via Tailscale (private mesh, free for personal use, auto-HTTPS at `https://<host>.<tailnet>.ts.net`). No public internet exposure.
+- **Topology**: Embedded core in a single Node process. The CLI, MCP server, and web UI all share the `@lifecoach/core` package.
+- **Data storage**: SQLite + sqlite-vec at `data/lifecoach.db`. Snapshot via `lifecoach export`; restore via `lifecoach import`. Recommended: nightly snapshot pushed to encrypted offsite storage.
+- **Auth (web UI)**: OAuth allow-list of a single email. The Tailscale tunnel is the primary auth surface — OAuth is defense in depth.
+- **Secrets**: `.env` on the host machine.
 
 ---
 
@@ -62,7 +62,7 @@ What's working:
 - [ ] Embed `@lifecoach/core` in Server Actions / Route Handlers
 - [ ] [prompt-kit](https://www.prompt-kit.com/chat-ui) for the chat surface
 - [ ] AI SDK v6 for streaming the agent's responses to the browser
-- [ ] NextAuth with Google OAuth, allow-list jamesleebaker@gmail.com only
+- [ ] NextAuth with Google OAuth, allow-list to a single configured email
 - [ ] Tailscale serve on the Mac Mini for HTTPS access
 - [ ] Mobile-friendly responsive layout (iPhone is the daily-use device)
 - [ ] Session list / history view in the sidebar

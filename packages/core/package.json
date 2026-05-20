@@ -27,6 +27,7 @@
     "papaparse": "^5.5.3",
     "pdf-parse": "^2.4.5",
     "sqlite-vec": "^0.1.6",
+    "tar": "^7.5.15",
     "ulid": "^2.3.0",
     "voyageai": "^0.0.4",
     "zod": "^3.24.1"
@@ -36,6 +37,7 @@
     "@types/node": "^22.10.0",
     "@types/papaparse": "^5.5.2",
     "@types/pdf-parse": "^1.1.5",
+    "@types/tar": "^7.0.87",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

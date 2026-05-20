@@ -9,7 +9,16 @@ import { logger } from "hono/logger";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { serve } from "@hono/node-server";
 import { createLifecoach, findWorkspaceRoot } from "@lifecoach/core";
-dotenv.config({ path: path.join(findWorkspaceRoot(), ".env"), override: true });
+// Override empty (or unset) values from .env, but never clobber a legit
+// command-line env var like `LIFECOACH_DATA_DIR=… node server`.
+const envPath = path.join(findWorkspaceRoot(), ".env");
+if (fs.existsSync(envPath)) {
+  const parsed = dotenv.parse(fs.readFileSync(envPath, "utf8"));
+  for (const [k, v] of Object.entries(parsed)) {
+    const existing = process.env[k];
+    if (existing === undefined || existing === "") process.env[k] = v;
+  }
+}
 
 import { chatRoutes } from "./routes/chat.js";
 import { profileRoutes } from "./routes/profile.js";

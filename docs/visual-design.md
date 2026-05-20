@@ -472,7 +472,7 @@ On laptop, the composer is max-width constrained to `max-w-2xl` and centered. Th
 │  │                                [›] │   │
 │  └─────────────────────────────────────┘   │
 │  ┌── Account ──────────────────────────┐   │
-│  │  Signed in as jamesleebaker@…      │   │
+│  │  Signed in as you@example.com       │   │
 │  └─────────────────────────────────────┘   │
 │  Sources →                                 │  nav link row (routes to /sources)
 │  Backup & Export →                         │

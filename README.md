@@ -1,84 +1,179 @@
 # Lifecoach
 
-A personal life/health coach agent built on the Claude Agent SDK with a local SQLite-backed memory.
+A personal life/health coach agent. Single user, long-memory, runs on your own hardware. Talks to you (and only you) over a private Tailscale network.
 
-## Why
+> **What it is, in one sentence:** a Claude-backed agent with persistent typed memory of your life — recipes, lab work, tasks, calendar, goals, projects, conversations — that reasons across all of it to help you make better daily decisions.
 
-I want a single, always-available agent that knows me — my dosha, my recent labs, my microbiome, my recipes, my calendar, my tasks, my recent conversations with it — and can reason holistically across all of it. Most LLM apps either dump everything into the prompt (RAG) or forget between sessions. This one stores everything locally, retrieves on demand, and compresses over time into reflections.
+## What makes it different
 
-## Architecture
+Most LLM apps either dump everything into the prompt (RAG) or forget between sessions. Lifecoach stores everything locally, retrieves on demand, and **compresses over time** through periodic LLM-generated reflections that auto-inject into future turns.
 
-Three layers:
+It's not a chatbot. The interesting work happens in the **memory architecture**, not the dialog. Four logical layers backed by one SQLite file:
 
-1. **Interaction surfaces** — CLI REPL, CLI one-shot, MCP server. All three drive the same agent.
-2. **Agent core** — Claude Agent SDK with a custom tool surface against memory.
-3. **Memory + storage** — single SQLite file with `sqlite-vec` for semantic search.
+| Layer | Holds | Loaded when |
+|---|---|---|
+| **Identity** | Stable profile facts (name, dosha, allergies, default goals) | Always — every turn |
+| **Episodic** | Every session + message, append-only | Searched by recency + meaning |
+| **Semantic** | Extracted facts + ingested docs + tasks, all embedded | On-demand via `recall` tool |
+| **Reflection** | LLM-generated period summaries (daily / weekly / monthly) | Latest auto-injects each turn |
 
-Memory has four logical layers:
-- **Identity** — stable profile facts (always injected into system prompt)
-- **Episodic** — every session + message, append-only
-- **Semantic** — extracted facts + ingested documents, vector-searchable
-- **Reflection** — periodic LLM-generated summaries (memory compression)
+Plus first-class entities for **goals** (with horizons + numeric targets), **projects** (scope bundles), and **insights** (agent-surfaced patterns).
 
-See [the plan](../../.claude/plans/you-are-responsible-for-rustling-pebble.md) for the full architecture and rationale.
-
-## Layout
+## Architecture at a glance
 
 ```
-packages/
-├── schemas/      # @lifecoach/schemas — shared zod types
-├── core/         # @lifecoach/core — agent runtime, memory, storage
-├── cli/          # @lifecoach/cli — interactive REPL + one-shot
-├── mcp-server/   # @lifecoach/mcp-server — exposes memory tools over MCP
-└── connectors/   # @lifecoach/connectors — Todoist, Calendar, file-drop (stubs)
-data/             # local SQLite + raw ingestion + snapshots (gitignored)
+                      ┌──────────────────────────┐
+                      │  Claude Agent SDK         │
+                      │  (Sonnet 4.6, ~15 tools)  │
+                      └────┬──────────────────────┘
+                           │
+                           ▼
+┌──────────────┐  ┌─────────────────────────────────────────┐
+│  CLI REPL    │──│              @lifecoach/core             │
+│  Web UI      │  │  memory · agent runtime · ingest pipe    │
+│  MCP server  │──│  reflector · insighter · forget · export │
+└──────────────┘  └────────────────┬─────────────────────────┘
+                                   │
+                                   ▼
+                  ┌────────────────────────────────────────┐
+                  │  SQLite + sqlite-vec                    │
+                  │  one file. all state. wal mode.         │
+                  └────────────────────────────────────────┘
 ```
+
+The three interaction surfaces (CLI, MCP, web UI) all drive the **same agent runtime** with the same tool surface. Everything you can do in chat, you can do via the CLI or MCP. No interaction is privileged.
+
+## What's working
+
+**Conversation:**
+- Streaming chat with tool calls visible as proof-of-work disclosures
+- Markdown rendering + copy-to-clipboard per message
+- Past-conversations sheet, deep-link URLs (`/c/$id`) for sharing
+- Chat state survives navigation between views
+
+**Memory:**
+- Identity / episodic / semantic / reflection layers all live
+- Voyage embeddings (with retry, LRU caching, batch writes)
+- `forget` flow that purges a document + everything derived from it transactionally
+
+**Ingestion:**
+- Drag-drop, paperclip, file watcher, CLI — same pipeline for PDF / CSV / Markdown
+- LLM-assisted extraction pulls structured facts + numeric measurements
+- Hash-based dedup (drop the same file twice → no-op)
+
+**Integrations:**
+- Todoist (v1 API): bidirectional sync, dual-write tools, embedded for semantic recall
+
+**Background intelligence:**
+- Reflection generator (daily / weekly / monthly) with structured payload (themes, wins, open threads, concerns)
+- Insight loop: agent scans recent data, surfaces 0–3 ranked observations into an Inbox view with Discuss / Acted / Dismiss / Snooze actions
+- Composed morning briefing at top of Inbox: time-aware greeting, today's tasks, active goal progress, latest reflection
+- launchd schedule for daily reflection + daily insight pass + weekly reflection
+
+**Portability:**
+- `lifecoach export` produces a single `.tar.gz` snapshot (SQLite consistent backup + raw files + manifest with hashes)
+- `lifecoach import` validates + restores. Move between machines, take nightly backups, never lose state.
+
+## Stack
+
+- TypeScript + Node 22+, pnpm workspaces
+- `@anthropic-ai/claude-agent-sdk` for chat + tool calling
+- `@anthropic-ai/sdk` direct for one-shot calls (extraction, reflection, insight generation)
+- `better-sqlite3` + `sqlite-vec` for storage
+- `voyageai` for embeddings (`voyage-3`, 1024 dims)
+- `hono` for HTTP API, served on the home server
+- Vite + React 19 + TanStack Router + Tailwind v4 for the web UI
+- `radix-ui/react-dialog` for the sheet primitive
+- `react-markdown` + `remark-gfm` for chat rendering
+- `arctic` for future OAuth (Google Calendar / Gmail)
+- `tar` + node `zlib` for snapshot export/import
 
 ## Getting started
 
 ```bash
-# 1. Copy env template and fill in your Anthropic API key
+# 1. Copy the env template
 cp env.example .env
-# edit .env
 
-# 2. Install
+# 2. Fill in your keys
+# - ANTHROPIC_API_KEY (required — chat, extraction, reflection, insight generation)
+# - VOYAGE_API_KEY    (required — embeddings; add a $5–10/mo cap, you'll spend pennies)
+# - TODOIST_API_TOKEN (optional — Todoist sync)
+
+# 3. Install
 pnpm install
 
-# 3. Initialize the DB + your profile
+# 4. Initialize the DB + seed your profile
 pnpm lifecoach init
 
-# 4. Chat with your coach
+# 5. Talk to your coach
 pnpm lifecoach chat
 ```
 
-## Commands
+Web UI:
+```bash
+pnpm --filter @lifecoach/web build
+pnpm --filter @lifecoach/server start
+# → http://localhost:3717
+```
 
-- `pnpm lifecoach init` — creates `data/lifecoach.db`, runs migrations, seeds your profile
-- `pnpm lifecoach chat` — interactive REPL session
-- `pnpm lifecoach query "<question>"` — one-shot query
-- `pnpm lifecoach status` — memory stats
-- `pnpm lifecoach ingest <path>` — pipe a file through ingestion (stubbed)
-- `pnpm mcp` — start the MCP server on stdio (for Claude Code, MCP Inspector, etc.)
+## CLI surface
+
+```
+pnpm lifecoach init                   Create DB, run migrations, seed profile
+pnpm lifecoach chat                   Interactive REPL
+pnpm lifecoach query "..."            One-shot query
+pnpm lifecoach status                 Memory + system stats
+
+pnpm lifecoach ingest <path>          Pipe a file through the ingest pipeline
+pnpm lifecoach watch                  Auto-ingest files dropped into data/raw/
+pnpm lifecoach forget document <id>   Remove a doc and everything derived from it
+
+pnpm lifecoach sync todoist           Pull active Todoist tasks
+pnpm lifecoach reflect daily          Generate a daily reflection
+pnpm lifecoach reflect weekly         Generate a weekly reflection
+pnpm lifecoach insights generate      Run the insight loop now
+pnpm lifecoach insights list          Show active insights
+
+pnpm lifecoach export                 Take a full snapshot to data/snapshots/
+pnpm lifecoach import <archive>       Restore a snapshot
+```
+
+## Deploying to a home server
+
+Recommended setup: a Mac mini (or any always-on Linux box) reachable over [Tailscale](https://tailscale.com).
+
+1. Install Tailscale on the server and on each device you'll access from
+2. `tailscale serve` exposes the local web UI at `https://<host>.<tailnet>.ts.net` with auto-issued TLS
+3. Run `pnpm --filter @lifecoach/server start` on the server
+4. Install the launchd schedule (`./scripts/launchd/install.sh`) so the daily reflection + insight pass run automatically — see [`docs/cron-setup.md`](docs/cron-setup.md)
+
+To migrate state from another machine:
+```bash
+# On the source machine
+pnpm lifecoach export                       # writes data/snapshots/lifecoach-<ts>.tar.gz
+
+# Copy the snapshot to the server (scp/AirDrop/etc)
+
+# On the server
+pnpm lifecoach import path/to/snapshot.tar.gz
+```
+
+## Privacy posture
+
+- All structured data lives in `data/lifecoach.db` on your machine. The file is gitignored.
+- All ingested raw files (PDFs, notes, etc.) live in `data/raw/`. Gitignored.
+- Outbound calls: Anthropic API (chat, extraction, reflection, insights) and optionally Voyage (embeddings). No other third party sees your data.
+- Web UI is reachable via Tailscale only — never exposed to the public internet by default. OAuth-based email allow-list is layered on top for defense in depth.
 
 ## Status
 
-**Now working end-to-end:**
-- Chat with streaming + tool calls + markdown rendering + copy-to-clipboard
-- Past-conversations sheet with semantic search
-- Identity, episodic, semantic memory + reflections + insights + goals + projects
-- File ingestion (drag-drop, paperclip, watcher, CLI) for PDF/CSV/MD with LLM-assisted fact + measurement extraction
-- Forget flow: delete a document + everything derived from it in one transaction
-- Todoist read + write + embedded for cross-source recall
-- Background intelligence:
-  - Daily / weekly / monthly reflections (CLI + agent tool + Memory > Reflections)
-  - Insight loop (agent reviews recent data, surfaces ranked observations in the Inbox)
-  - Composed morning briefing at the top of the Inbox
-- launchd cron schedule for daily reflection + daily insight pass + weekly reflection (see `docs/cron-setup.md`)
+Active development. Single-user by design — multi-tenancy is not a goal. PRs that match the project's posture (one-person, local-first, agent-as-sidekick) are welcome; PRs that move toward SaaS multi-tenancy are not.
 
-**Stubbed:**
-- Google Calendar / Gmail / Capacities / Apple Health connectors (planned)
-- Local embedder fallback (Voyage is the default)
+## License
 
-## Privacy
+MIT — see [LICENSE](LICENSE). Fork freely.
 
-Everything stays on this machine. SQLite file lives in `./data/lifecoach.db` and is git-ignored. Anthropic API calls and (optionally) Voyage embedding calls go out over the wire — no other third-party hosts your data.
+## Acknowledgements
+
+- The four-layer memory model + the architectural choices here are documented in [`docs/architecture-brief-for-handoff.md`](docs/architecture-brief-for-handoff.md). That brief is intentionally written so someone can build a domain-specific version (work coach, parenting coach, fitness coach) by swapping connectors + system prompt while keeping the memory machinery.
+- Visual + UX design system in [`docs/visual-design.md`](docs/visual-design.md) and [`docs/ux-spec.md`](docs/ux-spec.md). They're the source of truth for the surface, not the implementation.

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Menu, Plus } from "lucide-react";
 import { sendChat, type ChatEvent } from "~/lib/chat-stream";
+import { useProfileName } from "~/lib/use-profile";
 import { useSetAgentState } from "./agent-state";
 import { Message } from "./Message";
 import { ToolCallDisclosure, type ToolCallState } from "./ToolCallDisclosure";
@@ -26,6 +27,7 @@ const newClientId = (): string =>
 export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => {
   const setAgentState = useSetAgentState();
   const navigate = useNavigate();
+  const profileName = useProfileName();
   const { items, streaming, sessionId: ctxSessionId } = useChatState();
   const { reset, append, update, setSessionId, setStreaming } = useChatActions();
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -227,7 +229,9 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
         <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pb-6 pt-6">
           {items.length === 0 && (
             <div className="mt-12 flex flex-col items-center gap-2 text-center">
-              <div className="text-sm text-fg-muted">Good morning, James.</div>
+              <div className="text-sm text-fg-muted">
+                {profileName ? `Good morning, ${profileName}.` : "Good morning."}
+              </div>
               <div className="max-w-sm text-xs text-fg-faint">
                 Type below to start a new conversation, or ask the coach what they
                 noticed.

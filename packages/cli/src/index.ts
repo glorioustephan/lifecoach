@@ -1,11 +1,24 @@
 #!/usr/bin/env node
+import fs from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
 import { findWorkspaceRoot } from "@lifecoach/core";
-// `override: true` so .env wins over shadow shell values (e.g., a stray empty
-// ANTHROPIC_API_KEY="" exported in shell config that would otherwise mask the
-// real key in .env).
-dotenv.config({ path: path.join(findWorkspaceRoot(), ".env"), override: true });
+// Two failure modes we need to handle simultaneously:
+//   1. Shell has `ANTHROPIC_API_KEY=""` exported (common in dev shells). The
+//      empty value masks the real key in .env. → Need to override it.
+//   2. User passes a legitimate command-line env var like
+//      `LIFECOACH_DATA_DIR=/path/to/restore lifecoach import …`. → Must NOT
+//      be overridden by .env.
+// Solution: parse .env first, then for each key copy it into process.env
+// only when the existing value is unset OR an empty string.
+const envPath = path.join(findWorkspaceRoot(), ".env");
+if (fs.existsSync(envPath)) {
+  const parsed = dotenv.parse(fs.readFileSync(envPath, "utf8"));
+  for (const [k, v] of Object.entries(parsed)) {
+    const existing = process.env[k];
+    if (existing === undefined || existing === "") process.env[k] = v;
+  }
+}
 
 import { Command } from "commander";
 import { registerInit } from "./commands/init.js";
@@ -18,6 +31,7 @@ import { registerSync } from "./commands/sync.js";
 import { registerForget } from "./commands/forget.js";
 import { registerReflect } from "./commands/reflect.js";
 import { registerInsights } from "./commands/insights.js";
+import { registerExport, registerImport } from "./commands/snapshot.js";
 
 const program = new Command();
 
@@ -36,6 +50,8 @@ registerSync(program);
 registerForget(program);
 registerReflect(program);
 registerInsights(program);
+registerExport(program);
+registerImport(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : err);

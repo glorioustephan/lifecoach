@@ -89,4 +89,13 @@ export {
 export { forgetDocument, type ForgetDocumentResult } from "./memory/forget.js";
 export { Reflector, kindWindow, type ReflectionPayload } from "./memory/reflector.js";
 export { Insighter } from "./memory/insighter.js";
+export {
+  exportSnapshot,
+  importSnapshot,
+  type SnapshotManifest,
+  type ExportOptions,
+  type ImportOptions,
+  type ExportEvent,
+  type ImportEvent,
+} from "./util/snapshot.js";
 export { NotImplementedError, LifecoachError } from "./util/errors.js";

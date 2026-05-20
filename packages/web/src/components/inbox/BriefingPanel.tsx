@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { AlertCircle, Calendar, Target, CheckCircle2, ScrollText } from "lucide-react";
 import { api, type GoalRow } from "~/lib/api";
 import { cn } from "~/lib/cn";
+import { useProfileName } from "~/lib/use-profile";
 
 /**
  * The morning briefing — a composed panel that pulls from every system that
@@ -31,7 +32,8 @@ export const BriefingPanel = (): JSX.Element | null => {
   const reflection = data.reflection;
   const reflectionTitle = extractReflectionTitle(reflection?.body ?? "");
 
-  const greeting = greetingForNow();
+  const name = useProfileName();
+  const greeting = greetingForNow(name);
 
   return (
     <section
@@ -184,13 +186,18 @@ const GoalLine = ({ goal }: { goal: GoalRow }): JSX.Element => {
   );
 };
 
-const greetingForNow = (): string => {
+/**
+ * Time-of-day greeting. If a profile.name is available, personalize it;
+ * otherwise drop the comma and just say "Good morning" plainly.
+ */
+const greetingForNow = (name?: string): string => {
   const hour = new Date().getHours();
-  if (hour < 5) return "Late night, James";
-  if (hour < 12) return "Good morning, James";
-  if (hour < 17) return "Afternoon, James";
-  if (hour < 21) return "Evening, James";
-  return "Late, James";
+  const suffix = name ? `, ${name}` : "";
+  if (hour < 5) return `Late night${suffix}`;
+  if (hour < 12) return `Good morning${suffix}`;
+  if (hour < 17) return `Afternoon${suffix}`;
+  if (hour < 21) return `Evening${suffix}`;
+  return `Late${suffix}`;
 };
 
 const extractReflectionTitle = (body: string): string | null => {

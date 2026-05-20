@@ -1,9 +1,18 @@
 #!/usr/bin/env node
+import fs from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
 import { findWorkspaceRoot } from "@lifecoach/core";
-// `override: true` so .env wins over shadow shell values.
-dotenv.config({ path: path.join(findWorkspaceRoot(), ".env"), override: true });
+// Override empty (or unset) values from .env, but never clobber legit
+// command-line env vars.
+const envPath = path.join(findWorkspaceRoot(), ".env");
+if (fs.existsSync(envPath)) {
+  const parsed = dotenv.parse(fs.readFileSync(envPath, "utf8"));
+  for (const [k, v] of Object.entries(parsed)) {
+    const existing = process.env[k];
+    if (existing === undefined || existing === "") process.env[k] = v;
+  }
+}
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
