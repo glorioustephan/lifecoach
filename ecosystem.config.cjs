@@ -12,10 +12,14 @@
  * Each cron job runs `cron_restart` semantics — autorestart is off,
  * PM2 fires the process on schedule, it runs and exits, PM2 waits.
  *
- * Why `zsh -lc`?
- *   PM2's spawn environment is minimal. `zsh -lc` triggers .zshrc /
- *   /etc/zprofile so $PATH resolves pnpm + node + corepack consistently
- *   with your interactive shell, no matter how pnpm was installed.
+ * Why `sh -c` and not `zsh -lc`?
+ *   On macOS systems where Homebrew was installed before Volta, /etc/zprofile
+ *   prepends /opt/homebrew/bin to PATH. So `zsh -lc 'cmd'` runs the login
+ *   shell, picks up that prepend, and Homebrew's node (often Node 24) wins
+ *   over Volta's shim — defeating the per-project Node pin and crashing
+ *   native modules that were built against a different Node ABI. `sh -c`
+ *   (bash in POSIX mode on macOS) doesn't source any rc files in command
+ *   mode, so PM2's `env.PATH` below is the actual PATH the children see.
  *
  * Setup:
  *   pm2 start ecosystem.config.cjs
@@ -78,8 +82,8 @@ module.exports = {
   apps: [
     {
       name: "lifecoach-server",
-      script: "/bin/zsh",
-      args: ["-lc", "pnpm --filter @lifecoach/server start"],
+      script: "/bin/sh",
+      args: ["-c", "pnpm --filter @lifecoach/server start"],
       ...base("lifecoach-server"),
       autorestart: true,
       max_restarts: 10,
@@ -88,24 +92,24 @@ module.exports = {
     },
     {
       name: "lifecoach-daily-reflect",
-      script: "/bin/zsh",
-      args: ["-lc", "pnpm -w run lifecoach reflect daily"],
+      script: "/bin/sh",
+      args: ["-c", "pnpm -w run lifecoach reflect daily"],
       ...base("daily-reflect"),
       autorestart: false,
       cron_restart: "0 6 * * *",
     },
     {
       name: "lifecoach-insights",
-      script: "/bin/zsh",
-      args: ["-lc", "pnpm -w run lifecoach insights generate"],
+      script: "/bin/sh",
+      args: ["-c", "pnpm -w run lifecoach insights generate"],
       ...base("insights"),
       autorestart: false,
       cron_restart: "30 7 * * *",
     },
     {
       name: "lifecoach-weekly-reflect",
-      script: "/bin/zsh",
-      args: ["-lc", "pnpm -w run lifecoach reflect weekly"],
+      script: "/bin/sh",
+      args: ["-c", "pnpm -w run lifecoach reflect weekly"],
       ...base("weekly-reflect"),
       autorestart: false,
       cron_restart: "0 19 * * 0",
