@@ -35,19 +35,38 @@ const path = require("node:path");
 const cwd = __dirname;
 const logsDir = path.join(cwd, "data", "logs");
 
+/**
+ * The PATH passed to every PM2 child. We explicitly prepend Volta's shim
+ * directory (and a few common Node-manager dirs) so per-project Node
+ * version resolution works even when:
+ *   - PM2 is resurrected by launchd with a minimal PATH on reboot
+ *   - `/bin/zsh -lc` runs non-interactively (where Volta's .zshrc setup
+ *     is often gated behind an `if interactive` check and skipped)
+ *   - The daemon's stored PATH is stale from an earlier shell session
+ *
+ * The Volta shim at ~/.volta/bin/node reads the cwd's package.json,
+ * finds the `volta.node` pin, and execs the matching binary. So with
+ * Volta first in PATH, every child gets the project's pinned Node
+ * regardless of how it was invoked.
+ */
+const home = process.env.HOME || "";
+const childPath = [
+  `${home}/.volta/bin`,
+  `${home}/.volta/shims`,
+  `${home}/Library/pnpm`,
+  `/opt/homebrew/bin`,
+  `/opt/homebrew/sbin`,
+  `/usr/local/bin`,
+  process.env.PATH || "/usr/bin:/bin",
+].join(":");
+
 /** Common base config — env handling, cwd, log paths. */
 const base = (label) => ({
   cwd,
   interpreter: "none",
-  // IMPORTANT: don't set PATH here. Hard-coding PATH overrides whatever the
-  // login shell would have constructed, which breaks per-project Node version
-  // managers like Volta/nvm/fnm (their shims live at paths we'd have to enumerate
-  // explicitly). `script: "/bin/zsh"` with `args: ["-lc", "pnpm …"]` runs the
-  // login shell so .zshrc / .zprofile build PATH the same way they would in
-  // your interactive terminal — and that's where Volta hooks the shim that
-  // resolves Node 22 from the project's package.json `volta` field.
   env: {
     NODE_ENV: "production",
+    PATH: childPath,
   },
   out_file: path.join(logsDir, `${label}.out.log`),
   error_file: path.join(logsDir, `${label}.err.log`),
