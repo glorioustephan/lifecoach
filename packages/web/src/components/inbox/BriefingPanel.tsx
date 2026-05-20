@@ -17,6 +17,12 @@ export const BriefingPanel = (): JSX.Element | null => {
     refetchInterval: 5 * 60_000,
   });
 
+  // IMPORTANT: keep all hook calls above any conditional returns. Moving
+  // useProfileName() below the `if (!data) return null` caused React error
+  // #310 — first render returned early before this hook was called, second
+  // render reached it, hook counts diverged.
+  const name = useProfileName();
+
   if (isLoading) {
     return (
       <div className="h-32 animate-pulse rounded-md border border-border-subtle bg-surface/50" />
@@ -31,8 +37,6 @@ export const BriefingPanel = (): JSX.Element | null => {
   const hasGoals = goals.length > 0;
   const reflection = data.reflection;
   const reflectionTitle = extractReflectionTitle(reflection?.body ?? "");
-
-  const name = useProfileName();
   const greeting = greetingForNow(name);
 
   return (
