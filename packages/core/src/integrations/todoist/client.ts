@@ -1,9 +1,20 @@
 import { withRetry } from "../../util/retry.js";
 import { LifecoachError } from "../../util/errors.js";
 
-const BASE_URL = "https://api.todoist.com/rest/v2";
+/**
+ * Todoist's REST v2 surface (api.todoist.com/rest/v2) was deprecated and removed
+ * in 2025/2026 in favor of the unified `/api/v1` namespace. Two changes matter
+ * to callers:
+ *   - Base path is now `/api/v1`
+ *   - List endpoints (tasks, projects) return cursor-paginated envelopes
+ *     `{ results: [...], next_cursor: null | string }` instead of bare arrays.
+ *
+ * Single-resource endpoints (POST /tasks, GET /tasks/{id}, /close, /reopen)
+ * still return the bare object — so we only paginate where needed.
+ */
+const BASE_URL = "https://api.todoist.com/api/v1";
 
-// Raw Todoist REST v2 shapes — we only model the fields we use.
+// Raw Todoist v1 shapes — we only model the fields we use.
 export interface TodoistDue {
   date: string;
   string: string;
@@ -44,17 +55,24 @@ export interface CreateTodoistTaskInput {
   dueString?: string;
 }
 
+interface PaginatedResponse<T> {
+  results: T[];
+  next_cursor?: string | null;
+}
+
+const PAGE_LIMIT = 200; // upper bound per page; Todoist caps individual page sizes anyway
+
 export class TodoistClient {
   constructor(private readonly apiToken: string) {
     if (!apiToken) throw new LifecoachError("TodoistClient requires an API token", "TODOIST_NO_TOKEN");
   }
 
   async listActiveTasks(): Promise<TodoistTask[]> {
-    return this.request<TodoistTask[]>("GET", "/tasks");
+    return this.paginate<TodoistTask>("/tasks", { limit: String(PAGE_LIMIT) });
   }
 
   async listProjects(): Promise<TodoistProject[]> {
-    return this.request<TodoistProject[]>("GET", "/projects");
+    return this.paginate<TodoistProject>("/projects", { limit: String(PAGE_LIMIT) });
   }
 
   async getTask(id: string): Promise<TodoistTask | null> {
@@ -101,6 +119,32 @@ export class TodoistClient {
 
   async reopenTask(id: string): Promise<void> {
     await this.request<unknown>("POST", `/tasks/${encodeURIComponent(id)}/reopen`);
+  }
+
+  /**
+   * Walk all pages of a paginated GET endpoint. Stops when next_cursor is
+   * null/missing. Includes a safety cap so a server-side bug can't cause an
+   * unbounded fetch loop (~5000 items via 25 pages of 200).
+   */
+  private async paginate<T>(path: string, query: Record<string, string>): Promise<T[]> {
+    const out: T[] = [];
+    let cursor: string | null | undefined = null;
+    for (let page = 0; page < 25; page += 1) {
+      const params = new URLSearchParams(query);
+      if (cursor) params.set("cursor", cursor);
+      const url = `${path}?${params.toString()}`;
+      const resp = await this.request<PaginatedResponse<T>>("GET", url);
+      if (Array.isArray(resp)) {
+        // Defensive: if Todoist ever returns a bare array on this endpoint,
+        // accept it gracefully.
+        out.push(...(resp as unknown as T[]));
+        return out;
+      }
+      out.push(...(resp.results ?? []));
+      cursor = resp.next_cursor ?? null;
+      if (!cursor) break;
+    }
+    return out;
   }
 
   private async request<T>(
