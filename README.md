@@ -68,7 +68,7 @@ The three interaction surfaces (CLI, MCP, web UI) all drive the **same agent run
 - Reflection generator (daily / weekly / monthly) with structured payload (themes, wins, open threads, concerns)
 - Insight loop: agent scans recent data, surfaces 0–3 ranked observations into an Inbox view with Discuss / Acted / Dismiss / Snooze actions
 - Composed morning briefing at top of Inbox: time-aware greeting, today's tasks, active goal progress, latest reflection
-- launchd schedule for daily reflection + daily insight pass + weekly reflection
+- PM2 ecosystem config supervises the server + daily reflection + daily insight pass + weekly reflection
 
 **Portability:**
 - `lifecoach export` produces a single `.tar.gz` snapshot (SQLite consistent backup + raw files + manifest with hashes)
@@ -99,7 +99,9 @@ cp env.example .env
 # - VOYAGE_API_KEY    (required — embeddings; add a $5–10/mo cap, you'll spend pennies)
 # - TODOIST_API_TOKEN (optional — Todoist sync)
 
-# 3. Install
+# 3. Install. Uses pnpm 11.1.0 (corepack will auto-activate from the
+# packageManager field in root package.json). If you don't have corepack
+# enabled, run `corepack enable` first.
 pnpm install
 
 # 4. Initialize the DB + seed your profile
@@ -145,7 +147,7 @@ Recommended setup: a Mac mini (or any always-on Linux box) reachable over [Tails
 1. Install Tailscale on the server and on each device you'll access from
 2. `tailscale serve` exposes the local web UI at `https://<host>.<tailnet>.ts.net` with auto-issued TLS
 3. Run `pnpm --filter @lifecoach/server start` on the server
-4. Install the launchd schedule (`./scripts/launchd/install.sh`) so the daily reflection + insight pass run automatically — see [`docs/cron-setup.md`](docs/cron-setup.md)
+4. Start the server + cron jobs with PM2: `pm2 start ecosystem.config.cjs && pm2 save && pm2 startup` — see [`docs/pm2-setup.md`](docs/pm2-setup.md)
 
 To migrate state from another machine:
 ```bash
