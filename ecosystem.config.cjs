@@ -39,11 +39,15 @@ const logsDir = path.join(cwd, "data", "logs");
 const base = (label) => ({
   cwd,
   interpreter: "none",
-  // PM2 inherits these but a clean PATH avoids surprises if the systemd-like
-  // launcher (or `pm2 startup`'s generated agent) runs with a slim env.
+  // IMPORTANT: don't set PATH here. Hard-coding PATH overrides whatever the
+  // login shell would have constructed, which breaks per-project Node version
+  // managers like Volta/nvm/fnm (their shims live at paths we'd have to enumerate
+  // explicitly). `script: "/bin/zsh"` with `args: ["-lc", "pnpm …"]` runs the
+  // login shell so .zshrc / .zprofile build PATH the same way they would in
+  // your interactive terminal — and that's where Volta hooks the shim that
+  // resolves Node 22 from the project's package.json `volta` field.
   env: {
     NODE_ENV: "production",
-    PATH: "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
   },
   out_file: path.join(logsDir, `${label}.out.log`),
   error_file: path.join(logsDir, `${label}.err.log`),
