@@ -79,7 +79,7 @@ export const createLifecoach = (overrides?: Partial<LifecoachConfig>): Lifecoach
   };
 };
 
-export { loadConfig, findWorkspaceRoot } from "./config/index.js";
+export { loadConfig, findWorkspaceRoot, loadEnvironmentConfig } from "./config/index.js";
 export type { LifecoachConfig } from "./config/index.js";
 export type { Storage } from "./storage/index.js";
 export type { Embedder } from "./embeddings/index.js";

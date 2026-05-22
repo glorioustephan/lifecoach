@@ -85,6 +85,9 @@ importers:
       better-sqlite3:
         specifier: ^11.7.0
         version: 11.10.0
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3

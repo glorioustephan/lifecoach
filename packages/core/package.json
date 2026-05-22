@@ -23,6 +23,7 @@
     "@anthropic-ai/sdk": "^0.96.0",
     "@lifecoach/schemas": "workspace:*",
     "better-sqlite3": "^11.7.0",
+    "dotenv": "^16.4.7",
     "gray-matter": "^4.0.3",
     "papaparse": "^5.5.3",
     "pdf-parse": "^2.4.5",

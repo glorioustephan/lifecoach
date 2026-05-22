@@ -33,11 +33,16 @@ if [ "$STRATEGY" = "snapshot" ]; then
   echo "📦 Creating snapshot..."
   pnpm lifecoach export
 
-  SNAPSHOT=$(ls -t data-dev/snapshots/*.tar.gz 2>/dev/null | head -1 || ls -t data/snapshots/*.tar.gz 2>/dev/null | head -1)
+  # Find the most recent snapshot across all possible data directories.
+  # loadEnvironmentConfig() picks data-{LIFECOACH_ENV} or data-{NODE_ENV};
+  # also check the legacy data/ directory for backwards compatibility.
+  SNAPSHOT=$(ls -t data-*/snapshots/*.tar.gz data/snapshots/*.tar.gz 2>/dev/null | head -1)
   if [ -z "$SNAPSHOT" ]; then
-    echo "Error: Could not find snapshot file"
+    echo "Error: Could not find a snapshot file in data-*/snapshots/ or data/snapshots/"
+    echo "Tip: run 'pnpm lifecoach export' first, or check your LIFECOACH_ENV setting"
     exit 1
   fi
+  echo "Using snapshot: $SNAPSHOT"
 
   echo "📤 Uploading snapshot to $HOST..."
   scp -i "$SSH_KEY" "$SNAPSHOT" "$USER@$HOST:$REMOTE_DIR/" || {

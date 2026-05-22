@@ -37,8 +37,22 @@
  */
 
 const path = require("node:path");
+const fs = require("node:fs");
 const cwd = __dirname;
-const logsDir = path.join(cwd, "data", "logs");
+
+// Resolve the log directory relative to the environment-specific data directory.
+// Matches the logic in packages/core/src/config/index.ts:loadConfig():
+//   - Honour LIFECOACH_DATA_DIR when set
+//   - Otherwise default to data-{LIFECOACH_ENV || NODE_ENV || "development"}
+// This keeps PM2 logs co-located with the DB / raw files for a given environment.
+const _dataEnv = process.env.LIFECOACH_ENV || process.env.NODE_ENV || "development";
+const _dataBase = process.env.LIFECOACH_DATA_DIR
+  ? path.resolve(cwd, process.env.LIFECOACH_DATA_DIR)
+  : path.join(cwd, `data-${_dataEnv}`);
+const logsDir = path.join(_dataBase, "logs");
+
+// Ensure the logs directory exists before PM2 tries to write to it.
+fs.mkdirSync(logsDir, { recursive: true });
 
 /**
  * The PATH passed to every PM2 child. We explicitly prepend Volta's shim

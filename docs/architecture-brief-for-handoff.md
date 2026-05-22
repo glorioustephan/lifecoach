@@ -233,7 +233,7 @@ The three surfaces share the same `@core` package and the same memory tools. Bui
 
 These cost real time. Don't repeat them:
 
-1. **`dotenv.config()` defaults to `override: false`.** If your shell has `ANTHROPIC_API_KEY=""` exported (common in dev), dotenv silently refuses to load the real value from `.env`. Always pass `{ override: true }`.
+1. **`dotenv.config()` defaults to `override: false`.** If your shell has `ANTHROPIC_API_KEY=""` exported (common in dev), dotenv silently refuses to load the real value from `.env`. Always parse and apply manually: read the file, iterate keys, only set when `process.env[k]` is `undefined` or `""`. This lets legitimate CLI env-var overrides win while still recovering from empty-string shells.
 
 2. **`PRAGMA foreign_keys = ON`** is required for SQLite to enforce `ON DELETE CASCADE`. Default is OFF. The bare `sqlite3` CLI doesn't set this either, so any cleanup script you write needs to set it explicitly.
 
@@ -252,6 +252,14 @@ These cost real time. Don't repeat them:
 9. **Always store embedding dim in a `meta` table** and check on startup. Changing models mid-flight is a catastrophic dimension mismatch.
 
 10. **Build the unsubscribe/forget flow alongside the ingest flow.** Anything you ingest, you should be able to fully purge — document + facts derived from it + measurements + embeddings + the file hash record. Skipping this leaves you doing manual SQL surgery later (ask me how I know).
+
+11. **ESM static imports are hoisted — `loadEnvironmentConfig()` must run before any code that reads `process.env`.** In ESM, all `import` declarations are resolved before any top-level code executes, regardless of where they appear in the file. If your env-loading function is a *call* (not a static import), it runs after all module initializations complete. This is fine as long as no imported module reads `process.env.*` at module-initialization time (only at call time). Keep connectors, config reads, and `createApp()` as lazy calls, never top-level initializers.
+
+12. **Separate your data directories by environment from day one.** Sharing a single `data/` directory between local dev and production (via snapshot import/export) is a footgun — a `dev:reset` wipes the only copy of your embeddings. Use `data-development/` locally and `data-production/` on the server, driven by `LIFECOACH_ENV`. Store the env-var separately in `.env.local` (dev) and `.env.production` (server), both gitignored.
+
+13. **Add workspace package dependencies explicitly, even if they resolve transitively.** In a pnpm workspace with `--strict-peer-dependencies`, a package in `packages/core` that calls `require('dotenv')` must list `dotenv` in its own `dependencies`. The fact that `dotenv` is in `packages/server`'s deps does not make it available to `packages/core`. Strict pnpm will fail; loose pnpm will silently succeed locally but fail on CI or fresh installs. Always add the dep to the package that uses it.
+
+14. **PM2 cron log directories must exist before PM2 starts.** PM2 creates log *files* but not the parent directory. If your log path is `data-production/logs/server.out.log` and `data-production/logs/` doesn't exist yet, PM2 will silently drop logs. Call `fs.mkdirSync(logsDir, { recursive: true })` at the top of `ecosystem.config.cjs`.
 
 ---
 

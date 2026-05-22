@@ -62,14 +62,14 @@ The three interaction surfaces (CLI, MCP, web UI) all drive the **same agent run
 - Hash-based dedup (drop the same file twice → no-op)
 
 **Integrations:**
-- Todoist (v1 API): bidirectional sync, dual-write tools, embedded for semantic recall
-- Capacities: sweep-based directory mirror (titles + types + URLs embedded for recall), type-aware routing (Person → fact, Project → projects table, Recipe → fact), agent tools for live lookup + save-to-daily-note + save-as-Weblink, automatic write-back of daily/weekly reflections into the user's Capacities daily note
+- **Todoist** (v1 API): bidirectional sync, dual-write tools, embedded for semantic recall. Background sync every 30 minutes via PM2 cron — no manual `sync` calls needed in production.
+- **Capacities**: sweep-based directory mirror (titles + types + URLs embedded for recall), type-aware routing (Person → fact, Project → projects table, Recipe → fact), agent tools for live lookup + save-to-daily-note + save-as-Weblink, automatic write-back of daily/weekly reflections into your Capacities daily note
 
 **Background intelligence:**
 - Reflection generator (daily / weekly / monthly) with structured payload (themes, wins, open threads, concerns)
 - Insight loop: agent scans recent data, surfaces 0–3 ranked observations into an Inbox view with Discuss / Acted / Dismiss / Snooze actions
 - Composed morning briefing at top of Inbox: time-aware greeting, today's tasks, active goal progress, latest reflection
-- PM2 ecosystem config supervises the server + daily reflection + daily insight pass + weekly reflection
+- PM2 ecosystem config supervises the server + Todoist sync (every 30 min) + daily reflection + daily insight pass + weekly reflection
 
 **Portability:**
 - `lifecoach export` produces a single `.tar.gz` snapshot (SQLite consistent backup + raw files + manifest with hashes)
@@ -92,27 +92,73 @@ The three interaction surfaces (CLI, MCP, web UI) all drive the **same agent run
 ## Getting started
 
 ```bash
-# 1. Copy the env template
-cp env.example .env
-
-# 2. Fill in your keys
-# - ANTHROPIC_API_KEY (required — chat, extraction, reflection, insight generation)
-# - VOYAGE_API_KEY    (required — embeddings; add a $5–10/mo cap, you'll spend pennies)
-# - TODOIST_API_TOKEN (optional — Todoist sync)
-
-# 3. Install. Uses pnpm 11.1.0 (corepack will auto-activate from the
-# packageManager field in root package.json). If you don't have corepack
-# enabled, run `corepack enable` first.
+# 1. Install dependencies
 pnpm install
 
-# 4. Initialize the DB + seed your profile
+# 2. Set up the development environment (creates .env.local + data-development/)
+pnpm dev:setup
+# → Edit .env.local with your API keys
+
+# 3. Initialize the DB + seed your profile
 pnpm lifecoach init
 
-# 5. Talk to your coach
+# 4. Talk to your coach
 pnpm lifecoach chat
 ```
 
-Web UI:
+### Environment variables (`.env.local` for dev, `.env.mac-mini` for production)
+
+| Variable | Required | Description |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | ✓ | Chat, extraction, reflection, insight generation |
+| `VOYAGE_API_KEY` | recommended | Embeddings; without it recall falls back to keyword search |
+| `TODOIST_API_TOKEN` | optional | Todoist task sync |
+| `CAPACITIES_API_TOKEN` | optional | Capacities workspace mirror + reflection write-back |
+| `CAPACITIES_DEFAULT_SPACE_ID` | optional | Default Capacities space for write-back |
+| `LIFECOACH_ENV` | optional | `development` or `production` — drives data directory selection |
+| `LIFECOACH_DATA_DIR` | optional | Override the data directory path explicitly |
+| `LIFECOACH_AUTH` | optional | Set to `off` to disable email auth (dev only) |
+| `LIFECOACH_ALLOWED_EMAILS` | optional | Comma-separated email allow-list for auth |
+| `PORT` | optional | HTTP server port (default: 3717) |
+
+### Dev vs. production environments
+
+Lifecoach uses **hermetically separated data directories** per environment so local testing never touches production data or embeddings.
+
+```
+data-development/     ← local dev (LIFECOACH_ENV=development)
+  lifecoach.db
+  raw/
+  snapshots/
+  logs/
+
+data-production/      ← Mac Mini production (LIFECOACH_ENV=production)
+  lifecoach.db
+  raw/
+  snapshots/
+  logs/
+```
+
+Config is loaded from `.env.{LIFECOACH_ENV}` first, then falls back to `.env`. This lets you maintain a separate Voyage API key, separate Claude key, and separate data per environment.
+
+```bash
+# Local dev (uses .env.local, writes to data-development/)
+pnpm dev
+
+# Reset local dev data cleanly
+pnpm dev:reset
+```
+
+### Web UI (local dev)
+
+```bash
+pnpm dev
+# → Web UI: http://localhost:5173 (Vite dev server with HMR)
+# → API:    http://localhost:3717
+```
+
+### Web UI (production build)
+
 ```bash
 pnpm --filter @lifecoach/web build
 pnpm --filter @lifecoach/server start
@@ -128,17 +174,17 @@ pnpm lifecoach query "..."            One-shot query
 pnpm lifecoach status                 Memory + system stats
 
 pnpm lifecoach ingest <path>          Pipe a file through the ingest pipeline
-pnpm lifecoach watch                  Auto-ingest files dropped into data/raw/
+pnpm lifecoach watch                  Auto-ingest files dropped into data-{env}/raw/
 pnpm lifecoach forget document <id>   Remove a doc and everything derived from it
 
-pnpm lifecoach sync todoist           Pull active Todoist tasks
+pnpm lifecoach sync todoist           Pull active Todoist tasks (also runs automatically via PM2 every 30 min)
 pnpm lifecoach sync capacities        Sweep Capacities spaces — mirror objects as documents, route Person/Project/Recipe to first-class entities
 pnpm lifecoach reflect daily          Generate a daily reflection
 pnpm lifecoach reflect weekly         Generate a weekly reflection
 pnpm lifecoach insights generate      Run the insight loop now
 pnpm lifecoach insights list          Show active insights
 
-pnpm lifecoach export                 Take a full snapshot to data/snapshots/
+pnpm lifecoach export                 Take a full snapshot to data-{env}/snapshots/
 pnpm lifecoach import <archive>       Restore a snapshot
 ```
 
@@ -146,28 +192,76 @@ pnpm lifecoach import <archive>       Restore a snapshot
 
 Recommended setup: a Mac mini (or any always-on Linux box) reachable over [Tailscale](https://tailscale.com).
 
-1. Install Tailscale on the server and on each device you'll access from
-2. `tailscale serve` exposes the local web UI at `https://<host>.<tailnet>.ts.net` with auto-issued TLS
-3. Run `pnpm --filter @lifecoach/server start` on the server
-4. Start the server + cron jobs with PM2: `pm2 start ecosystem.config.cjs && pm2 save && pm2 startup` — see [`docs/pm2-setup.md`](docs/pm2-setup.md)
+### One-time server setup
 
-To migrate state from another machine:
+```bash
+# On the Mac Mini:
+mkdir -p /opt/lifecoach
+cd /opt/lifecoach
+git clone https://github.com/jamesleebaker/lifecoach .
+pnpm install
+
+# Create your production environment file (never committed to git)
+cp env.example .env.production
+# Edit .env.production with production API keys + LIFECOACH_ENV=production
+
+# Initialize the DB
+LIFECOACH_ENV=production pnpm lifecoach init
+
+# Start all processes with PM2
+pm2 start ecosystem.config.cjs
+pm2 save
+pm2 startup    # follow the printed sudo command to survive reboots
+```
+
+`tailscale serve` exposes the local web UI at `https://<host>.<tailnet>.ts.net` with auto-issued TLS.
+
+### Automated deployment from your dev machine
+
+```bash
+# Copy and fill in the deployment config (gitignored)
+cp .deploy.config.example.js .deploy.config.js
+# Edit .deploy.config.js: host, user, SSH key path, remote dir
+
+# Deploy data snapshot + restart PM2
+pnpm deploy:macmini
+
+# Update only the production environment variables
+pnpm deploy:macmini:env
+```
+
+The deploy script exports the local snapshot, SCP-uploads it to the Mac Mini, imports it there, and restarts PM2. See [`scripts/deploy-to-macmini.sh`](scripts/deploy-to-macmini.sh) for the full flow.
+
+### Manual snapshot migration
+
 ```bash
 # On the source machine
-pnpm lifecoach export                       # writes data/snapshots/lifecoach-<ts>.tar.gz
+pnpm lifecoach export                       # writes data-{env}/snapshots/lifecoach-<ts>.tar.gz
 
 # Copy the snapshot to the server (scp/AirDrop/etc)
 
 # On the server
-pnpm lifecoach import path/to/snapshot.tar.gz
+LIFECOACH_ENV=production pnpm lifecoach import path/to/snapshot.tar.gz
 ```
+
+### PM2 managed processes
+
+See [`docs/pm2-setup.md`](docs/pm2-setup.md) for the full PM2 reference. Summary of what runs:
+
+| Process | Schedule | What it does |
+|---|---|---|
+| `lifecoach-server` | always | Hono HTTP+API server (port 3717) |
+| `lifecoach-sync-todoist` | every 30 min | Pull Todoist tasks into local storage |
+| `lifecoach-daily-reflect` | 06:00 daily | Generate morning reflection |
+| `lifecoach-insights` | 07:30 daily | Run the insight loop (after reflection) |
+| `lifecoach-weekly-reflect` | 19:00 Sunday | Generate weekly reflection |
 
 ## Privacy posture
 
-- All structured data lives in `data/lifecoach.db` on your machine. The file is gitignored.
-- All ingested raw files (PDFs, notes, etc.) live in `data/raw/`. Gitignored.
-- Outbound calls: Anthropic API (chat, extraction, reflection, insights) and optionally Voyage (embeddings). No other third party sees your data.
-- Web UI is reachable via Tailscale only — never exposed to the public internet by default. OAuth-based email allow-list is layered on top for defense in depth.
+- All structured data lives in `data-{env}/lifecoach.db` on your machine. Gitignored.
+- All ingested raw files (PDFs, notes, etc.) live in `data-{env}/raw/`. Gitignored.
+- Outbound calls: Anthropic API (chat, extraction, reflection, insights) and optionally Voyage (embeddings) and Todoist / Capacities APIs. No other third party sees your data.
+- Web UI is reachable via Tailscale only — never exposed to the public internet by default. Email allow-list auth is layered on top for defense in depth.
 
 ## Status
 
