@@ -11,6 +11,13 @@ routeTree.gen.ts
 .env
 .env.local
 .env.*.local
+.env.mac-mini
+.env.production
+.env.development
+
+# Deployment
+.deploy.config.js
+.deploy.config.local.js
 
 # Lifecoach data (personal — never commit)
 data/lifecoach.db
@@ -19,6 +26,9 @@ data/raw/*
 !data/raw/.gitkeep
 data/snapshots/*
 !data/snapshots/.gitkeep
+data-dev/
+data-production/
+data-prod/
 
 # Editor
 .DS_Store

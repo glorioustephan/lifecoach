@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import dotenv from "dotenv";
 
 export interface LifecoachConfig {
   dataDir: string;
@@ -52,6 +53,35 @@ export const findWorkspaceRoot = (start: string = process.cwd()): string => {
   return start;
 };
 
+/**
+ * Load environment-specific .env file into process.env.
+ * Tries `.env.${env}` first, then falls back to `.env`.
+ * Only sets values that aren't already in process.env, allowing CLI overrides.
+ */
+export const loadEnvironmentConfig = (root: string = findWorkspaceRoot()): void => {
+  const env = process.env.LIFECOACH_ENV || process.env.NODE_ENV || "development";
+  const envSpecificPath = path.join(root, `.env.${env}`);
+  const envPath = path.join(root, ".env");
+
+  let envFile: string | null = null;
+  if (fs.existsSync(envSpecificPath)) {
+    envFile = envSpecificPath;
+  } else if (fs.existsSync(envPath)) {
+    envFile = envPath;
+  }
+
+  if (envFile) {
+    const parsed = dotenv.parse(fs.readFileSync(envFile, "utf8"));
+    for (const [k, v] of Object.entries(parsed)) {
+      const existing = process.env[k];
+      // Only set if undefined or empty, allowing CLI overrides
+      if (existing === undefined || existing === "") {
+        process.env[k] = v;
+      }
+    }
+  }
+};
+
 export const loadConfig = (overrides: Partial<LifecoachConfig> = {}): LifecoachConfig => {
   const root = findWorkspaceRoot();
   const rawDataDir = overrides.dataDir ?? process.env.LIFECOACH_DATA_DIR;
@@ -59,7 +89,14 @@ export const loadConfig = (overrides: Partial<LifecoachConfig> = {}): LifecoachC
   //   absolute input → returned as-is
   //   relative input → resolved against the workspace root (NOT process.cwd, which
   //   shifts under `pnpm --filter` and would scatter DB files across packages)
-  const dataDir = rawDataDir ? path.resolve(root, rawDataDir) : path.join(root, "data");
+  let dataDir: string;
+  if (rawDataDir) {
+    dataDir = path.resolve(root, rawDataDir);
+  } else {
+    // Default to environment-specific data directory (data-dev, data-production, etc.)
+    const env = process.env.LIFECOACH_ENV || process.env.NODE_ENV || "development";
+    dataDir = path.join(root, `data-${env}`);
+  }
 
   return {
     dataDir,

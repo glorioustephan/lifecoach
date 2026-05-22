@@ -28,7 +28,7 @@ function SourcesRoute(): JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <ViewHeader title="Sources" subtitle="Where your data comes from" />
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto mobile-safe-bottom">
         <div className="mx-auto max-w-2xl space-y-3 px-4 py-4 md:px-6">
           {isLoading && (
             <>

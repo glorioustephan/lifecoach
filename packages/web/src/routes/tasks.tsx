@@ -37,7 +37,7 @@ function TasksRoute(): JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <ViewHeader title="Tasks" subtitle="Your active Todoist, lightly" />
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto mobile-safe-bottom">
         <div className="mx-auto max-w-2xl px-4 py-4 md:px-6">
           {isLoading && (
             <ul className="space-y-2">

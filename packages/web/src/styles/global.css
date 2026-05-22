@@ -46,3 +46,6 @@ body {
 /* Safe-area padding on iOS PWAs */
 .safe-pb { padding-bottom: env(safe-area-inset-bottom); }
 .safe-pt { padding-top: env(safe-area-inset-top); }
+
+/* Mobile bottom padding to prevent scrolling behind fixed TabBar (56px + 1rem spacing) */
+.mobile-safe-bottom { @apply sm:pb-[calc(56px+1rem)] md:pb-0; }

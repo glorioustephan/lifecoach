@@ -23,7 +23,7 @@ function SettingsRoute(): JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <ViewHeader title="Settings" />
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto mobile-safe-bottom">
         <div className="mx-auto max-w-2xl space-y-6 px-4 py-4 md:px-6">
           <section className="rounded-md border border-border bg-surface">
             <header className="border-b border-border-subtle px-4 py-3">

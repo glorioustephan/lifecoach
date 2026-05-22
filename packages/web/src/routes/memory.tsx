@@ -43,7 +43,7 @@ function MemoryRoute(): JSX.Element {
           Reflections
         </TabButton>
       </nav>
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto mobile-safe-bottom">
         <div className="mx-auto max-w-3xl px-4 py-4 md:px-6">
           {tab === "facts" && <FactsTab />}
           {tab === "documents" && <DocumentsTab />}

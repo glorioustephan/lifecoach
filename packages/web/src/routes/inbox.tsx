@@ -99,7 +99,7 @@ function InboxRoute(): JSX.Element {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto mobile-safe-bottom">
         <div className="mx-auto max-w-2xl space-y-4 px-4 py-4 md:px-6">
           {filter === "active" && <BriefingPanel />}
 

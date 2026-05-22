@@ -226,7 +226,7 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
         aria-label="Conversation"
         className="flex-1 overflow-y-auto"
       >
-        <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pb-6 pt-6">
+        <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pb-6 pt-6 mobile-safe-bottom">
           {items.length === 0 && (
             <div className="mt-12 flex flex-col items-center gap-2 text-center">
               <div className="text-sm text-fg-muted">

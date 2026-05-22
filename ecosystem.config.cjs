@@ -1,8 +1,9 @@
 /**
  * PM2 ecosystem config for Lifecoach.
  *
- * Four processes:
+ * Five processes:
  *  - lifecoach-server         long-lived Hono web/API server
+ *  - lifecoach-sync-todoist   sync Todoist tasks every 30 minutes
  *  - lifecoach-daily-reflect  daily reflection at 06:00 local
  *  - lifecoach-insights       daily insight pass at 07:30 local
  *                             (runs AFTER the daily reflection so the
@@ -89,6 +90,15 @@ module.exports = {
       max_restarts: 10,
       min_uptime: "30s",
       max_memory_restart: "1G",
+    },
+    {
+      name: "lifecoach-sync-todoist",
+      script: "/bin/sh",
+      args: ["-c", "pnpm -w run lifecoach sync todoist"],
+      ...base("sync-todoist"),
+      autorestart: false,
+      cron_restart: "*/30 * * * *",  // Every 30 minutes
+      max_memory_restart: "512M",
     },
     {
       name: "lifecoach-daily-reflect",

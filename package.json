@@ -8,12 +8,16 @@
     "node": ">=22.0.0"
   },
   "scripts": {
+    "dev:setup": "bash scripts/dev-setup.sh",
+    "dev": "pnpm dev:setup && pnpm --parallel --filter @lifecoach/server --filter @lifecoach/web run dev",
+    "dev:reset": "rm -rf data-dev && pnpm dev",
+    "deploy:macmini": "bash scripts/deploy-to-macmini.sh",
+    "deploy:macmini:env": "bash scripts/deploy-env-to-macmini.sh",
     "lifecoach": "pnpm --filter @lifecoach/cli start",
     "mcp": "pnpm --filter @lifecoach/mcp-server start",
     "server": "pnpm --filter @lifecoach/server start",
     "web:dev": "pnpm --filter @lifecoach/web dev",
     "web:build": "pnpm --filter @lifecoach/web build",
-    "dev": "pnpm --parallel --filter @lifecoach/server --filter @lifecoach/web run dev",
     "start": "pnpm web:build && pnpm server",
     "typecheck": "pnpm -r typecheck",
     "build": "pnpm -r build",

@@ -2,23 +2,15 @@
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import dotenv from "dotenv";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { serve } from "@hono/node-server";
-import { createLifecoach, findWorkspaceRoot } from "@lifecoach/core";
-// Override empty (or unset) values from .env, but never clobber a legit
-// command-line env var like `LIFECOACH_DATA_DIR=… node server`.
-const envPath = path.join(findWorkspaceRoot(), ".env");
-if (fs.existsSync(envPath)) {
-  const parsed = dotenv.parse(fs.readFileSync(envPath, "utf8"));
-  for (const [k, v] of Object.entries(parsed)) {
-    const existing = process.env[k];
-    if (existing === undefined || existing === "") process.env[k] = v;
-  }
-}
+import { createLifecoach, findWorkspaceRoot, loadEnvironmentConfig } from "@lifecoach/core";
+
+// Load environment-specific config (.env.{env} or .env)
+loadEnvironmentConfig(findWorkspaceRoot());
 
 import { chatRoutes } from "./routes/chat.js";
 import { profileRoutes } from "./routes/profile.js";
