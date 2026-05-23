@@ -3,6 +3,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2, Sparkles } from "lucide-react";
 import { ViewHeader } from "~/components/ui/ViewHeader";
+import { TabNav } from "~/components/ui/TabNav";
+import { PaginationNav } from "~/components/ui/PaginationNav";
 import { api, type DocumentRow, type ReflectionRow } from "~/lib/api";
 import { formatRelative } from "~/lib/time";
 import { cn } from "~/lib/cn";
@@ -25,70 +27,48 @@ interface FactRow {
 
 function MemoryRoute(): JSX.Element {
   const [tab, setTab] = useState<Tab>("facts");
+  const [factsPage, setFactsPage] = useState(1);
+  const [docsPage, setDocsPage] = useState(1);
+  const [reflectionsPage, setReflectionsPage] = useState(1);
+
+  const tabs = [
+    { id: "facts" as const, label: "Facts" },
+    { id: "documents" as const, label: "Documents" },
+    { id: "reflections" as const, label: "Reflections" },
+  ];
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <ViewHeader title="Memory" subtitle="What the coach knows about you" />
-      <nav
-        aria-label="Memory section"
-        className="flex gap-1 border-b border-border-subtle px-4 md:px-6"
-      >
-        <TabButton active={tab === "facts"} onClick={() => setTab("facts")}>
-          Facts
-        </TabButton>
-        <TabButton active={tab === "documents"} onClick={() => setTab("documents")}>
-          Documents
-        </TabButton>
-        <TabButton active={tab === "reflections"} onClick={() => setTab("reflections")}>
-          Reflections
-        </TabButton>
-      </nav>
+      <TabNav tabs={tabs} active={tab} onChange={setTab} variant="underline" />
       <div className="flex-1 overflow-y-auto mobile-safe-bottom">
         <div className="mx-auto max-w-3xl px-4 py-4 md:px-6">
-          {tab === "facts" && <FactsTab />}
-          {tab === "documents" && <DocumentsTab />}
-          {tab === "reflections" && <ReflectionsTab />}
+          {tab === "facts" && <FactsTab page={factsPage} onPageChange={setFactsPage} />}
+          {tab === "documents" && <DocumentsTab page={docsPage} onPageChange={setDocsPage} />}
+          {tab === "reflections" && <ReflectionsTab page={reflectionsPage} onPageChange={setReflectionsPage} />}
         </div>
       </div>
     </div>
   );
 }
 
-const TabButton = ({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}): JSX.Element => (
-  <button
-    type="button"
-    onClick={onClick}
-    role="tab"
-    aria-selected={active}
-    className={cn(
-      "relative -mb-px px-3 py-2 text-sm transition-colors",
-      active ? "text-fg" : "text-fg-muted hover:text-fg",
-    )}
-  >
-    {children}
-    {active && (
-      <span aria-hidden className="absolute inset-x-2 -bottom-px h-px bg-accent" />
-    )}
-  </button>
-);
+const FACTS_PAGE_SIZE = 50;
+const DOCS_PAGE_SIZE = 20;
+const REFLECTIONS_PAGE_SIZE = 10;
 
-function FactsTab(): JSX.Element {
-  const { data, isLoading } = useQuery<{ facts: FactRow[] }>({
-    queryKey: ["memory", "facts"],
+function FactsTab({ page, onPageChange }: { page: number; onPageChange: (p: number) => void }): JSX.Element {
+  const { data, isLoading } = useQuery<{ facts: FactRow[]; total: number }>({
+    queryKey: ["memory", "facts", page],
     queryFn: async () => {
-      const resp = await fetch("/api/memory/facts");
+      const resp = await fetch(`/api/memory/facts?page=${page}&limit=${FACTS_PAGE_SIZE}`);
       if (!resp.ok) throw new Error(resp.statusText);
       return resp.json();
     },
   });
+
+  const totalPages = Math.ceil((data?.total ?? 0) / FACTS_PAGE_SIZE);
+  const itemsShown = data?.facts.length ?? 0;
+  const totalItems = data?.total ?? 0;
 
   if (isLoading) {
     return (
@@ -102,7 +82,7 @@ function FactsTab(): JSX.Element {
       </ul>
     );
   }
-  if (!data || data.facts.length === 0) {
+  if (!data || totalItems === 0) {
     return (
       <p className="mt-12 text-center text-sm text-fg-muted">
         No facts stored yet. Chat with your coach — facts will land here as you
@@ -111,30 +91,50 @@ function FactsTab(): JSX.Element {
     );
   }
   return (
-    <ul className="divide-y divide-border-subtle rounded-md border border-border bg-surface">
-      {data.facts.slice(0, 200).map((f) => (
-        <li key={f.id} className="px-4 py-3">
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="text-sm font-medium text-fg">{f.subject}</span>
-            <span className="rounded-sm border border-border bg-surface-elevated px-1.5 py-0.5 text-[10px] text-fg-faint">
-              {f.category}
-            </span>
-          </div>
-          <p className="mt-0.5 text-xs text-fg-muted">{f.body}</p>
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className="divide-y divide-border-subtle rounded-md border border-border bg-surface">
+        {data.facts.map((f) => (
+          <li key={f.id} className="px-4 py-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-sm font-medium text-fg">{f.subject}</span>
+              <span className="rounded-sm border border-border bg-surface-elevated px-1.5 py-0.5 text-[10px] text-fg-faint">
+                {f.category}
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-fg-muted">{f.body}</p>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-6">
+        <PaginationNav
+          currentPage={page}
+          totalPages={totalPages}
+          itemsShown={itemsShown}
+          totalItems={totalItems}
+          onLoadMore={() => onPageChange(page + 1)}
+          isLoading={isLoading}
+        />
+      </div>
+    </>
   );
 }
 
-function DocumentsTab(): JSX.Element {
+function DocumentsTab({ page, onPageChange }: { page: number; onPageChange: (p: number) => void }): JSX.Element {
   const qc = useQueryClient();
-  const { data, isLoading } = useQuery({
-    queryKey: ["memory", "documents"],
-    queryFn: api.documents,
+  const { data, isLoading } = useQuery<{ documents: DocumentRow[]; total: number }>({
+    queryKey: ["memory", "documents", page],
+    queryFn: async () => {
+      const resp = await fetch(`/api/memory/documents?page=${page}&limit=${DOCS_PAGE_SIZE}`);
+      if (!resp.ok) throw new Error(resp.statusText);
+      return resp.json();
+    },
   });
   const [pendingForget, setPendingForget] = useState<DocumentRow | null>(null);
   const [lastResult, setLastResult] = useState<string | null>(null);
+
+  const totalPages = Math.ceil((data?.total ?? 0) / DOCS_PAGE_SIZE);
+  const itemsShown = data?.documents.length ?? 0;
+  const totalItems = data?.total ?? 0;
 
   const forgetMut = useMutation({
     mutationFn: (id: string) => api.forgetDocument(id),
@@ -164,7 +164,7 @@ function DocumentsTab(): JSX.Element {
       </ul>
     );
   }
-  if (!data || data.documents.length === 0) {
+  if (!data || totalItems === 0) {
     return (
       <p className="mt-12 text-center text-sm text-fg-muted">
         No documents ingested. Drop files in{" "}
@@ -212,6 +212,16 @@ function DocumentsTab(): JSX.Element {
           </li>
         ))}
       </ul>
+      <div className="mt-6">
+        <PaginationNav
+          currentPage={page}
+          totalPages={totalPages}
+          itemsShown={itemsShown}
+          totalItems={totalItems}
+          onLoadMore={() => onPageChange(page + 1)}
+          isLoading={isLoading}
+        />
+      </div>
       <ConfirmForgetDialog
         doc={pendingForget}
         onCancel={() => setPendingForget(null)}
@@ -286,12 +296,20 @@ const KIND_LABEL: Record<ReflectionRow["kind"], string> = {
   monthly: "Monthly",
 };
 
-function ReflectionsTab(): JSX.Element {
+function ReflectionsTab({ page, onPageChange }: { page: number; onPageChange: (p: number) => void }): JSX.Element {
   const qc = useQueryClient();
-  const { data, isLoading } = useQuery({
-    queryKey: ["memory", "reflections"],
-    queryFn: api.reflections,
+  const { data, isLoading } = useQuery<{ reflections: ReflectionRow[]; total: number }>({
+    queryKey: ["memory", "reflections", page],
+    queryFn: async () => {
+      const resp = await fetch(`/api/memory/reflections?page=${page}&limit=${REFLECTIONS_PAGE_SIZE}`);
+      if (!resp.ok) throw new Error(resp.statusText);
+      return resp.json();
+    },
   });
+
+  const totalPages = Math.ceil((data?.total ?? 0) / REFLECTIONS_PAGE_SIZE);
+  const itemsShown = data?.reflections.length ?? 0;
+  const totalItems = data?.total ?? 0;
 
   const generate = useMutation({
     mutationFn: (kind: "daily" | "weekly" | "monthly") => api.generateReflection(kind),
@@ -342,7 +360,7 @@ function ReflectionsTab(): JSX.Element {
         </div>
       )}
 
-      {!isLoading && (data?.reflections.length ?? 0) === 0 && (
+      {!isLoading && totalItems === 0 && (
         <p className="mt-8 text-center text-sm text-fg-muted">
           No reflections yet. Generate one above — it'll synthesize your recent
           conversations, completed tasks, new facts, and measurements into a
@@ -351,11 +369,23 @@ function ReflectionsTab(): JSX.Element {
       )}
 
       {!isLoading && data && data.reflections.length > 0 && (
-        <div className="space-y-3">
-          {data.reflections.map((r) => (
-            <ReflectionCard key={r.id} reflection={r} />
-          ))}
-        </div>
+        <>
+          <div className="space-y-3">
+            {data.reflections.map((r) => (
+              <ReflectionCard key={r.id} reflection={r} />
+            ))}
+          </div>
+          <div className="mt-6">
+            <PaginationNav
+              currentPage={page}
+              totalPages={totalPages}
+              itemsShown={itemsShown}
+              totalItems={totalItems}
+              onLoadMore={() => onPageChange(page + 1)}
+              isLoading={isLoading}
+            />
+          </div>
+        </>
       )}
     </div>
   );

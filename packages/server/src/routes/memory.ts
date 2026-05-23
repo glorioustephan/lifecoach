@@ -18,38 +18,57 @@ const recallSchema = z.object({
 export const memoryRoutes = (lc: Lifecoach) => {
   const app = new Hono();
 
-  // Facts list — basic for now; filter by category, status (active=null valid_to).
+  // Facts list with pagination
   app.get("/facts", (c) => {
     const category = c.req.query("category");
     const includeExpired = c.req.query("includeExpired") === "true";
+    const limit = Number(c.req.query("limit") ?? "50");
+    const page = Number(c.req.query("page") ?? "1");
+    const offset = (page - 1) * limit;
+
+    let allFacts: typeof lc.storage.facts.byCategory extends (
+      ...args: any[]
+    ) => infer R
+      ? R
+      : never;
+
     if (category) {
-      return c.json({
-        facts: lc.storage.facts.byCategory(category as never, includeExpired),
-      });
+      allFacts = lc.storage.facts.byCategory(category as never, includeExpired);
+    } else {
+      // No category filter — return all categories
+      const categories = [
+        "health",
+        "preference",
+        "recipe",
+        "task",
+        "routine",
+        "goal",
+        "relationship",
+        "other",
+      ] as const;
+      allFacts = categories.flatMap((cat) =>
+        lc.storage.facts.byCategory(cat, includeExpired),
+      );
     }
-    // No category filter — return all categories (simple approach for now).
-    const categories = [
-      "health",
-      "preference",
-      "recipe",
-      "task",
-      "routine",
-      "goal",
-      "relationship",
-      "other",
-    ] as const;
-    const facts = categories.flatMap((cat) =>
-      lc.storage.facts.byCategory(cat, includeExpired),
-    );
-    return c.json({ facts });
+
+    const facts = allFacts.slice(offset, offset + limit);
+    return c.json({ facts, total: allFacts.length });
   });
 
-  // Documents list.
+  // Documents list with pagination
   app.get("/documents", (c) => {
+    const limit = Number(c.req.query("limit") ?? "20");
+    const page = Number(c.req.query("page") ?? "1");
+    const offset = (page - 1) * limit;
+
+    const countStmt = lc.storage.handle.db.prepare("SELECT COUNT(*) as count FROM documents");
+    const total = (countStmt.get() as { count: number }).count;
+
     const stmt = lc.storage.handle.db.prepare(
-      "SELECT id, source, mime, title, length(body) as body_chars, ingested_at FROM documents ORDER BY ingested_at DESC LIMIT 200",
+      "SELECT id, source, mime, title, length(body) as body_chars, ingested_at FROM documents ORDER BY ingested_at DESC LIMIT ? OFFSET ?",
     );
-    return c.json({ documents: stmt.all() });
+    const documents = stmt.all(limit, offset);
+    return c.json({ documents, total });
   });
 
   // Forget a document and everything derived from it. Destructive but
@@ -80,14 +99,21 @@ export const memoryRoutes = (lc: Lifecoach) => {
     });
   });
 
-  // Reflections — list (newest first).
+  // Reflections — list with pagination (newest first)
   app.get("/reflections", (c) => {
+    const limit = Number(c.req.query("limit") ?? "10");
+    const page = Number(c.req.query("page") ?? "1");
+    const offset = (page - 1) * limit;
+
+    const countStmt = lc.storage.handle.db.prepare("SELECT COUNT(*) as count FROM reflections");
+    const total = (countStmt.get() as { count: number }).count;
+
     const rows = lc.storage.handle.db
       .prepare(
-        "SELECT id, period_start, period_end, kind, body, created_at FROM reflections ORDER BY period_end DESC LIMIT 100",
+        "SELECT id, period_start, period_end, kind, body, created_at FROM reflections ORDER BY period_end DESC LIMIT ? OFFSET ?",
       )
-      .all();
-    return c.json({ reflections: rows });
+      .all(limit, offset);
+    return c.json({ reflections: rows, total });
   });
 
   // Reflections — generate a new one over a period. Falls back to the spec's
