@@ -14,6 +14,7 @@ import {
   TaskRepository,
   GoalRepository,
   ProjectRepository,
+  ArtifactRepository,
 } from "./repositories/index.js";
 
 export interface Storage {
@@ -31,6 +32,7 @@ export interface Storage {
   tasks: TaskRepository;
   goals: GoalRepository;
   projects: ProjectRepository;
+  artifacts: ArtifactRepository;
   close: () => void;
 }
 
@@ -52,6 +54,7 @@ export const createStorage = (config: LifecoachConfig): Storage => {
     tasks: new TaskRepository(db),
     goals: new GoalRepository(db),
     projects: new ProjectRepository(db),
+    artifacts: new ArtifactRepository(db),
     close: handle.close,
   };
 };

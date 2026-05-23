@@ -1,7 +1,7 @@
 /**
  * PM2 ecosystem config for Lifecoach.
  *
- * Five processes:
+ * Six processes:
  *  - lifecoach-server         long-lived Hono web/API server
  *  - lifecoach-sync-todoist   sync Todoist tasks every 30 minutes
  *  - lifecoach-daily-reflect  daily reflection at 06:00 local
@@ -9,6 +9,9 @@
  *                             (runs AFTER the daily reflection so the
  *                              insighter has the morning summary in context)
  *  - lifecoach-weekly-reflect weekly reflection Sundays at 19:00 local
+ *  - lifecoach-artifacts      daily artifact extraction at 08:00 local
+ *                             (self-disables after 5 consecutive empty runs;
+ *                              re-enable from the Settings page)
  *
  * Each cron job runs `cron_restart` semantics — autorestart is off,
  * PM2 fires the process on schedule, it runs and exits, PM2 waits.
@@ -137,6 +140,14 @@ module.exports = {
       ...base("weekly-reflect"),
       autorestart: false,
       cron_restart: "0 19 * * 0",
+    },
+    {
+      name: "lifecoach-artifacts",
+      script: "/bin/sh",
+      args: ["-c", "pnpm -w run lifecoach artifacts extract"],
+      ...base("artifacts"),
+      autorestart: false,
+      cron_restart: "0 8 * * *", // daily at 08:00, after insights (07:30)
     },
   ],
 };

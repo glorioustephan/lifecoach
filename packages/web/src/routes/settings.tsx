@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "~/lib/api";
 import { ViewHeader } from "~/components/ui/ViewHeader";
 import { cn } from "~/lib/cn";
+import { formatRelative } from "~/lib/time";
 
 export const Route = createFileRoute("/settings")({
   component: SettingsRoute,
@@ -62,6 +63,8 @@ function SettingsRoute(): JSX.Element {
             </div>
           </section>
 
+          <ArtifactExtractionSection />
+
           <section className="rounded-md border border-border bg-surface">
             <header className="border-b border-border-subtle px-4 py-3">
               <h2 className="text-sm font-medium text-fg">System</h2>
@@ -80,6 +83,7 @@ function SettingsRoute(): JSX.Element {
               <Row k="Active tasks" v={status?.counts.activeTasks ?? "—"} />
               <Row k="Sessions" v={status?.counts.sessions ?? "—"} />
               <Row k="Messages" v={status?.counts.messages ?? "—"} />
+              <Row k="Artifacts" v={status?.counts.artifacts ?? "—"} />
             </dl>
           </section>
         </div>
@@ -165,6 +169,80 @@ function SourceRow({ source }: { source: Source }): JSX.Element {
         </p>
       )}
     </div>
+  );
+}
+
+// ─── Artifact Extraction Section ─────────────────────────────────────────────
+
+function ArtifactExtractionSection(): JSX.Element {
+  const qc = useQueryClient();
+
+  const { data } = useQuery({
+    queryKey: ["artifact-settings"],
+    queryFn: api.artifactSettings,
+  });
+
+  const settings = data?.settings;
+
+  const toggle = useMutation({
+    mutationFn: (next: boolean) => api.setArtifactAutoExtract(next),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["artifact-settings"] });
+      void qc.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+
+  const enabled = settings?.enabled ?? false;
+
+  return (
+    <section className="rounded-md border border-border bg-surface">
+      <header className="border-b border-border-subtle px-4 py-3">
+        <h2 className="text-sm font-medium text-fg">Artifact extraction</h2>
+      </header>
+      <div className="px-4 py-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p id="artifact-extract-label" className="text-sm text-fg">Daily auto-extraction</p>
+            <p className="mt-0.5 text-xs text-fg-muted">
+              Scans recent conversations each day and saves new recipes &amp; artifacts automatically.
+            </p>
+            {settings?.autoDisabled && (
+              <p className="mt-1.5 text-[11px] text-warning-200">
+                Paused automatically after 5 empty runs. Toggle on to resume.
+              </p>
+            )}
+            {settings?.lastScanAt && (
+              <p className="mt-1 font-mono text-[10px] text-fg-faint">
+                Last scan: {formatRelative(settings.lastScanAt)}
+              </p>
+            )}
+          </div>
+          {/* Toggle pill */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enabled}
+            aria-labelledby="artifact-extract-label"
+            onClick={() => toggle.mutate(!enabled)}
+            disabled={toggle.isPending}
+            className={cn(
+              "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+              enabled ? "bg-accent" : "bg-surface-elevated",
+              toggle.isPending && "opacity-60 cursor-not-allowed",
+            )}
+          >
+            <span className="sr-only">{enabled ? "Disable" : "Enable"} daily auto-extraction</span>
+            <span
+              className={cn(
+                "pointer-events-none inline-block size-4 rounded-full bg-bg shadow-sm ring-0 transition-transform",
+                enabled ? "translate-x-4" : "translate-x-0",
+              )}
+            />
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 

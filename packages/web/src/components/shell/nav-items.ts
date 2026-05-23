@@ -6,6 +6,7 @@ import {
   Radio,
   Settings,
   Target,
+  FileStack,
   type LucideIcon,
 } from "lucide-react";
 
@@ -23,6 +24,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "inbox", label: "Inbox", to: "/inbox", icon: Inbox, inTabBar: true },
   { id: "goals", label: "Goals", to: "/goals", icon: Target, inTabBar: false },
   { id: "memory", label: "Memory", to: "/memory", icon: Brain, inTabBar: true },
+  { id: "artifacts", label: "Artifacts", to: "/artifacts", icon: FileStack, inTabBar: false },
   { id: "tasks", label: "Tasks", to: "/tasks", icon: CheckCircle2, inTabBar: true },
   { id: "sources", label: "Sources", to: "/sources", icon: Radio, inTabBar: false },
   { id: "settings", label: "Settings", to: "/settings", icon: Settings, inTabBar: true },

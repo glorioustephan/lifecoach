@@ -5,6 +5,7 @@ export interface StatusResponse {
   embedder: { enabled: boolean; dim: number };
   todoist: boolean;
   capacities?: boolean;
+  artifactsAutoExtract?: boolean;
   counts: {
     profileEntries: number;
     facts: number;
@@ -16,8 +17,33 @@ export interface StatusResponse {
     sessions: number;
     messages: number;
     activeTasks: number;
+    artifacts?: number;
   };
   lastSession: { id: string; startedAt: number } | null;
+}
+
+export type ArtifactOrigin = "conversation" | "cron" | "manual";
+
+export interface ArtifactRow {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  category: string | null;
+  tags: string[];
+  confidence: number | null;
+  origin: ArtifactOrigin;
+  sourceSessionId: string | null;
+  sourceMessageIds: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ArtifactSettingsRow {
+  enabled: boolean;
+  autoDisabled: boolean;
+  emptyStreak: number;
+  lastScanAt: number | null;
 }
 
 const get = async <T>(path: string): Promise<T> => {
@@ -267,4 +293,37 @@ export const api = {
         embedded: number;
       };
     }>("/api/sources/todoist/sync", {}),
+
+  // ─── Artifacts ──────────────────────────────────────────────────────────
+  artifacts: (params: { type?: string; q?: string; limit?: number; offset?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.type) qs.set("type", params.type);
+    if (params.q) qs.set("q", params.q);
+    qs.set("limit", String(params.limit ?? 20));
+    qs.set("offset", String(params.offset ?? 0));
+    return get<{ items: ArtifactRow[]; total: number; limit: number; offset: number }>(
+      `/api/artifacts?${qs.toString()}`,
+    );
+  },
+  saveArtifactFromMessage: (body: { content: string; sessionId?: string; type?: string }) =>
+    postJson<{ artifact: ArtifactRow }>("/api/artifacts/extract", body),
+  generateArtifacts: () =>
+    postJson<{ created: ArtifactRow[]; candidateSessions: number }>(
+      "/api/artifacts/generate",
+      {},
+    ),
+  updateArtifact: (
+    id: string,
+    patch: Partial<{ title: string; body: string; tags: string[]; category: string | null }>,
+  ) => patchJson<{ artifact: ArtifactRow }>(`/api/artifacts/${encodeURIComponent(id)}`, patch),
+  deleteArtifact: (id: string) =>
+    del<{ ok: true }>(`/api/artifacts/${encodeURIComponent(id)}`),
+  artifactToCapacities: (id: string) =>
+    postJson<{ ok: true }>(`/api/artifacts/${encodeURIComponent(id)}/capacities`, {}),
+  artifactSettings: () =>
+    get<{ settings: ArtifactSettingsRow }>("/api/artifacts/settings"),
+  setArtifactAutoExtract: (autoExtractEnabled: boolean) =>
+    patchJson<{ settings: ArtifactSettingsRow }>("/api/artifacts/settings", {
+      autoExtractEnabled,
+    }),
 };

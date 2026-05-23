@@ -11,3 +11,8 @@ export { IngestedFileRepository, type IngestedFile } from "./ingested-files.js";
 export { TaskRepository, type TaskListFilter } from "./tasks.js";
 export { GoalRepository, type GoalListFilter } from "./goals.js";
 export { ProjectRepository, type ProjectListFilter } from "./projects.js";
+export {
+  ArtifactRepository,
+  artifactDedupKey,
+  type ArtifactListFilter,
+} from "./artifacts.js";

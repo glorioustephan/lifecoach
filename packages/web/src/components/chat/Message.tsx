@@ -76,7 +76,7 @@ export const Message = ({ role, content, streaming, isRunStart = true }: Props):
         </div>
         {!streaming && content.length > 0 && (
           <div className="mt-1 pl-4">
-            <MessageActions content={content} />
+            <MessageActions content={content} artifactSource={{ content }} />
           </div>
         )}
       </div>

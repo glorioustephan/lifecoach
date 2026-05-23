@@ -16,6 +16,7 @@ import { registerSync } from "./commands/sync.js";
 import { registerForget } from "./commands/forget.js";
 import { registerReflect } from "./commands/reflect.js";
 import { registerInsights } from "./commands/insights.js";
+import { registerArtifacts } from "./commands/artifacts.js";
 import { registerExport, registerImport } from "./commands/snapshot.js";
 
 const program = new Command();
@@ -35,6 +36,7 @@ registerSync(program);
 registerForget(program);
 registerReflect(program);
 registerInsights(program);
+registerArtifacts(program);
 registerExport(program);
 registerImport(program);
 

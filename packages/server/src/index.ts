@@ -21,6 +21,7 @@ import { statusRoutes } from "./routes/status.js";
 import { ingestRoutes } from "./routes/ingest.js";
 import { inboxRoutes } from "./routes/inbox.js";
 import { goalRoutes } from "./routes/goals.js";
+import { artifactRoutes } from "./routes/artifacts.js";
 import { briefingRoutes } from "./routes/briefing.js";
 import { loadAuthConfig, requireAuth } from "./middleware/auth.js";
 
@@ -52,6 +53,7 @@ api.route("/status", statusRoutes(lc));
 api.route("/ingest", ingestRoutes(lc));
 api.route("/inbox", inboxRoutes(lc));
 api.route("/goals", goalRoutes(lc));
+api.route("/artifacts", artifactRoutes(lc));
 api.route("/briefing", briefingRoutes(lc));
 app.route("/api", api);
 
