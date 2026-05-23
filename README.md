@@ -106,7 +106,7 @@ pnpm lifecoach init
 pnpm lifecoach chat
 ```
 
-### Environment variables (`.env.local` for dev, `.env.mac-mini` for production)
+### Environment variables (`.env.local` for dev, `.env.production` or `.env` on the Mac Mini)
 
 | Variable | Required | Description |
 |---|---|---|
@@ -114,7 +114,7 @@ pnpm lifecoach chat
 | `VOYAGE_API_KEY` | recommended | Embeddings; without it recall falls back to keyword search |
 | `TODOIST_API_TOKEN` | optional | Todoist task sync |
 | `CAPACITIES_API_TOKEN` | optional | Capacities workspace mirror + reflection write-back |
-| `CAPACITIES_DEFAULT_SPACE_ID` | optional | Default Capacities space for write-back |
+| `CAPACITIES_DEFAULT_SPACE_ID` | optional | Default Capacities space for daily notes and reflection write-back |
 | `LIFECOACH_ENV` | optional | `development` or `production` — drives data directory selection |
 | `LIFECOACH_DATA_DIR` | optional | Override the data directory path explicitly |
 | `LIFECOACH_AUTH` | optional | Set to `off` to disable email auth (dev only) |
@@ -140,6 +140,11 @@ data-production/      ← Mac Mini production (LIFECOACH_ENV=production)
 ```
 
 Config is loaded from `.env.{LIFECOACH_ENV}` first, then falls back to `.env`. This lets you maintain a separate Voyage API key, separate Claude key, and separate data per environment.
+
+Production deploy credentials live in GitHub's `production` environment, but
+runtime app configuration lives on the Mac Mini. See
+[`docs/deployment.md`](docs/deployment.md) for that split and the Capacities
+write-back setup.
 
 ```bash
 # Local dev (uses .env.local, writes to data-development/)

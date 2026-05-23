@@ -12,7 +12,7 @@ the source of code, while secrets and personal data stay outside git:
 ## Flow
 
 1. A push lands on `main`.
-2. GitHub Actions installs dependencies, runs tests, and builds the workspace.
+2. GitHub Actions installs dependencies and builds the workspace.
 3. The deploy job joins the tailnet with the Tailscale GitHub Action.
 4. The job SSHes to the Mac Mini.
 5. The Mac Mini runs `scripts/deploy-production.sh`.
@@ -21,6 +21,40 @@ The server-side script refuses to deploy if the Mac Mini checkout has local
 tracked edits. It then fast-forwards `main`, installs dependencies, builds,
 runs `pnpm lifecoach init --no-profile` so migrations apply, reloads PM2, and
 checks `/health`.
+
+## Configuration ownership
+
+There are two separate configuration layers:
+
+| Layer | Lives in | Owns |
+|---|---|---|
+| Deploy configuration | GitHub `production` environment | Tailscale access, SSH key, Mac Mini host/user/path |
+| Runtime app configuration | Mac Mini `.env.production` or `.env` | API tokens, personal app settings, production data behavior |
+
+GitHub Actions should only know how to reach the Mac Mini. It should not own
+the app's personal runtime configuration unless we intentionally build an env
+sync workflow later.
+
+Keep these values on the Mac Mini, not in git and not in GitHub Actions:
+
+| Name | Why |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude chat, extraction, reflection, and insight calls |
+| `VOYAGE_API_KEY` | Embeddings |
+| `TODOIST_API_TOKEN` | Todoist sync |
+| `CAPACITIES_API_TOKEN` | Capacities lookup, sync, and write-back API access |
+| `CAPACITIES_DEFAULT_SPACE_ID` | Default Capacities target for daily notes and reflection write-back |
+| `LIFECOACH_ENV=production` | Keeps production data in `data-production/` |
+| `PORT=3717` | Server listen port, if different from the default |
+
+After changing Mac Mini runtime config, reload PM2 so the server and scheduled
+jobs pick it up:
+
+```bash
+cd /Users/leebaker/dev/lifecoach
+pm2 startOrReload ecosystem.config.cjs --update-env
+pm2 save
+```
 
 ## GitHub production environment
 
@@ -93,6 +127,34 @@ Then add the deploy public key to:
 ```bash
 ~/.ssh/authorized_keys
 ```
+
+## Capacities write-back
+
+`CAPACITIES_API_TOKEN` connects Lifecoach to Capacities. To enable automatic
+daily/weekly reflection write-back and the agent's `save_to_daily_note` default
+target, production also needs:
+
+```bash
+CAPACITIES_DEFAULT_SPACE_ID=<capacities-space-id>
+```
+
+Find the available spaces from the Mac Mini:
+
+```bash
+cd /Users/leebaker/dev/lifecoach
+curl --silent http://127.0.0.1:3717/api/sources/capacities/spaces
+```
+
+Add the chosen space id to `.env.production` or `.env`, then reload PM2:
+
+```bash
+pm2 startOrReload ecosystem.config.cjs --update-env
+pm2 save
+curl --silent http://127.0.0.1:3717/api/sources
+```
+
+The `capacities` source should show `connected: true` and a non-null
+`defaultSpaceId`.
 
 The normal deploy path should not import snapshots from a laptop. Snapshots are
 for backup, restore, and migration; production deploys update code in place.
