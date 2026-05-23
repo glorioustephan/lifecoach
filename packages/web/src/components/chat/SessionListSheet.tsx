@@ -62,42 +62,44 @@ export const SessionListSheet = ({
         )}
         {!isLoading && data && data.sessions.length > 0 && (
           <ul className="divide-y divide-border-subtle">
-            {data.sessions.map((s) => {
-              const isActive = s.id === activeSessionId;
-              const label =
-                s.summary && s.summary.trim().length > 0
-                  ? s.summary
-                  : s.preview && s.preview.length > 0
-                    ? s.preview
-                    : "(empty conversation)";
-              return (
-                <li key={s.id}>
-                  <button
-                    type="button"
-                    onClick={() => handlePick(s.id)}
-                    className={
-                      "block w-full px-4 py-3 text-left transition-colors hover:bg-surface-elevated/40" +
-                      (isActive ? " bg-surface-elevated/60" : "")
-                    }
-                  >
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="truncate text-sm text-fg">{label}</span>
-                      <span className="shrink-0 font-mono text-[10px] text-fg-faint">
-                        {formatRelative(s.startedAt)}
-                      </span>
-                    </div>
-                    <div className="mt-1 flex items-center gap-2 text-[11px] text-fg-faint">
-                      <span>{s.messageCount} msg{s.messageCount === 1 ? "" : "s"}</span>
-                      {isActive && (
-                        <span className="rounded-sm bg-accent/15 px-1.5 py-0.5 text-accent">
-                          current
+            {data.sessions
+              .filter((s) => (s.summary?.trim().length ?? 0) > 0 || (s.preview?.length ?? 0) > 0)
+              .map((s) => {
+                const isActive = s.id === activeSessionId;
+                const label =
+                  s.summary && s.summary.trim().length > 0
+                    ? s.summary
+                    : s.preview && s.preview.length > 0
+                      ? s.preview
+                      : "(empty conversation)";
+                return (
+                  <li key={s.id}>
+                    <button
+                      type="button"
+                      onClick={() => handlePick(s.id)}
+                      className={
+                        "block w-full px-4 py-3 text-left transition-colors hover:bg-surface-elevated/40" +
+                        (isActive ? " bg-surface-elevated/60" : "")
+                      }
+                    >
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="truncate text-sm text-fg">{label}</span>
+                        <span className="shrink-0 font-mono text-[10px] text-fg-faint">
+                          {formatRelative(s.startedAt)}
                         </span>
-                      )}
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
+                      </div>
+                      <div className="mt-1 flex items-center gap-2 text-[11px] text-fg-faint">
+                        <span>{s.messageCount} msg{s.messageCount === 1 ? "" : "s"}</span>
+                        {isActive && (
+                          <span className="rounded-sm bg-accent/15 px-1.5 py-0.5 text-accent">
+                            current
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
           </ul>
         )}
       </SheetBody>
