@@ -37,5 +37,28 @@ export const taskRoutes = (lc: Lifecoach) => {
     return c.json({ task });
   });
 
+  app.post("/:id/complete", async (c) => {
+    const id = c.req.param("id");
+    const task = lc.storage.tasks.get(id);
+    if (!task) return c.json({ error: "not_found" }, 404);
+
+    // Complete in Todoist if it's a Todoist task
+    if (task.externalSource === "todoist" && task.externalId && lc.todoist) {
+      try {
+        await lc.todoist.completeTask(task.externalId);
+      } catch (err) {
+        console.error(`Failed to complete task in Todoist: ${err}`);
+      }
+    }
+
+    // Update local storage
+    const ts = Date.now();
+    lc.storage.db
+      .prepare("UPDATE tasks SET completed_at = ?, updated_at = ? WHERE id = ?")
+      .run(ts, ts, id);
+
+    return c.json({ ok: true });
+  });
+
   return app;
 };
