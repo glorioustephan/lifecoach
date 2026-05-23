@@ -39,7 +39,7 @@ function SettingsRoute(): JSX.Element {
               {(profile?.profile ?? []).map((entry) => (
                 <div
                   key={entry.key}
-                  className="grid grid-cols-[max-content_1fr] gap-3 px-4 py-3"
+                  className="grid grid-cols-[max-content_1fr] items-center gap-3 px-4 py-3"
                 >
                   <span className="text-xs uppercase tracking-wide text-fg-faint">
                     {entry.key}
@@ -247,7 +247,7 @@ function ArtifactExtractionSection(): JSX.Element {
 }
 
 const Row = ({ k, v }: { k: string; v: unknown }): JSX.Element => (
-  <div className="grid grid-cols-[max-content_1fr] gap-3 px-4 py-2.5">
+  <div className="grid grid-cols-[max-content_1fr] items-center gap-3 px-4 py-2.5">
     <dt className="text-xs uppercase tracking-wide text-fg-faint">{k}</dt>
     <dd className="text-sm text-fg">{String(v ?? "—")}</dd>
   </div>
