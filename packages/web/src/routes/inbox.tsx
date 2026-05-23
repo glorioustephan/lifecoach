@@ -10,6 +10,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { ViewHeader } from "~/components/ui/ViewHeader";
+import { PaginationNav } from "~/components/ui/PaginationNav";
 import { api, type InsightRow, type InsightState } from "~/lib/api";
 import { formatRelative } from "~/lib/time";
 import { cn } from "~/lib/cn";
@@ -20,6 +21,8 @@ import { BriefingPanel } from "~/components/inbox/BriefingPanel";
 export const Route = createFileRoute("/inbox")({
   component: InboxRoute,
 });
+
+const PAGE_SIZE = 25;
 
 const PRIORITY_LABEL: Record<number, string> = {
   1: "Notice",
@@ -41,11 +44,18 @@ const PRIORITY_BADGE: Record<number, string> = {
 
 function InboxRoute(): JSX.Element {
   const [filter, setFilter] = useState<InsightState>("active");
+  const [page, setPage] = useState(1);
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["inbox", filter],
-    queryFn: () => api.inbox(filter),
+    queryKey: ["inbox", filter, page],
+    queryFn: async () => {
+      const resp = await fetch(
+        `/api/inbox?state=${filter}&page=${page}&limit=${PAGE_SIZE}`
+      );
+      if (!resp.ok) throw new Error(resp.statusText);
+      return resp.json() as Promise<{ insights: InsightRow[]; total: number }>;
+    },
     refetchInterval: filter === "active" ? 60_000 : false,
   });
 
@@ -57,7 +67,15 @@ function InboxRoute(): JSX.Element {
     },
   });
 
-  const counts = data?.insights.length ?? 0;
+  const handleFilterChange = (newFilter: InsightState): void => {
+    setFilter(newFilter);
+    setPage(1);
+  };
+
+  const totalPages = Math.ceil((data?.total ?? 0) / PAGE_SIZE);
+  const itemsShown = data?.insights.length ?? 0;
+  const totalItems = data?.total ?? 0;
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <ViewHeader
@@ -85,7 +103,11 @@ function InboxRoute(): JSX.Element {
         className="flex items-center gap-1 border-b border-border-subtle px-4 md:px-6"
       >
         {(["active", "snoozed", "acted", "dismissed"] as const).map((s) => (
-          <FilterTab key={s} active={filter === s} onClick={() => setFilter(s)}>
+          <FilterTab
+            key={s}
+            active={filter === s}
+            onClick={() => handleFilterChange(s)}
+          >
             {s[0]!.toUpperCase() + s.slice(1)}
           </FilterTab>
         ))}
@@ -114,7 +136,7 @@ function InboxRoute(): JSX.Element {
             </div>
           )}
 
-          {!isLoading && counts === 0 && (
+          {!isLoading && totalItems === 0 && (
             <EmptyState
               filter={filter}
               onGenerate={() => generate.mutate()}
@@ -122,12 +144,24 @@ function InboxRoute(): JSX.Element {
             />
           )}
 
-          {!isLoading && counts > 0 && (
-            <ul className="space-y-3">
-              {data!.insights.map((insight) => (
-                <InsightCard key={insight.id} insight={insight} />
-              ))}
-            </ul>
+          {!isLoading && totalItems > 0 && (
+            <>
+              <ul className="space-y-3">
+                {data!.insights.map((insight) => (
+                  <InsightCard key={insight.id} insight={insight} />
+                ))}
+              </ul>
+              <div className="mt-6">
+                <PaginationNav
+                  currentPage={page}
+                  totalPages={totalPages}
+                  itemsShown={itemsShown}
+                  totalItems={totalItems}
+                  onLoadMore={() => setPage(page + 1)}
+                  isLoading={isLoading}
+                />
+              </div>
+            </>
           )}
         </div>
       </div>

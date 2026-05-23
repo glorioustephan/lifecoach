@@ -19,7 +19,7 @@ const parseUntil = (raw: number | string): number | null => {
 export const inboxRoutes = (lc: Lifecoach) => {
   const app = new Hono();
 
-  // List insights by state (default: active).
+  // List insights by state with pagination (default: active).
   app.get("/", (c) => {
     const state = (c.req.query("state") ?? "active") as
       | "active"
@@ -27,9 +27,17 @@ export const inboxRoutes = (lc: Lifecoach) => {
       | "dismissed"
       | "snoozed"
       | "all";
-    const limit = Number(c.req.query("limit") ?? "30");
-    const insights = lc.storage.insights.list({ state, limit });
-    return c.json({ insights });
+    const limit = Number(c.req.query("limit") ?? "25");
+    const page = Number(c.req.query("page") ?? "1");
+    const offset = (page - 1) * limit;
+
+    // Get all insights for this state to calculate total
+    const allInsights = lc.storage.insights.list({ state, limit: 1_000_000 });
+    const total = allInsights.length;
+
+    // Get paginated slice
+    const insights = allInsights.slice(offset, offset + limit);
+    return c.json({ insights, total });
   });
 
   // Generate a new pass.
