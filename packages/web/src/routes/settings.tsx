@@ -15,10 +15,15 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsRoute(): JSX.Element {
   const [tab, setTab] = useState<Tab>("profile");
+  const qc = useQueryClient();
 
   const { data: status } = useQuery({ queryKey: ["status"], queryFn: api.status });
   const { data: profile } = useQuery({ queryKey: ["profile"], queryFn: api.profile });
   const { data: sources } = useQuery({ queryKey: ["sources"], queryFn: api.sources });
+  const { data: archived } = useQuery({
+    queryKey: ["sessions", "archived"],
+    queryFn: api.archivedSessions,
+  });
 
   const tabs = [
     { id: "profile" as const, label: "Profile" },
@@ -115,9 +120,17 @@ function SettingsRoute(): JSX.Element {
               <header className="border-b border-border-subtle px-4 py-3">
                 <h2 className="text-sm font-medium text-fg">Archived Conversations</h2>
               </header>
-              <p className="px-4 py-6 text-center text-xs text-fg-faint">
-                No archived conversations yet.
-              </p>
+              {(archived?.sessions.length ?? 0) === 0 ? (
+                <p className="px-4 py-6 text-center text-xs text-fg-faint">
+                  No archived conversations.
+                </p>
+              ) : (
+                <div className="divide-y divide-border-subtle">
+                  {archived?.sessions.map((s) => (
+                    <ArchivedSessionRow key={s.id} session={s} qc={qc} />
+                  ))}
+                </div>
+              )}
             </section>
           )}
         </div>
@@ -277,6 +290,46 @@ function ArtifactExtractionSection(): JSX.Element {
         </div>
       </div>
     </section>
+  );
+}
+
+type ArchivedSession = NonNullable<
+  Awaited<ReturnType<typeof api.archivedSessions>>["sessions"]
+>[number];
+
+function ArchivedSessionRow({
+  session,
+  qc,
+}: {
+  session: ArchivedSession;
+  qc: ReturnType<typeof useQueryClient>;
+}): JSX.Element {
+  const unarchive = useMutation({
+    mutationFn: () => api.unarchiveSession(session.id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["sessions"] });
+    },
+  });
+
+  const label = session.summary ?? session.preview ?? "(empty conversation)";
+
+  return (
+    <div className="flex items-start justify-between gap-3 px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm text-fg">{label}</p>
+        <p className="mt-0.5 text-xs text-fg-faint">
+          Archived {formatRelative(session.archivedAt ?? 0)} · {session.messageCount} messages
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={() => unarchive.mutate()}
+        disabled={unarchive.isPending}
+        className="shrink-0 rounded-md border border-border-subtle px-2.5 py-1 text-xs text-fg-muted transition-colors hover:border-accent/40 hover:text-fg disabled:opacity-50"
+      >
+        {unarchive.isPending ? "Restoring…" : "Restore"}
+      </button>
+    </div>
   );
 }
 

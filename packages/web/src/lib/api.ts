@@ -242,6 +242,22 @@ export const api = {
         preview: string | null;
       }>;
     }>("/api/chat/sessions?limit=50"),
+  archivedSessions: () =>
+    get<{
+      sessions: Array<{
+        id: string;
+        startedAt: number;
+        endedAt: number | null;
+        summary: string | null;
+        archivedAt: number | null;
+        messageCount: number;
+        preview: string | null;
+      }>;
+    }>("/api/chat/sessions?archived=true&limit=50"),
+  archiveSession: (id: string) =>
+    postJson<{ ok: true }>(`/api/chat/sessions/${encodeURIComponent(id)}/archive`, {}),
+  unarchiveSession: (id: string) =>
+    postJson<{ ok: true }>(`/api/chat/sessions/${encodeURIComponent(id)}/unarchive`, {}),
   session: (id: string) =>
     get<{
       session: { id: string; startedAt: number };

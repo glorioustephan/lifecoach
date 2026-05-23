@@ -1,8 +1,9 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, Archive } from "lucide-react";
 import { api } from "~/lib/api";
 import { formatRelative } from "~/lib/time";
+import { cn } from "~/lib/cn";
 import { Sheet, SheetBody, SheetHeader } from "~/components/ui/Sheet";
 
 interface Props {
@@ -27,6 +28,13 @@ export const SessionListSheet = ({
     refetchInterval: open ? 30_000 : false,
   });
 
+  const archiveMut = useMutation({
+    mutationFn: (id: string) => api.archiveSession(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["sessions"] });
+    },
+  });
+
   const handlePick = (id: string): void => {
     onOpenChange(false);
     // Pre-warm the session detail cache so the route load is instant.
@@ -35,6 +43,11 @@ export const SessionListSheet = ({
       queryFn: () => api.session(id),
     });
     void navigate({ to: "/c/$sessionId", params: { sessionId: id } });
+  };
+
+  const handleArchive = (e: React.MouseEvent, id: string): void => {
+    e.stopPropagation();
+    archiveMut.mutate(id);
   };
 
   return (
@@ -73,30 +86,41 @@ export const SessionListSheet = ({
                       ? s.preview
                       : "(empty conversation)";
                 return (
-                  <li key={s.id}>
-                    <button
-                      type="button"
-                      onClick={() => handlePick(s.id)}
-                      className={
-                        "block w-full px-4 py-3 text-left transition-colors hover:bg-surface-elevated/40" +
-                        (isActive ? " bg-surface-elevated/60" : "")
-                      }
-                    >
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span className="truncate text-sm text-fg">{label}</span>
-                        <span className="shrink-0 font-mono text-[10px] text-fg-faint">
-                          {formatRelative(s.startedAt)}
-                        </span>
-                      </div>
-                      <div className="mt-1 flex items-center gap-2 text-[11px] text-fg-faint">
-                        <span>{s.messageCount} msg{s.messageCount === 1 ? "" : "s"}</span>
-                        {isActive && (
-                          <span className="rounded-sm bg-accent/15 px-1.5 py-0.5 text-accent">
-                            current
-                          </span>
+                  <li key={s.id} className="group">
+                    <div className="flex items-center">
+                      <button
+                        type="button"
+                        onClick={() => handlePick(s.id)}
+                        className={cn(
+                          "flex-1 px-4 py-3 text-left transition-colors hover:bg-surface-elevated/40",
+                          isActive && "bg-surface-elevated/60"
                         )}
-                      </div>
-                    </button>
+                      >
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="truncate text-sm text-fg">{label}</span>
+                          <span className="shrink-0 font-mono text-[10px] text-fg-faint">
+                            {formatRelative(s.startedAt)}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-[11px] text-fg-faint">
+                          <span>{s.messageCount} msg{s.messageCount === 1 ? "" : "s"}</span>
+                          {isActive && (
+                            <span className="rounded-sm bg-accent/15 px-1.5 py-0.5 text-accent">
+                              current
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleArchive(e, s.id)}
+                        disabled={archiveMut.isPending}
+                        aria-label={`Archive ${label}`}
+                        className="mr-2 hidden size-8 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-surface-elevated/60 group-hover:flex disabled:opacity-50"
+                      >
+                        <Archive className="size-4" strokeWidth={1.75} />
+                      </button>
+                    </div>
                   </li>
                 );
               })}

@@ -17,7 +17,10 @@ export const chatRoutes = (lc: Lifecoach) => {
   // a message count so the sheet can render meaningful row labels.
   app.get("/sessions", (c) => {
     const limit = Number(c.req.query("limit") ?? "30");
-    const sessions = lc.memory.episodic.recentSessions(limit);
+    const archived = c.req.query("archived") === "true";
+    const sessions = archived
+      ? lc.storage.sessions.archived(limit)
+      : lc.memory.episodic.recentSessions(limit);
     const rows = sessions.map((session) => {
       const messages = lc.memory.episodic.forSession(session.id);
       const firstUser = messages.find((m) => m.role === "user");
@@ -54,6 +57,24 @@ export const chatRoutes = (lc: Lifecoach) => {
     const body = await c.req.json().catch(() => ({}));
     const summary = typeof body?.summary === "string" ? body.summary : undefined;
     lc.agent.endSession(id, summary);
+    return c.json({ ok: true });
+  });
+
+  // Archive a session (hide from main session list).
+  app.post("/sessions/:id/archive", (c) => {
+    const id = c.req.param("id");
+    const session = lc.storage.sessions.get(id);
+    if (!session) return c.json({ error: "not_found" }, 404);
+    lc.storage.sessions.archive(id);
+    return c.json({ ok: true });
+  });
+
+  // Unarchive a session (restore to main session list).
+  app.post("/sessions/:id/unarchive", (c) => {
+    const id = c.req.param("id");
+    const session = lc.storage.sessions.get(id);
+    if (!session) return c.json({ error: "not_found" }, 404);
+    lc.storage.sessions.unarchive(id);
     return c.json({ ok: true });
   });
 

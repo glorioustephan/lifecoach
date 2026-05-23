@@ -5,6 +5,7 @@ export const sessionSchema = z.object({
   startedAt: z.number().int(),
   endedAt: z.number().int().nullable().optional(),
   summary: z.string().nullable().optional(),
+  archivedAt: z.number().int().nullable().optional(),
 });
 export type Session = z.infer<typeof sessionSchema>;
 

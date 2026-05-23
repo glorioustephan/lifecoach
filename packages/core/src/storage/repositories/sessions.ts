@@ -7,6 +7,7 @@ interface SessionRow {
   started_at: number;
   ended_at: number | null;
   summary: string | null;
+  archived_at: number | null;
 }
 
 const rowToSession = (row: SessionRow): Session => ({
@@ -14,6 +15,7 @@ const rowToSession = (row: SessionRow): Session => ({
   startedAt: row.started_at,
   endedAt: row.ended_at,
   summary: row.summary,
+  archivedAt: row.archived_at,
 });
 
 export class SessionRepository {
@@ -36,18 +38,42 @@ export class SessionRepository {
 
   get(id: string): Session | undefined {
     const row = this.db
-      .prepare("SELECT id, started_at, ended_at, summary FROM sessions WHERE id = ?")
+      .prepare(
+        "SELECT id, started_at, ended_at, summary, archived_at FROM sessions WHERE id = ?"
+      )
       .get(id) as SessionRow | undefined;
     return row ? rowToSession(row) : undefined;
   }
 
-  recent(limit = 20): Session[] {
+  recent(limit = 20, includeArchived = false): Session[] {
+    const whereClause = includeArchived ? "" : "WHERE archived_at IS NULL";
     const rows = this.db
       .prepare(
-        "SELECT id, started_at, ended_at, summary FROM sessions ORDER BY started_at DESC LIMIT ?",
+        `SELECT id, started_at, ended_at, summary, archived_at FROM sessions ${whereClause} ORDER BY started_at DESC LIMIT ?`
       )
       .all(limit) as SessionRow[];
     return rows.map(rowToSession);
+  }
+
+  archived(limit = 20): Session[] {
+    const rows = this.db
+      .prepare(
+        "SELECT id, started_at, ended_at, summary, archived_at FROM sessions WHERE archived_at IS NOT NULL ORDER BY archived_at DESC LIMIT ?"
+      )
+      .all(limit) as SessionRow[];
+    return rows.map(rowToSession);
+  }
+
+  archive(id: string): void {
+    this.db
+      .prepare("UPDATE sessions SET archived_at = ? WHERE id = ?")
+      .run(now(), id);
+  }
+
+  unarchive(id: string): void {
+    this.db
+      .prepare("UPDATE sessions SET archived_at = NULL WHERE id = ?")
+      .run(id);
   }
 
   count(): number {
