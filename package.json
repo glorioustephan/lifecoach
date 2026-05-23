@@ -13,6 +13,7 @@
     "dev:reset": "rm -rf data-dev && pnpm dev",
     "deploy:macmini": "bash scripts/deploy-to-macmini.sh",
     "deploy:macmini:env": "bash scripts/deploy-env-to-macmini.sh",
+    "deploy:production": "bash scripts/deploy-production.sh",
     "lifecoach": "pnpm --filter @lifecoach/cli start",
     "mcp": "pnpm --filter @lifecoach/mcp-server start",
     "server": "pnpm --filter @lifecoach/server start",

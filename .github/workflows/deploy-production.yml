@@ -1,0 +1,116 @@
+name: Deploy production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: lifecoach-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.1.0 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace
+        run: pnpm build
+
+  deploy:
+    name: Deploy to Mac Mini
+    needs: verify
+    runs-on: ubuntu-latest
+    if: github.repository == 'glorioustephan/lifecoach' && github.ref == 'refs/heads/main'
+    environment:
+      name: production
+    env:
+      DEPLOY_HOST: ${{ vars.LIFECOACH_DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ vars.LIFECOACH_DEPLOY_SSH_PORT || '22' }}
+      DEPLOY_REMOTE_DIR: ${{ vars.LIFECOACH_DEPLOY_REMOTE_DIR }}
+      DEPLOY_USER: ${{ vars.LIFECOACH_DEPLOY_USER }}
+    steps:
+      - name: Validate deployment configuration
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_PORT"
+          test -n "$DEPLOY_REMOTE_DIR"
+          test -n "$DEPLOY_USER"
+          test -n "$LIFECOACH_DEPLOY_SSH_PRIVATE_KEY"
+          test -n "$TS_OAUTH_CLIENT_ID"
+          test -n "$TS_OAUTH_SECRET"
+        env:
+          LIFECOACH_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.LIFECOACH_DEPLOY_SSH_PRIVATE_KEY }}
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: ${{ vars.LIFECOACH_TAILSCALE_TAGS || 'tag:github-actions-deploy' }}
+          ping: ${{ vars.LIFECOACH_DEPLOY_HOST }}
+          version: latest
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$LIFECOACH_DEPLOY_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/lifecoach_deploy
+          chmod 600 ~/.ssh/lifecoach_deploy
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+        env:
+          LIFECOACH_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.LIFECOACH_DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Deploy on Mac Mini
+        run: |
+          ssh \
+            -i ~/.ssh/lifecoach_deploy \
+            -p "$DEPLOY_PORT" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "DEPLOY_REMOTE_DIR='$DEPLOY_REMOTE_DIR' /bin/bash -s" <<'REMOTE_SCRIPT'
+          set -Eeuo pipefail
+
+          cd "$DEPLOY_REMOTE_DIR"
+          export PATH="$HOME/.volta/bin:$HOME/.volta/shims:$HOME/Library/pnpm:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$PATH"
+
+          current_branch="$(git branch --show-current)"
+          if [ "$current_branch" != "main" ]; then
+            echo "Error: production checkout must be on main; found '$current_branch'" >&2
+            exit 1
+          fi
+
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            echo "Error: production checkout has local tracked changes. Refusing to deploy." >&2
+            git status --short --untracked-files=no >&2
+            exit 1
+          fi
+
+          git fetch --prune origin main
+          git merge --ff-only origin/main
+          /bin/bash scripts/deploy-production.sh
+          REMOTE_SCRIPT

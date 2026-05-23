@@ -216,23 +216,27 @@ pm2 startup    # follow the printed sudo command to survive reboots
 
 `tailscale serve` exposes the local web UI at `https://<host>.<tailnet>.ts.net` with auto-issued TLS.
 
-### Automated deployment from your dev machine
+### Production deployment from GitHub Actions
 
-```bash
-# Copy and fill in the deployment config (gitignored)
-cp .deploy.config.example.js .deploy.config.js
-# Edit .deploy.config.js: host, user, SSH key path, remote dir
+Pushes to `main` deploy automatically to the Mac Mini through GitHub Actions +
+Tailscale. The workflow verifies the repo, joins the tailnet as an ephemeral
+node, SSHes to the Mac Mini, fast-forwards the production checkout, installs
+dependencies, builds, runs migrations, reloads PM2, and checks `/health`.
 
-# Deploy data snapshot + restart PM2
-pnpm deploy:macmini
-
-# Update only the production environment variables
-pnpm deploy:macmini:env
-```
-
-The deploy script exports the local snapshot, SCP-uploads it to the Mac Mini, imports it there, and restarts PM2. See [`scripts/deploy-to-macmini.sh`](scripts/deploy-to-macmini.sh) for the full flow.
+See [`docs/deployment.md`](docs/deployment.md) for the GitHub environment
+variables, Tailscale ACL shape, and Mac Mini setup.
 
 ### Manual snapshot migration
+
+Use snapshots for backup, restore, or one-time machine migration. The normal
+production deploy path should not copy laptop data into production.
+
+The legacy helper scripts are still available for manual operations:
+
+```bash
+pnpm deploy:macmini      # export local data, upload, import on the Mac Mini
+pnpm deploy:macmini:env  # upload .env.mac-mini to the Mac Mini
+```
 
 ```bash
 # On the source machine
