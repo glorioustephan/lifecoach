@@ -50,6 +50,7 @@ export interface TaskListFilter {
   projectId?: string;
   externalSource?: string;
   limit?: number;
+  offset?: number;
 }
 
 export class TaskRepository {
@@ -109,11 +110,54 @@ export class TaskRepository {
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const limit = filter.limit ?? 200;
+    const offset = filter.offset ?? 0;
     const sql = `SELECT ${FULL_COLUMNS} FROM tasks ${where}
                  ORDER BY (due_at IS NULL), due_at ASC, priority DESC NULLS LAST, created_at DESC
-                 LIMIT ?`;
-    const rows = this.db.prepare(sql).all(...params, limit) as TaskRow[];
+                 LIMIT ? OFFSET ?`;
+    const rows = this.db.prepare(sql).all(...params, limit, offset) as TaskRow[];
     return rows.map(rowToTask);
+  }
+
+  count(filter: Omit<TaskListFilter, "limit" | "offset"> = {}): number {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    switch (filter.status) {
+      case "active":
+        conditions.push("completed_at IS NULL");
+        break;
+      case "completed":
+        conditions.push("completed_at IS NOT NULL");
+        break;
+      case "overdue":
+        conditions.push("completed_at IS NULL AND due_at IS NOT NULL AND due_at < ?");
+        params.push(now());
+        break;
+      case "all":
+      default:
+        break;
+    }
+    if (filter.dueBefore !== undefined) {
+      conditions.push("due_at < ?");
+      params.push(filter.dueBefore);
+    }
+    if (filter.dueAfter !== undefined) {
+      conditions.push("due_at >= ?");
+      params.push(filter.dueAfter);
+    }
+    if (filter.projectId) {
+      conditions.push("project_id = ?");
+      params.push(filter.projectId);
+    }
+    if (filter.externalSource) {
+      conditions.push("external_source = ?");
+      params.push(filter.externalSource);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const sql = `SELECT COUNT(*) as count FROM tasks ${where}`;
+    const result = this.db.prepare(sql).get(...params) as { count: number } | undefined;
+    return result?.count ?? 0;
   }
 
   /**

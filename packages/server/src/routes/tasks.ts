@@ -10,15 +10,25 @@ export const taskRoutes = (lc: Lifecoach) => {
       | "completed"
       | "overdue"
       | "all";
-    const limit = Number(c.req.query("limit") ?? "100");
+    const limit = Number(c.req.query("limit") ?? "25");
+    const page = Number(c.req.query("page") ?? "1");
+    const offset = (page - 1) * limit;
     const projectId = c.req.query("projectId");
-    return c.json({
-      tasks: lc.storage.tasks.list({
-        status,
-        limit,
-        ...(projectId ? { projectId } : {}),
-      }),
+
+    const filterParams = {
+      status,
+      limit,
+      offset,
+      ...(projectId ? { projectId } : {}),
+    };
+
+    const tasks = lc.storage.tasks.list(filterParams);
+    const total = lc.storage.tasks.count({
+      status,
+      ...(projectId ? { projectId } : {}),
     });
+
+    return c.json({ tasks, total });
   });
 
   app.get("/:id", (c) => {
