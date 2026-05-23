@@ -5,7 +5,7 @@ export const Route = createFileRoute("/sources")({
   component: SourcesRoute,
 });
 
-function SourcesRoute(): JSX.Element {
+function SourcesRoute(): null {
   const navigate = useNavigate();
 
   useEffect(() => {

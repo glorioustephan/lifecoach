@@ -58,6 +58,7 @@ export function getGreeting(name?: string): string {
   } else if (flourishSeed < 5) {
     // First of month gets special occasion
     if (dayOfMonth === 1) {
+      const month = now.getMonth();
       const occasion = SPECIAL_OCCASIONS[month % SPECIAL_OCCASIONS.length]!;
       greeting = `${base}, ${occasion}`;
     }

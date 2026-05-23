@@ -52,10 +52,7 @@ export const taskRoutes = (lc: Lifecoach) => {
     }
 
     // Update local storage
-    const ts = Date.now();
-    lc.storage.db
-      .prepare("UPDATE tasks SET completed_at = ?, updated_at = ? WHERE id = ?")
-      .run(ts, ts, id);
+    lc.storage.tasks.completeTask(id);
 
     return c.json({ ok: true });
   });

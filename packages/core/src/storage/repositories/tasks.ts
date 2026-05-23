@@ -271,8 +271,10 @@ export class TaskRepository {
     return newlyCompleted;
   }
 
-  count(filter: TaskListFilter = {}): number {
-    const rows = this.list({ ...filter, limit: 1_000_000 });
-    return rows.length;
+  completeTask(id: string): void {
+    const ts = now();
+    this.db
+      .prepare("UPDATE tasks SET completed_at = ?, updated_at = ? WHERE id = ?")
+      .run(ts, ts, id);
   }
 }

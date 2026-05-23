@@ -1,25 +1,20 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { z } from "zod";
 import { api } from "~/lib/api";
 import { ViewHeader } from "~/components/ui/ViewHeader";
 import { TabNav } from "~/components/ui/TabNav";
 import { cn } from "~/lib/cn";
 import { formatRelative } from "~/lib/time";
 
-const searchSchema = z.object({
-  tab: z.enum(["profile", "sources", "system", "archived"]).default("profile"),
-});
+type Tab = "profile" | "sources" | "system" | "archived";
 
 export const Route = createFileRoute("/settings")({
-  validateSearch: searchSchema,
   component: SettingsRoute,
 });
 
 function SettingsRoute(): JSX.Element {
-  const { tab } = Route.useSearch();
-  const navigate = useNavigate({ from: "/settings" });
+  const [tab, setTab] = useState<Tab>("profile");
 
   const { data: status } = useQuery({ queryKey: ["status"], queryFn: api.status });
   const { data: profile } = useQuery({ queryKey: ["profile"], queryFn: api.profile });
@@ -31,10 +26,6 @@ function SettingsRoute(): JSX.Element {
     { id: "system" as const, label: "System" },
     { id: "archived" as const, label: "Archived" },
   ];
-
-  const handleTabChange = (newTab: typeof tab) => {
-    void navigate({ search: { tab: newTab }, replace: true });
-  };
 
   const formatValue = (v: unknown): string => {
     if (Array.isArray(v)) return v.join(", ");
@@ -48,7 +39,7 @@ function SettingsRoute(): JSX.Element {
       <TabNav
         tabs={tabs}
         active={tab}
-        onChange={handleTabChange}
+        onChange={setTab}
         variant="pill"
       />
       <div className="flex-1 overflow-y-auto mobile-safe-bottom">
