@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Menu, Plus } from "lucide-react";
 import { sendChat, type ChatEvent } from "~/lib/chat-stream";
 import { useProfileName } from "~/lib/use-profile";
+import { getGreeting } from "~/lib/greeting";
 import { useSetAgentState } from "./agent-state";
 import { Message } from "./Message";
 import { ToolCallDisclosure, type ToolCallState } from "./ToolCallDisclosure";
@@ -32,6 +33,7 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
   const { reset, append, update, setSessionId, setStreaming } = useChatActions();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const greeting = useMemo(() => getGreeting(profileName ?? undefined), [profileName]);
 
   const handleNewConversation = useCallback((): void => {
     reset({ sessionId: undefined, items: [] });
@@ -229,9 +231,7 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
         <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pb-6 pt-6 mobile-safe-bottom">
           {items.length === 0 && (
             <div className="mt-12 flex flex-col items-center gap-2 text-center">
-              <div className="text-sm text-fg-muted">
-                {profileName ? `Good morning, ${profileName}.` : "Good morning."}
-              </div>
+              <div className="text-sm text-fg-muted">{greeting}</div>
               <div className="max-w-sm text-xs text-fg-faint">
                 Type below to start a new conversation, or ask the coach what they
                 noticed.
