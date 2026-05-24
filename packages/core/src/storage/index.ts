@@ -17,6 +17,7 @@ import {
   GoalRepository,
   ProjectRepository,
   ArtifactRepository,
+  FinancialRepository,
 } from "./repositories/index.js";
 
 export interface Storage {
@@ -37,6 +38,7 @@ export interface Storage {
   goals: GoalRepository;
   projects: ProjectRepository;
   artifacts: ArtifactRepository;
+  financial: FinancialRepository;
   close: () => void;
 }
 
@@ -61,6 +63,7 @@ export const createStorage = (config: LifecoachConfig): Storage => {
     goals: new GoalRepository(db),
     projects: new ProjectRepository(db),
     artifacts: new ArtifactRepository(db),
+    financial: new FinancialRepository(db),
     close: handle.close,
   };
 };

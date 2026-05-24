@@ -30,3 +30,4 @@ export {
   artifactDedupKey,
   type ArtifactListFilter,
 } from "./artifacts.js";
+export { FinancialRepository } from "./financial.js";

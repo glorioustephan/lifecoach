@@ -19,6 +19,8 @@ export interface LifecoachConfig {
    * When unset, write-back tools fail unless the agent specifies a spaceId.
    */
   capacitiesDefaultSpaceId: string | undefined;
+  monarchSessionFile: string | undefined;
+  monarchSyncEnabled: boolean;
   /** Model used by the conversational agent. */
   model: string;
   /** Model used by the ingest extractor. Defaults to Sonnet for accuracy at low cost. */
@@ -115,6 +117,9 @@ export const loadConfig = (overrides: Partial<LifecoachConfig> = {}): LifecoachC
     capacitiesApiToken: overrides.capacitiesApiToken ?? process.env.CAPACITIES_API_TOKEN,
     capacitiesDefaultSpaceId:
       overrides.capacitiesDefaultSpaceId ?? process.env.CAPACITIES_DEFAULT_SPACE_ID,
+    monarchSessionFile: overrides.monarchSessionFile ?? process.env.MONARCH_SESSION_FILE,
+    monarchSyncEnabled:
+      overrides.monarchSyncEnabled ?? (process.env.MONARCH_SYNC_ENABLED ?? "true") === "true",
     model: overrides.model ?? process.env.LIFECOACH_MODEL ?? DEFAULT_MODEL,
     extractionModel:
       overrides.extractionModel

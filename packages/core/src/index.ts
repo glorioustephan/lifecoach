@@ -110,6 +110,9 @@ export {
   type CapacitiesLookupResult,
   pushReflectionToCapacities,
   type ReflectionWritebackOptions,
+  MonarchClient,
+  syncMonarch,
+  type MonarchSyncResult,
 } from "./integrations/index.js";
 export { forgetDocument, type ForgetDocumentResult } from "./memory/forget.js";
 export { refreshAttentionSignals } from "./memory/attention.js";

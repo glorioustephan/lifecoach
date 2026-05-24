@@ -17,6 +17,7 @@ import { buildForgetDocumentTools } from "./forget-document.js";
 import { buildInsightTools } from "./insights.js";
 import { buildGoalTools } from "./goals.js";
 import { buildCapacitiesTools } from "./capacities.js";
+import { buildFinancialTools } from "./financial.js";
 
 export interface ToolDeps {
   memory: Memory;
@@ -64,6 +65,7 @@ export const buildAllTools = (deps: ToolDeps) => [
     storage: deps.storage,
     defaultSpaceId: deps.capacitiesDefaultSpaceId,
   }),
+  ...buildFinancialTools(deps.storage),
 ];
 
 export type LifecoachTool = ReturnType<typeof buildAllTools>[number];

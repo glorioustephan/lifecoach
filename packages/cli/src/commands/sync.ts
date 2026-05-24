@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import ora from "ora";
 import { Command } from "commander";
-import { createLifecoach, syncTodoist, syncCapacities } from "@lifecoach/core";
+import { createLifecoach, syncTodoist, syncCapacities, MonarchClient, syncMonarch } from "@lifecoach/core";
 
 export const registerSync = (program: Command): void => {
   const sync = program
@@ -116,6 +116,43 @@ export const registerSync = (program: Command): void => {
         if (result.removed > 0) {
           console.log(chalk.dim(`  · ${result.removed} stale rows pruned`));
         }
+      } catch (err) {
+        spinner.fail("sync failed");
+        console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+        process.exitCode = 1;
+      } finally {
+        lc.close();
+      }
+    });
+
+  sync
+    .command("financial")
+    .description("Sync financial data from Monarch Money API")
+    .action(async () => {
+      const lc = createLifecoach();
+      const spinner = ora({ text: "syncing Monarch financial data…", color: "cyan" }).start();
+      try {
+        const monarchSessionFile = lc.config.monarchSessionFile || ".mm/mm_session.json";
+        const client = new MonarchClient(monarchSessionFile);
+
+        // Try to load existing session
+        const sessionLoaded = await client.loadSession();
+        if (!sessionLoaded) {
+          spinner.fail(
+            "Monarch session not found. Please authenticate first with: lifecoach auth monarch",
+          );
+          console.error(
+            chalk.dim("  Or set MONARCH_SESSION_FILE in your .env to the path of your Monarch session."),
+          );
+          lc.close();
+          process.exitCode = 1;
+          return;
+        }
+
+        const result = await syncMonarch(client, lc.storage);
+        spinner.succeed(
+          `Monarch sync — ${result.accountsUpserted} accounts, ${result.transactionsUpserted} transactions, ${result.holdingsSnapshotted} holdings`,
+        );
       } catch (err) {
         spinner.fail("sync failed");
         console.error(chalk.red(err instanceof Error ? err.message : String(err)));
