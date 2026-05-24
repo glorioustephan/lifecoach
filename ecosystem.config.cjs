@@ -1,17 +1,21 @@
 /**
  * PM2 ecosystem config for Lifecoach.
  *
- * Six processes:
- *  - lifecoach-server         long-lived Hono web/API server
- *  - lifecoach-sync-todoist   sync Todoist tasks every 30 minutes
- *  - lifecoach-daily-reflect  daily reflection at 06:00 local
- *  - lifecoach-insights       daily insight pass at 07:30 local
- *                             (runs AFTER the daily reflection so the
- *                              insighter has the morning summary in context)
- *  - lifecoach-weekly-reflect weekly reflection Sundays at 19:00 local
- *  - lifecoach-artifacts      daily artifact extraction at 08:00 local
- *                             (self-disables after 5 consecutive empty runs;
- *                              re-enable from the Settings page)
+ * Eight processes:
+ *  - lifecoach-server           long-lived Hono web/API server
+ *  - lifecoach-sync-todoist     sync Todoist tasks every 30 minutes
+ *  - lifecoach-sync-financial   sync Monarch Money financial data at 02:00 local
+ *  - lifecoach-daily-reflect    daily reflection at 06:00 local
+ *  - lifecoach-insights         daily insight pass at 07:30 local
+ *                               (runs AFTER the daily reflection so the
+ *                                insighter has the morning summary in context)
+ *  - lifecoach-weekly-reflect   weekly reflection Sundays at 19:00 local
+ *                               (includes financial section from Monarch data)
+ *  - lifecoach-monthly-reflect  monthly reflection on 1st of month at 10:00 local
+ *                               (includes financial section from Monarch data)
+ *  - lifecoach-artifacts        daily artifact extraction at 08:00 local
+ *                               (self-disables after 5 consecutive empty runs;
+ *                                re-enable from the Settings page)
  *
  * Each cron job runs `cron_restart` semantics — autorestart is off,
  * PM2 fires the process on schedule, it runs and exits, PM2 waits.
@@ -33,10 +37,13 @@
  * Inspect:
  *   pm2 status
  *   pm2 logs lifecoach-server
- *   pm2 logs lifecoach-daily-reflect --lines 100
+ *   pm2 logs lifecoach-sync-financial --lines 100
+ *   pm2 logs lifecoach-weekly-reflect --lines 100
  *
  * Trigger a cron job manually (skip the next schedule):
+ *   pm2 restart lifecoach-sync-financial
  *   pm2 restart lifecoach-daily-reflect
+ *   pm2 restart lifecoach-weekly-reflect
  */
 
 const path = require("node:path");
@@ -122,6 +129,15 @@ module.exports = {
       max_memory_restart: "512M",
     },
     {
+      name: "lifecoach-sync-financial",
+      script: "/bin/sh",
+      args: ["-c", "pnpm -w run lifecoach sync financial"],
+      ...base("sync-financial"),
+      autorestart: false,
+      cron_restart: "0 2 * * *",  // Daily at 02:00 — well before morning reflection
+      max_memory_restart: "512M",
+    },
+    {
       name: "lifecoach-daily-reflect",
       script: "/bin/sh",
       args: ["-c", "pnpm -w run lifecoach reflect daily"],
@@ -143,7 +159,15 @@ module.exports = {
       args: ["-c", "pnpm -w run lifecoach reflect weekly"],
       ...base("weekly-reflect"),
       autorestart: false,
-      cron_restart: "0 19 * * 0",
+      cron_restart: "0 19 * * 0",  // Sundays 19:00 — includes financial section
+    },
+    {
+      name: "lifecoach-monthly-reflect",
+      script: "/bin/sh",
+      args: ["-c", "pnpm -w run lifecoach reflect monthly"],
+      ...base("monthly-reflect"),
+      autorestart: false,
+      cron_restart: "0 10 1 * *",  // 1st of each month 10:00 — includes financial section
     },
     {
       name: "lifecoach-artifacts",

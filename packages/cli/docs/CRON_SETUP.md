@@ -1,217 +1,80 @@
-# Cron Job Setup for Life Coach
+# Scheduled Jobs Setup
 
-Life Coach supports automated daily financial sync and periodic reflection generation via cron jobs. This guide shows how to configure your system scheduler.
+Life Coach uses **PM2** for all scheduled jobs. There is no system cron, launchd, or Windows Task Scheduler involved. Scheduling is defined in `ecosystem.config.cjs` at the repo root and is applied automatically on every production deploy.
 
-## Prerequisites
+## How It Works
 
-- Life Coach CLI installed and working (`lifecoach --help`)
-- `.env` file configured with API keys (ANTHROPIC_API_KEY, MONARCH_SESSION_FILE, etc.)
-- Monarch session file authenticated (run `lifecoach sync financial` once manually to create/verify session)
+The deploy script (`scripts/deploy-production.sh`) runs `pm2 startOrReload ecosystem.config.cjs --update-env` on every push to `main`. This means:
 
-## Daily Financial Sync
+- Adding a new job = add it to `ecosystem.config.cjs` + push to `main`
+- Changing a schedule = update the `cron_restart` in `ecosystem.config.cjs` + push to `main`
+- No SSH or manual steps needed on the Mac Mini
 
-Syncs financial data from Monarch Money API at 2 AM every day.
+## Scheduled Processes
 
-### Linux/macOS (crontab)
+| Process | Schedule | Description |
+|---|---|---|
+| `lifecoach-sync-todoist` | Every 30 min | Mirror Todoist tasks into local DB |
+| `lifecoach-sync-financial` | Daily 02:00 | Sync Monarch Money accounts, transactions, holdings |
+| `lifecoach-daily-reflect` | Daily 06:00 | Daily reflection |
+| `lifecoach-insights` | Daily 07:30 | Insight generation (runs after daily reflection) |
+| `lifecoach-artifacts` | Daily 08:00 | Artifact extraction (auto-disables after 5 empty runs) |
+| `lifecoach-weekly-reflect` | Sundays 19:00 | Weekly reflection (includes financial section) |
+| `lifecoach-monthly-reflect` | 1st of month 10:00 | Monthly reflection (includes financial section) |
 
-```bash
-# Edit your crontab
-crontab -e
-
-# Add this line (2 AM daily)
-0 2 * * * cd /path/to/lifecoach && /path/to/pnpm lifecoach sync financial >> /var/log/lifecoach-sync.log 2>&1
-```
-
-### macOS (launchd)
-
-Create `~/Library/LaunchAgents/com.lifecoach.sync.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.lifecoach.sync.financial</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/bin/sh</string>
-        <string>-c</string>
-        <string>cd /path/to/lifecoach && /path/to/pnpm lifecoach sync financial</string>
-    </array>
-    <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>
-        <integer>2</integer>
-        <key>Minute</key>
-        <integer>0</integer>
-    </dict>
-    <key>StandardOutPath</key>
-    <string>/var/log/lifecoach-sync.log</string>
-    <key>StandardErrorPath</key>
-    <string>/var/log/lifecoach-sync.err</string>
-</dict>
-</plist>
-```
-
-Then enable it:
+## Inspecting Jobs on the Mac Mini
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.lifecoach.sync.financial.plist
-launchctl list | grep lifecoach  # Verify it's loaded
+# See all process statuses and last exit codes
+pm2 status
+
+# Follow logs for financial sync
+pm2 logs lifecoach-sync-financial --lines 100
+
+# Follow weekly reflection logs
+pm2 logs lifecoach-weekly-reflect --lines 100
+
+# Watch all logs live
+pm2 logs
 ```
 
-### Windows (Task Scheduler)
-
-1. Open Task Scheduler
-2. Create Basic Task → Name: "Life Coach Financial Sync"
-3. Trigger: Daily at 2:00 AM
-4. Action: Start a program
-   - Program: `pnpm`
-   - Arguments: `lifecoach sync financial`
-   - Start in: `C:\path\to\lifecoach`
-5. Settings: Check "Run whether user is logged in or not"
-
-## Weekly Reflection
-
-Generates a structured weekly reflection every Sunday at 9 AM.
-
-### Linux/macOS (crontab)
+## Manually Triggering a Job
 
 ```bash
-# Edit your crontab
-crontab -e
+# Force-run financial sync right now (skips wait for next 02:00)
+pm2 restart lifecoach-sync-financial
 
-# Add this line (9 AM on Sundays)
-0 9 * * 0 cd /path/to/lifecoach && /path/to/pnpm lifecoach reflect weekly >> /var/log/lifecoach-reflect.log 2>&1
+# Force-run weekly reflection
+pm2 restart lifecoach-weekly-reflect
+
+# Force-run monthly reflection
+pm2 restart lifecoach-monthly-reflect
 ```
 
-### macOS (launchd)
+## Prerequisites on the Mac Mini
 
-Create `~/Library/LaunchAgents/com.lifecoach.reflect.weekly.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.lifecoach.reflect.weekly</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/bin/sh</string>
-        <string>-c</string>
-        <string>cd /path/to/lifecoach && /path/to/pnpm lifecoach reflect weekly</string>
-    </array>
-    <key>StartCalendarInterval</key>
-    <array>
-        <dict>
-            <key>Hour</key>
-            <integer>9</integer>
-            <key>Minute</key>
-            <integer>0</integer>
-            <key>Weekday</key>
-            <integer>0</integer>
-        </dict>
-    </array>
-    <key>StandardOutPath</key>
-    <string>/var/log/lifecoach-reflect.log</string>
-    <key>StandardErrorPath</key>
-    <string>/var/log/lifecoach-reflect.err</string>
-</dict>
-</plist>
-```
-
-Enable:
+The Mac Mini `.env` (or `.env.production`) must contain Monarch credentials:
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.lifecoach.reflect.weekly.plist
+MONARCH_SESSION_FILE=.mm/mm_session.json
 ```
 
-## Monthly Reflection
+The Monarch session file is created once by running `lifecoach auth monarch` on the Mac Mini directly. It persists across deploys (it lives in the working directory, not in the repo).
 
-Generates a monthly reflection on the first day of the month at 10 AM.
+## Adding a New Scheduled Job
 
-### Linux/macOS (crontab)
+Edit `ecosystem.config.cjs` to add a new entry to the `apps` array:
 
-```bash
-# First day of month at 10 AM
-0 10 1 * * cd /path/to/lifecoach && /path/to/pnpm lifecoach reflect monthly >> /var/log/lifecoach-reflect.log 2>&1
+```js
+{
+  name: "lifecoach-my-new-job",
+  script: "/bin/sh",
+  args: ["-c", "pnpm -w run lifecoach <command>"],
+  ...base("my-new-job"),
+  autorestart: false,
+  cron_restart: "0 3 * * *",  // Daily at 03:00
+  max_memory_restart: "512M",
+},
 ```
 
-## Monitoring & Logs
-
-Check sync/reflect logs:
-
-```bash
-# Follow sync logs in real-time
-tail -f /var/log/lifecoach-sync.log
-
-# Check for errors
-tail -f /var/log/lifecoach-sync.err
-
-# View last 50 lines
-tail -50 /var/log/lifecoach-sync.log
-```
-
-### Crontab Tips
-
-- Always use **absolute paths** (e.g., `/path/to/pnpm` not `pnpm`)
-- Redirect both stdout and stderr: `>> file.log 2>&1`
-- Test your command manually first before adding to crontab
-- Use `*/5 * * * *` for every 5 minutes (development/testing)
-
-### Troubleshooting
-
-**Cron job not running:**
-
-```bash
-# Check if crontab is set up
-crontab -l
-
-# Check system logs
-log stream --predicate 'process == "cron"' --level debug  # macOS
-journalctl -u cron --since today                         # Linux
-```
-
-**Environment variables not found:**
-
-- Cron runs in a minimal environment; use full paths
-- Consider sourcing your `.env` in the cron command:
-  ```bash
-  0 2 * * * bash -c 'set -a; source /path/to/.env; set +a; cd /path/to/lifecoach && /path/to/pnpm lifecoach sync financial'
-  ```
-
-**Permission denied:**
-
-```bash
-# Ensure pnpm is executable
-which pnpm
-chmod +x /path/to/pnpm
-
-# Ensure log directory is writable
-touch /var/log/lifecoach-sync.log
-chmod 644 /var/log/lifecoach-sync.log
-```
-
-## Integration with Capacities
-
-When financial reflections are generated (weekly/monthly), they are automatically pushed to your Capacities daily notes if configured:
-
-- Ensure `CAPACITIES_API_TOKEN` and `CAPACITIES_DEFAULT_SPACE_ID` are set in `.env`
-- Financial insights will appear in the weekly note under "Financial Status"
-
-## Performance Notes
-
-- **Daily sync** (2 AM): ~10-30 seconds depending on account count
-- **Weekly reflection** (9 AM): ~5-15 seconds (includes financial analysis)
-- **Monthly reflection** (10 AM first of month): ~10-20 seconds
-
-Monitor system resources if running on constrained devices.
-
-## Next Steps
-
-1. Test manually: `lifecoach sync financial` and `lifecoach reflect weekly`
-2. Set up cron jobs for your OS
-3. Monitor logs to verify execution
-4. Check Capacities for reflection write-back
+Push to `main` — the deploy pipeline picks it up automatically.
