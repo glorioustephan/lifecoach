@@ -10,6 +10,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { ViewHeader } from "~/components/ui/ViewHeader";
+import { TabNav } from "~/components/ui/TabNav";
 import { PaginationNav } from "~/components/ui/PaginationNav";
 import { api, type InsightRow, type InsightState } from "~/lib/api";
 import { formatRelative } from "~/lib/time";
@@ -98,20 +99,17 @@ function InboxRoute(): JSX.Element {
           </button>
         }
       />
-      <nav
-        aria-label="Inbox filter"
-        className="flex items-center gap-1 border-b border-border-subtle px-4 md:px-6"
-      >
-        {(["active", "snoozed", "acted", "dismissed"] as const).map((s) => (
-          <FilterTab
-            key={s}
-            active={filter === s}
-            onClick={() => handleFilterChange(s)}
-          >
-            {s[0]!.toUpperCase() + s.slice(1)}
-          </FilterTab>
-        ))}
-      </nav>
+      <TabNav
+        tabs={[
+          { id: "active" as const, label: "Active" },
+          { id: "snoozed" as const, label: "Snoozed" },
+          { id: "acted" as const, label: "Acted" },
+          { id: "dismissed" as const, label: "Dismissed" },
+        ]}
+        active={filter}
+        onChange={handleFilterChange}
+        variant="underline"
+      />
 
       {generate.isError && (
         <div className="mx-auto mt-3 w-full max-w-2xl px-4 md:px-6">
@@ -168,32 +166,6 @@ function InboxRoute(): JSX.Element {
     </div>
   );
 }
-
-const FilterTab = ({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}): JSX.Element => (
-  <button
-    type="button"
-    onClick={onClick}
-    role="tab"
-    aria-selected={active}
-    className={cn(
-      "relative -mb-px px-3 py-2 text-sm transition-colors",
-      active ? "text-fg" : "text-fg-muted hover:text-fg",
-    )}
-  >
-    {children}
-    {active && (
-      <span aria-hidden className="absolute inset-x-2 -bottom-px h-px bg-accent" />
-    )}
-  </button>
-);
 
 const EmptyState = ({
   filter,

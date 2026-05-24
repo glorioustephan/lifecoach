@@ -11,6 +11,9 @@ import {
 } from "lucide-react";
 import { ARTIFACT_DESCRIPTORS } from "@lifecoach/schemas";
 import { ViewHeader } from "~/components/ui/ViewHeader";
+import { TabNav } from "~/components/ui/TabNav";
+import { Button } from "~/components/ui/Button";
+import { IconButton } from "~/components/ui/IconButton";
 import { TypeBadge, TagBadge } from "~/components/ui/Badge";
 import { Sheet, SheetBody, SheetHeader } from "~/components/ui/Sheet";
 import { Markdown } from "~/components/chat/Markdown";
@@ -73,20 +76,16 @@ function GenerateButton(): JSX.Element {
       {banner && (
         <span className="text-xs text-fg-muted">{banner}</span>
       )}
-      <button
-        type="button"
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={() => generate.mutate()}
         disabled={generate.isPending}
-        className={cn(
-          "inline-flex h-8 items-center gap-1.5 rounded-md border border-border-subtle px-3 text-xs transition-colors",
-          generate.isPending
-            ? "border-accent/40 bg-accent/10 text-accent"
-            : "text-fg-muted hover:border-accent/40 hover:bg-surface-elevated hover:text-fg",
-        )}
+        loading={generate.isPending}
       >
         <Sparkles className="size-3.5" strokeWidth={1.75} />
         {generate.isPending ? "scanning…" : "Generate now"}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -148,24 +147,21 @@ function ArtifactsRoute(): JSX.Element {
         actions={<GenerateButton />}
       />
 
-      {/* Filter tabs */}
-      <nav
-        aria-label="Artifact type filter"
-        className="flex items-center gap-1 border-b border-border-subtle px-4 md:px-6"
-      >
-        <div role="tablist" aria-label="Artifact type" className="flex items-center gap-1 min-w-0 overflow-x-auto">
-          <FilterTab active={typeFilter === "all"} onClick={() => handleTypeChange("all")}>
-            All
-          </FilterTab>
-          {ARTIFACT_DESCRIPTORS.map((d) => (
-            <FilterTab key={d.id} active={typeFilter === d.id} onClick={() => handleTypeChange(d.id)}>
-              {d.label}
-            </FilterTab>
-          ))}
+      {/* Filter tabs and search */}
+      <nav className="flex items-center gap-2 border-b border-border-subtle px-4 md:px-6">
+        <div className="flex-1 min-w-0 overflow-x-auto">
+          <TabNav
+            tabs={[
+              { id: "all", label: "All" },
+              ...ARTIFACT_DESCRIPTORS.map((d) => ({ id: d.id, label: d.label })),
+            ] as Array<{ id: string; label: string }>}
+            active={typeFilter}
+            onChange={handleTypeChange}
+            variant="underline"
+          />
         </div>
-
         {/* Search — pushed to the right, width-constrained to prevent overflow on mobile */}
-        <div className="ml-auto shrink-0 py-2">
+        <div className="shrink-0">
           <label htmlFor="artifact-search" className="sr-only">Search artifacts</label>
           <input
             id="artifact-search"
@@ -225,25 +221,25 @@ function ArtifactsRoute(): JSX.Element {
           {/* Pagination */}
           {total > LIMIT && (
             <div className="mt-4 flex items-center justify-center gap-3">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
                 disabled={page === 0}
                 onClick={() => setPage((p) => p - 1)}
-                className="min-h-[44px] sm:min-h-0 rounded-md border border-border-subtle px-3 py-2 text-xs text-fg-muted hover:text-fg disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
               >
                 Prev
-              </button>
+              </Button>
               <span className="text-xs text-fg-faint">
                 {page * LIMIT + 1}–{Math.min((page + 1) * LIMIT, total)} of {total}
               </span>
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
                 disabled={(page + 1) * LIMIT >= total}
                 onClick={() => setPage((p) => p + 1)}
-                className="min-h-[44px] sm:min-h-0 rounded-md border border-border-subtle px-3 py-2 text-xs text-fg-muted hover:text-fg disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
               >
                 Next
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -344,8 +340,11 @@ function ArtifactCard({
       {/* Action row — always visible on touch, hover-reveal on desktop */}
       <div className="mt-2 flex items-center gap-1 md:opacity-0 md:group-hover/card:opacity-100 md:focus-within:opacity-100 transition-opacity duration-150">
         {/* Copy */}
-        <ActionIconBtn
-          label={copied ? "Copied" : "Copy"}
+        <IconButton
+          variant="default"
+          size="sm"
+          aria-label={copied ? "Copied" : "Copy"}
+          title={copied ? "Copied" : "Copy"}
           onClick={handleCopy}
         >
           {copied ? (
@@ -353,11 +352,20 @@ function ArtifactCard({
           ) : (
             <Copy className="size-3.5" strokeWidth={1.75} />
           )}
-        </ActionIconBtn>
+        </IconButton>
 
         {/* Save to Capacities */}
-        <ActionIconBtn
-          label={
+        <IconButton
+          variant="default"
+          size="sm"
+          aria-label={
+            capacitiesState === "ok"
+              ? "Saved"
+              : capacitiesState === "error"
+                ? "Error"
+                : "Save to Capacities"
+          }
+          title={
             capacitiesState === "ok"
               ? "Saved"
               : capacitiesState === "error"
@@ -377,82 +385,36 @@ function ArtifactCard({
               strokeWidth={1.75}
             />
           )}
-        </ActionIconBtn>
+        </IconButton>
         {capacitiesState === "error" && (
           <span className="text-[10px] text-destructive-300">{capacitiesMsg.current}</span>
         )}
 
         {/* Edit */}
-        <ActionIconBtn label="Edit" onClick={onEdit}>
+        <IconButton
+          variant="default"
+          size="sm"
+          aria-label="Edit"
+          title="Edit"
+          onClick={onEdit}
+        >
           <Pencil className="size-3.5" strokeWidth={1.75} />
-        </ActionIconBtn>
+        </IconButton>
 
         {/* Delete */}
-        <ActionIconBtn label="Delete" onClick={onDelete} destructive>
+        <IconButton
+          variant="destructive"
+          size="sm"
+          aria-label="Delete"
+          title="Delete"
+          onClick={onDelete}
+        >
           <Trash2 className="size-3.5" strokeWidth={1.75} />
-        </ActionIconBtn>
+        </IconButton>
       </div>
     </li>
   );
 }
-
-function ActionIconBtn({
-  label,
-  onClick,
-  children,
-  destructive,
-}: {
-  label: string;
-  onClick: () => void;
-  children: React.ReactNode;
-  destructive?: boolean;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className={cn(
-        "flex size-9 items-center justify-center rounded-md transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-bg",
-        destructive
-          ? "text-fg-faint hover:bg-destructive-500/10 hover:text-destructive-300"
-          : "text-fg-faint hover:bg-surface-elevated/60 hover:text-fg",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-// ─── Filter tab ───────────────────────────────────────────────────────────────
-
-const FilterTab = ({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}): JSX.Element => (
-  <button
-    type="button"
-    onClick={onClick}
-    role="tab"
-    aria-selected={active}
-    className={cn(
-      "relative -mb-px px-3 py-2 text-sm transition-colors",
-      active ? "text-fg" : "text-fg-muted hover:text-fg",
-    )}
-  >
-    {children}
-    {active && (
-      <span aria-hidden className="absolute inset-x-2 -bottom-px h-px bg-accent" />
-    )}
-  </button>
-);
 
 // ─── Edit sheet ───────────────────────────────────────────────────────────────
 
@@ -511,20 +473,15 @@ function EditArtifactSheet({
         title="Edit artifact"
         onClose={requestClose}
         action={
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => save.mutate()}
             disabled={save.isPending || !dirty}
-            className={cn(
-              "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              save.isPending
-                ? "bg-accent/20 text-accent"
-                : "bg-accent text-accent-fg hover:bg-accent-400",
-              "disabled:opacity-60 disabled:cursor-not-allowed",
-            )}
+            loading={save.isPending}
           >
             {save.isPending ? "Saving…" : dirty ? "Save" : "Saved"}
-          </button>
+          </Button>
         }
       />
       <SheetBody>

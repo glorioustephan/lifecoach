@@ -65,7 +65,7 @@ interface SheetHeaderProps {
 }
 
 export const SheetHeader = ({ title, onClose, action }: SheetHeaderProps): JSX.Element => (
-  <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-bg px-4 py-3">
+  <header className="sticky top-0 z-10 flex h-12 items-center justify-between border-b border-border bg-bg px-4 md:px-6">
     <Dialog.Title className="text-sm font-medium text-fg">{title}</Dialog.Title>
     <div className="flex items-center gap-2">
       {action}
@@ -73,7 +73,7 @@ export const SheetHeader = ({ title, onClose, action }: SheetHeaderProps): JSX.E
         type="button"
         onClick={onClose}
         aria-label="Close"
-        className="flex size-9 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg"
+        className="flex size-9 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
       >
         <X className="size-4" strokeWidth={1.75} />
       </button>

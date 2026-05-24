@@ -192,7 +192,7 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="relative flex h-12 items-center justify-between border-b border-border px-2">
+      <header className="relative flex h-12 items-center justify-between border-b border-border px-4">
         <button
           type="button"
           onClick={() => setHistoryOpen(true)}

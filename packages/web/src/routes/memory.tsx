@@ -5,6 +5,8 @@ import { Trash2, Sparkles } from "lucide-react";
 import { ViewHeader } from "~/components/ui/ViewHeader";
 import { TabNav } from "~/components/ui/TabNav";
 import { PaginationNav } from "~/components/ui/PaginationNav";
+import { Button } from "~/components/ui/Button";
+import { IconButton } from "~/components/ui/IconButton";
 import { api, type DocumentRow, type ReflectionRow } from "~/lib/api";
 import { formatRelative } from "~/lib/time";
 import { cn } from "~/lib/cn";
@@ -201,14 +203,14 @@ function DocumentsTab({ page, onPageChange }: { page: number; onPageChange: (p: 
               </p>
               <p className="mt-0.5 truncate font-mono text-[10px] text-fg-faint">{d.id}</p>
             </div>
-            <button
-              type="button"
+            <IconButton
+              variant="default"
+              size="sm"
               onClick={() => setPendingForget(d)}
               aria-label={`Forget ${d.title ?? d.id}`}
-              className="flex size-9 shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-destructive-500/10 hover:text-destructive-300"
             >
               <Trash2 className="size-4" strokeWidth={1.75} />
-            </button>
+            </IconButton>
           </li>
         ))}
       </ul>
@@ -266,22 +268,23 @@ function ConfirmForgetDialog({
           The source file (if still on disk) is untouched.
         </p>
         <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onCancel}
             disabled={pending}
-            className="rounded-md px-3 py-1.5 text-sm text-fg-muted hover:bg-surface-elevated/50 disabled:opacity-50"
           >
             Cancel
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
             onClick={() => onConfirm(doc.id)}
             disabled={pending}
-            className="rounded-md bg-destructive-500/90 px-3 py-1.5 text-sm text-white transition-colors hover:bg-destructive-500 disabled:opacity-50"
+            loading={pending}
           >
             {pending ? "Forgetting…" : "Forget"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -325,21 +328,16 @@ function ReflectionsTab({ page, onPageChange }: { page: number; onPageChange: (p
         <Sparkles className="size-4 text-accent" strokeWidth={1.75} />
         <span className="mr-auto text-sm font-medium text-fg">Generate a reflection</span>
         {(["daily", "weekly", "monthly"] as const).map((k) => (
-          <button
+          <Button
             key={k}
-            type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => generate.mutate(k)}
             disabled={generate.isPending}
-            className={cn(
-              "rounded-md border border-border-subtle px-3 py-1.5 text-xs transition-colors",
-              generate.isPending && generate.variables === k
-                ? "border-accent/40 bg-accent/10 text-accent"
-                : "text-fg-muted hover:border-accent/40 hover:bg-surface-elevated hover:text-fg",
-              generate.isPending && "cursor-not-allowed",
-            )}
+            loading={generate.isPending && generate.variables === k}
           >
             {generate.isPending && generate.variables === k ? "reflecting…" : KIND_LABEL[k]}
-          </button>
+          </Button>
         ))}
       </div>
 

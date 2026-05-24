@@ -334,7 +334,7 @@ function ArchivedSessionRow({
 }
 
 const Row = ({ k, v }: { k: string; v: unknown }): JSX.Element => (
-  <div className="grid grid-cols-[max-content_1fr] items-center gap-3 px-4 py-2.5">
+  <div className="grid grid-cols-[max-content_1fr] items-center gap-3 px-4 py-3">
     <dt className="text-xs uppercase tracking-wide text-fg-faint">{k}</dt>
     <dd className="text-sm text-fg">{String(v ?? "—")}</dd>
   </div>

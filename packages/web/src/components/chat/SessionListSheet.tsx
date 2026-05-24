@@ -74,7 +74,7 @@ export const SessionListSheet = ({
           </div>
         )}
         {!isLoading && data && data.sessions.length > 0 && (
-          <ul className="divide-y divide-border-subtle">
+          <ul className="mx-4 my-3 divide-y divide-border-subtle rounded-md border border-border bg-surface">
             {data.sessions
               .filter((s) => (s.summary?.trim().length ?? 0) > 0 || (s.preview?.length ?? 0) > 0)
               .map((s) => {

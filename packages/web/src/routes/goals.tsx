@@ -3,6 +3,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Target, Plus, CheckCircle2 } from "lucide-react";
 import { ViewHeader } from "~/components/ui/ViewHeader";
+import { Button } from "~/components/ui/Button";
+import { IconButton } from "~/components/ui/IconButton";
 import { api, type GoalRow, type ProjectRow } from "~/lib/api";
 import { cn } from "~/lib/cn";
 
@@ -65,14 +67,14 @@ function GoalsRoute(): JSX.Element {
         title="Goals"
         subtitle="What you're working toward"
         actions={
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => setShowNew(true)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-subtle px-3 text-xs text-fg-muted transition-colors hover:border-accent/40 hover:bg-surface-elevated hover:text-fg"
           >
             <Plus className="size-3.5" strokeWidth={1.75} />
             New goal
-          </button>
+          </Button>
         }
       />
       <div className="flex-1 overflow-y-auto mobile-safe-bottom">
@@ -109,14 +111,15 @@ function GoalsRoute(): JSX.Element {
                 Goals are durable intentions with a horizon. Add one to give the
                 coach something to anchor recommendations against.
               </p>
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => setShowNew(true)}
-                className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-400"
+                className="mt-2"
               >
                 <Plus className="size-4" strokeWidth={1.75} />
                 Add your first goal
-              </button>
+              </Button>
             </div>
           )}
 
@@ -219,14 +222,14 @@ function GoalCard({
             </p>
           )}
         </div>
-        <button
-          type="button"
+        <IconButton
+          variant="success"
+          size="sm"
           onClick={onComplete}
           aria-label={`Complete ${goal.title}`}
-          className="flex size-8 shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-success-500/10 hover:text-success-200"
         >
           <CheckCircle2 className="size-4" strokeWidth={1.75} />
-        </button>
+        </IconButton>
       </div>
     </li>
   );
@@ -313,21 +316,24 @@ function NewGoalForm({
           </select>
         )}
         <div className="ml-auto flex items-center gap-2">
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="rounded-md px-3 py-1.5 text-xs text-fg-muted hover:bg-surface-elevated/50"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
             type="submit"
             disabled={!canSubmit}
-            className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg hover:bg-accent-400 disabled:opacity-50"
+            loading={pending}
           >
             {pending ? "creating…" : "Add goal"}
-          </button>
+          </Button>
         </div>
       </div>
     </form>
