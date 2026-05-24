@@ -72,11 +72,10 @@ export class AlpacaClient {
   }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       "APCA-API-KEY-ID": this.apiKey,
       "APCA-API-SECRET-KEY": this.secretKey,
       "Content-Type": "application/json",
-      ...options.headers,
     };
 
     return withRetry(

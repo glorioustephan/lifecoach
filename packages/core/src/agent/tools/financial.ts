@@ -246,6 +246,7 @@ export const buildFinancialTools = (storage: Storage) => [
         category,
         month: targetMonth,
         limit,
+        spent: 0,
         status: "active",
       });
 

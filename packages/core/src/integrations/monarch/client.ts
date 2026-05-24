@@ -1,13 +1,16 @@
-import { MonarchMoney } from "monarch-ts";
-import type {
-  AccountsResponse,
-  BudgetsResponse,
-  HoldingsResponse,
-  GetTransactionsOptions,
-  TransactionDetailsResponse,
-} from "monarch-ts";
-import { withRetry } from "../../util/retry.js";
+import fs from "node:fs";
+import path from "node:path";
+import {
+  EmailPasswordAuthProvider,
+  MonarchGraphQLClient,
+  getAccounts,
+  getTransactions,
+  getPortfolio,
+} from "monarch-money-ts";
+import type { GetTransactionsOptions } from "monarch-money-ts";
 import { LifecoachError } from "../../util/errors.js";
+
+// ─── Public interfaces ───────────────────────────────────────────────────────
 
 export interface MonarchAccount {
   id: string;
@@ -28,18 +31,6 @@ export interface MonarchTransaction {
   isPending: boolean;
 }
 
-export interface MonarchBudgetData {
-  monthlyAmountsByCategory: Array<{
-    category: { id: string; name: string };
-    monthlyAmounts: Array<{
-      month: string;
-      plannedCashFlowAmount: number;
-      actualAmount: number;
-      remainingAmount: number;
-    }>;
-  }>;
-}
-
 export interface MonarchNetWorth {
   totalAssets: number;
   totalLiabilities: number;
@@ -52,237 +43,190 @@ export interface MonarchHolding {
   currentPrice: number;
   marketValue: number;
   costBasis?: number;
-  unrealizedGainLoss?: number;
-  unrealizedGainLossPercent?: number;
 }
 
+// ─── Persisted session shape ─────────────────────────────────────────────────
+
+interface PersistedSession {
+  token: string;
+  expiresAtMs: number;
+}
+
+// ─── Client ──────────────────────────────────────────────────────────────────
+
 export class MonarchClient {
-  private client: MonarchMoney | null = null;
+  private auth: EmailPasswordAuthProvider | null = null;
+  private graphql: MonarchGraphQLClient | null = null;
   private readonly sessionFile: string;
 
   constructor(sessionFile?: string) {
-    this.sessionFile = sessionFile || ".mm/mm_session.json";
+    this.sessionFile = sessionFile ?? ".mm/mm_session.json";
   }
 
-  async authenticate(email: string, password: string, mfaSecretKey?: string): Promise<void> {
-    try {
-      this.client = new MonarchMoney({
-        sessionFile: this.sessionFile,
-      });
+  /**
+   * Authenticate with email + password. Persists the token to sessionFile so
+   * subsequent calls can skip the login round-trip.
+   */
+  async authenticate(email: string, password: string, totpKey?: string): Promise<void> {
+    const onTokenUpdate = (token: string, expiresAtMs: number | undefined) => {
+      try {
+        const dir = path.dirname(this.sessionFile);
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(
+          this.sessionFile,
+          JSON.stringify({ token, expiresAtMs: expiresAtMs ?? (Date.now() + 24 * 60 * 60 * 1000) } satisfies PersistedSession, null, 2),
+          "utf8",
+        );
+      } catch {
+        // Non-fatal: token will be refreshed next run via email/password
+      }
+    };
 
-      await withRetry(
-        async () => {
-          await this.client!.login({
-            email,
-            password,
-            mfaSecretKey,
-            saveSession: true,
-          });
-        },
-        3,
-        "Monarch authentication",
-      );
-    } catch (error) {
-      this.client = null;
+    this.auth = new EmailPasswordAuthProvider({
+      email,
+      password,
+      ...(totpKey ? { totpKey } : {}),
+      onTokenUpdate,
+    });
+    this.graphql = new MonarchGraphQLClient();
+
+    // Trigger a real token fetch to validate credentials and persist session
+    try {
+      await this.auth.getToken();
+    } catch (err) {
+      this.auth = null;
+      this.graphql = null;
       throw new LifecoachError(
-        `Failed to authenticate with Monarch: ${error instanceof Error ? error.message : String(error)}`,
+        `Monarch authentication failed: ${err instanceof Error ? err.message : String(err)}`,
+        "MONARCH_AUTH_FAILED",
       );
     }
   }
 
+  /**
+   * Attempt to restore a previously persisted session. Returns true if a
+   * valid (non-expired) token was found.
+   */
   async loadSession(): Promise<boolean> {
     try {
-      this.client = new MonarchMoney({
-        sessionFile: this.sessionFile,
+      if (!fs.existsSync(this.sessionFile)) return false;
+      const raw = fs.readFileSync(this.sessionFile, "utf8");
+      const session = JSON.parse(raw) as PersistedSession;
+      if (!session.token || !session.expiresAtMs) return false;
+      // Treat as expired if it expires within the next 5 minutes
+      if (Date.now() >= session.expiresAtMs - 5 * 60 * 1000) return false;
+
+      const onTokenUpdate = (token: string, expiresAtMs: number | undefined) => {
+        try {
+          fs.writeFileSync(
+            this.sessionFile,
+            JSON.stringify({ token, expiresAtMs: expiresAtMs ?? (Date.now() + 24 * 60 * 60 * 1000) } satisfies PersistedSession, null, 2),
+            "utf8",
+          );
+        } catch {
+          // Non-fatal
+        }
+      };
+
+      this.auth = new EmailPasswordAuthProvider({
+        email: "",
+        password: "",
+        token: session.token,
+        tokenExpiresAtMs: session.expiresAtMs,
+        onTokenUpdate,
       });
-      return this.client.loadSession();
-    } catch (error) {
-      this.client = null;
+      this.graphql = new MonarchGraphQLClient();
+      return true;
+    } catch {
       return false;
     }
   }
 
   isAuthenticated(): boolean {
-    return this.client !== null;
+    return this.auth !== null && this.graphql !== null;
   }
 
+  private ensureAuth(): { auth: EmailPasswordAuthProvider; graphql: MonarchGraphQLClient } {
+    if (!this.auth || !this.graphql) {
+      throw new LifecoachError("Monarch client not authenticated", "MONARCH_NOT_AUTHENTICATED");
+    }
+    return { auth: this.auth, graphql: this.graphql };
+  }
+
+  // ─── API methods ────────────────────────────────────────────────────────────
+
   async listAccounts(): Promise<MonarchAccount[]> {
-    if (!this.client) throw new LifecoachError("Monarch client not authenticated");
-
+    const { auth, graphql } = this.ensureAuth();
     try {
-      const response = (await withRetry(
-        () => this.client!.getAccounts(),
-        3,
-        "Fetch Monarch accounts",
-      )) as AccountsResponse;
-
-      return (response.accounts || []).map((acc: any) => ({
+      const response = await getAccounts(auth, graphql);
+      return ((response as any).accounts ?? response ?? []).map((acc: any) => ({
         id: acc.id,
         displayName: acc.displayName,
-        type: acc.type,
-        subtype: acc.subtype,
-        currentBalance: acc.currentBalance,
-        isAsset: acc.isAsset,
-        institution: acc.institution,
+        type: acc.type ?? { name: "unknown", display: "Unknown" },
+        subtype: acc.subtype ?? { name: "unknown", display: "Unknown" },
+        currentBalance: acc.displayBalance ?? acc.signedBalance ?? 0,
+        isAsset: acc.isAsset ?? true,
+        institution: acc.institution ?? null,
       }));
-    } catch (error) {
+    } catch (err) {
       throw new LifecoachError(
-        `Failed to list Monarch accounts: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to list Monarch accounts: ${err instanceof Error ? err.message : String(err)}`,
+        "MONARCH_ACCOUNTS_FAILED",
       );
     }
   }
 
-  async listTransactions(options?: GetTransactionsOptions): Promise<MonarchTransaction[]> {
-    if (!this.client) throw new LifecoachError("Monarch client not authenticated");
-
+  async listTransactions(options?: Partial<GetTransactionsOptions>): Promise<MonarchTransaction[]> {
+    const { auth, graphql } = this.ensureAuth();
     try {
-      const response = await withRetry(
-        () =>
-          this.client!.getTransactions({
-            limit: 500,
-            ...options,
-          }),
-        3,
-        "Fetch Monarch transactions",
-      );
-
-      return (response.transactions || []).map((txn: any) => ({
+      const response = await getTransactions(auth, graphql, options as GetTransactionsOptions);
+      return ((response as any).allTransactions?.results ?? []).map((txn: any) => ({
         id: txn.id,
         date: txn.date,
         amount: txn.amount,
-        merchant: txn.merchant || "Unknown",
-        category: txn.category,
-        isPending: txn.isPending || false,
+        merchant: txn.merchant?.name ?? "Unknown",
+        category: txn.category ? { name: txn.category.name } : null,
+        isPending: txn.pending ?? false,
       }));
-    } catch (error) {
+    } catch (err) {
       throw new LifecoachError(
-        `Failed to list Monarch transactions: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  async getTransactionDetails(transactionId: string): Promise<any> {
-    if (!this.client) throw new LifecoachError("Monarch client not authenticated");
-
-    try {
-      return await withRetry(
-        () => this.client!.getTransactionDetails(transactionId),
-        3,
-        "Fetch Monarch transaction details",
-      );
-    } catch (error) {
-      throw new LifecoachError(
-        `Failed to get transaction details: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  async getBudgetStatus(month?: string): Promise<MonarchBudgetData | null> {
-    if (!this.client) throw new LifecoachError("Monarch client not authenticated");
-
-    try {
-      const response = (await withRetry(
-        () => this.client!.getBudgets(month ? { month } : undefined),
-        3,
-        "Fetch Monarch budgets",
-      )) as BudgetsResponse;
-
-      return response.budgetData || null;
-    } catch (error) {
-      throw new LifecoachError(
-        `Failed to get budget status: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to list Monarch transactions: ${err instanceof Error ? err.message : String(err)}`,
+        "MONARCH_TRANSACTIONS_FAILED",
       );
     }
   }
 
   async getNetWorth(): Promise<MonarchNetWorth> {
-    if (!this.client) throw new LifecoachError("Monarch client not authenticated");
-
-    try {
-      const accounts = await this.listAccounts();
-      let totalAssets = 0;
-      let totalLiabilities = 0;
-
-      accounts.forEach((acc) => {
-        if (acc.isAsset) {
-          totalAssets += acc.currentBalance;
-        } else {
-          totalLiabilities += Math.abs(acc.currentBalance);
-        }
-      });
-
-      return {
-        totalAssets,
-        totalLiabilities,
-        networth: totalAssets - totalLiabilities,
-      };
-    } catch (error) {
-      throw new LifecoachError(
-        `Failed to calculate net worth: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    const accounts = await this.listAccounts();
+    let totalAssets = 0;
+    let totalLiabilities = 0;
+    for (const acc of accounts) {
+      if (acc.isAsset) {
+        totalAssets += acc.currentBalance;
+      } else {
+        totalLiabilities += Math.abs(acc.currentBalance);
+      }
     }
+    return { totalAssets, totalLiabilities, networth: totalAssets - totalLiabilities };
   }
 
-  async getHoldings(accountId: string): Promise<MonarchHolding[]> {
-    if (!this.client) throw new LifecoachError("Monarch client not authenticated");
-
+  async getHoldings(): Promise<MonarchHolding[]> {
+    const { auth, graphql } = this.ensureAuth();
     try {
-      const response = (await withRetry(
-        () => this.client!.getAccountHoldings(accountId),
-        3,
-        "Fetch Monarch holdings",
-      )) as HoldingsResponse;
-
-      return (response.portfolio?.aggregateHoldings?.edges || [])
-        .map((edge: any) => edge.node)
+      const response = await getPortfolio(auth, graphql);
+      return ((response as any).aggregateHoldings?.edges ?? (response as any).portfolio?.aggregateHoldings?.edges ?? [])
+        .map((edge: any) => edge.node ?? edge)
         .map((holding: any) => ({
-          symbol: holding.security?.ticker || "UNKNOWN",
-          quantity: holding.quantity,
-          currentPrice: holding.security?.currentPrice || 0,
-          marketValue: holding.totalValue,
+          symbol: holding.security?.ticker ?? holding.holdings?.[0]?.ticker ?? "UNKNOWN",
+          quantity: holding.quantity ?? 0,
+          currentPrice: holding.security?.closingPrice ?? 0,
+          marketValue: holding.totalValue ?? 0,
           costBasis: holding.basis,
-          unrealizedGainLoss: holding.totalValue - (holding.basis || 0),
-          unrealizedGainLossPercent:
-            holding.basis && holding.basis !== 0
-              ? ((holding.totalValue - holding.basis) / holding.basis) * 100
-              : undefined,
         }));
-    } catch (error) {
+    } catch (err) {
       throw new LifecoachError(
-        `Failed to get holdings: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  async requestAccountRefresh(accountIds: string[]): Promise<void> {
-    if (!this.client) throw new LifecoachError("Monarch client not authenticated");
-
-    try {
-      await withRetry(
-        () => this.client!.requestAccountsRefresh(accountIds),
-        3,
-        "Request Monarch account refresh",
-      );
-    } catch (error) {
-      throw new LifecoachError(
-        `Failed to request account refresh: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  async isRefreshComplete(accountIds: string[]): Promise<boolean> {
-    if (!this.client) throw new LifecoachError("Monarch client not authenticated");
-
-    try {
-      const response = await withRetry(
-        () => this.client!.isAccountsRefreshComplete(accountIds),
-        3,
-        "Check Monarch refresh status",
-      );
-      return response.isRefreshComplete || false;
-    } catch (error) {
-      throw new LifecoachError(
-        `Failed to check refresh status: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to get Monarch holdings: ${err instanceof Error ? err.message : String(err)}`,
+        "MONARCH_HOLDINGS_FAILED",
       );
     }
   }

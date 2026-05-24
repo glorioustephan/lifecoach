@@ -1,65 +1,70 @@
 import { z } from "zod";
-import type { ArtifactPlugin } from "../index.js";
+import { getArtifactDescriptor } from "@lifecoach/schemas";
+import type { ArtifactPlugin, FormattedArtifact } from "../types.js";
 
-export const debtPayoffPlanPayloadSchema = z.object({
-  debt_type: z.string().describe("Type of debt (e.g., 'Credit Card', 'Student Loan', 'Car Loan')"),
-  current_balance: z.number().describe("Current outstanding balance"),
-  interest_rate: z.number().describe("Annual interest rate (as percentage, e.g., 18.5)"),
-  monthly_payment: z.number().describe("Current monthly payment amount"),
-  payoff_months: z.number().describe("Months to payoff at current payment rate"),
-  monthly_interest_saved_if_accelerated: z.number().describe("Interest saved per month if payment increased by 50%"),
-  strategy: z.string().describe("Detailed payoff strategy with timeline and recommendations"),
+const debtPayoffSchema = z.object({
+  debt_type: z.string().min(1),
+  current_balance: z.number(),
+  interest_rate: z.number(),
+  monthly_payment: z.number(),
+  payoff_months: z.number().int(),
+  monthly_interest_saved_if_accelerated: z.number(),
+  strategy: z.string(),
+  confidence: z.number().min(0).max(1),
 });
 
-export type DebtPayoffPlanPayload = z.infer<typeof debtPayoffPlanPayloadSchema>;
+type DebtPayoffPlan = z.infer<typeof debtPayoffSchema>;
+
+const itemSchema: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    debt_type: { type: "string", description: "Type of debt, e.g. 'Credit Card', 'Student Loan'." },
+    current_balance: { type: "number", description: "Current outstanding balance in dollars." },
+    interest_rate: { type: "number", description: "Annual interest rate as a percentage, e.g. 18.5." },
+    monthly_payment: { type: "number", description: "Current monthly payment amount." },
+    payoff_months: { type: "number", description: "Months to payoff at current payment rate." },
+    monthly_interest_saved_if_accelerated: {
+      type: "number",
+      description: "Interest saved per month if payment is increased by ~50%.",
+    },
+    strategy: { type: "string", description: "Concrete payoff strategy with timeline and recommendation." },
+    confidence: {
+      type: "number",
+      description: "0–1: confidence this is a genuine debt payoff plan, not a passing mention of debt.",
+    },
+  },
+  required: [
+    "debt_type", "current_balance", "interest_rate", "monthly_payment",
+    "payoff_months", "monthly_interest_saved_if_accelerated", "strategy", "confidence",
+  ],
+};
+
+const format = (data: DebtPayoffPlan): FormattedArtifact => ({
+  title: `${data.debt_type} payoff plan — ${data.payoff_months} months`,
+  body: [
+    `# ${data.debt_type} Payoff Plan`,
+    "",
+    `**Balance:** $${data.current_balance.toFixed(2)} at ${data.interest_rate}% APR`,
+    `**Monthly payment:** $${data.monthly_payment.toFixed(2)} → payoff in **${data.payoff_months} months**`,
+    "",
+    data.strategy,
+    "",
+    `💡 Accelerating saves ~$${data.monthly_interest_saved_if_accelerated.toFixed(2)}/month in interest.`,
+  ].join("\n"),
+  tags: ["debt", "payoff", data.debt_type.toLowerCase().replace(/\s+/g, "-")],
+  category: "finance",
+});
 
 export const debtPayoffPlanPlugin: ArtifactPlugin = {
-  id: "debt-payoff-plan",
-  name: "Debt Payoff Plan",
-  description: "Detailed payoff strategy for debt. Includes timeline, interest savings, and acceleration scenarios.",
-  badgeColor: "destructive",
-  keywords: ["debt", "payoff", "credit card", "loan", "interest", "balance"],
-  detectionPrompt: `Look for mentions of debt, loans, credit card balances, or questions about paying off debt faster. The user might ask "How long to pay off my credit card?" or mention "I have $2,400 in credit card debt." Flag any debt-related concern, especially if they're interested in acceleration strategies.`,
-  payloadSchema: {
-    type: "object",
-    properties: {
-      debt_type: {
-        type: "string",
-        description: "Type of debt",
-      },
-      current_balance: {
-        type: "number",
-        description: "Current outstanding balance",
-      },
-      interest_rate: {
-        type: "number",
-        description: "Annual interest rate as percentage",
-      },
-      monthly_payment: {
-        type: "number",
-        description: "Current monthly payment",
-      },
-      payoff_months: {
-        type: "number",
-        description: "Months to payoff at current rate",
-      },
-      monthly_interest_saved_if_accelerated: {
-        type: "number",
-        description: "Interest saved per month if payment increased 50%",
-      },
-      strategy: {
-        type: "string",
-        description: "Detailed payoff strategy with timeline",
-      },
-    },
-    required: [
-      "debt_type",
-      "current_balance",
-      "interest_rate",
-      "monthly_payment",
-      "payoff_months",
-      "monthly_interest_saved_if_accelerated",
-      "strategy",
-    ],
+  descriptor: getArtifactDescriptor("debt-payoff-plan")!,
+  collectionKey: "debt_payoff_plans",
+  itemSchema,
+  promptHint:
+    "debt_payoff_plans: specific debt balances with interest rate and payoff timeline. " +
+    "Only extract when the user is clearly discussing a specific debt, not just mentioning debt in passing.",
+  extractItem: (input) => {
+    const parsed = debtPayoffSchema.safeParse(input);
+    if (!parsed.success) return null;
+    return { confidence: parsed.data.confidence, formatted: format(parsed.data) };
   },
 };

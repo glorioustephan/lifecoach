@@ -20,6 +20,12 @@ export interface LifecoachConfig {
    */
   capacitiesDefaultSpaceId: string | undefined;
   monarchSessionFile: string | undefined;
+  /** Email for Monarch Money login (MONARCH_EMAIL). Used when no session file exists. */
+  monarchEmail: string | undefined;
+  /** Password for Monarch Money login (MONARCH_PASSWORD). Used when no session file exists. */
+  monarchPassword: string | undefined;
+  /** TOTP secret for Monarch Money MFA (MONARCH_MFA_SECRET). Optional. */
+  monarchMfaSecret: string | undefined;
   monarchSyncEnabled: boolean;
   /** Model used by the conversational agent. */
   model: string;
@@ -118,6 +124,9 @@ export const loadConfig = (overrides: Partial<LifecoachConfig> = {}): LifecoachC
     capacitiesDefaultSpaceId:
       overrides.capacitiesDefaultSpaceId ?? process.env.CAPACITIES_DEFAULT_SPACE_ID,
     monarchSessionFile: overrides.monarchSessionFile ?? process.env.MONARCH_SESSION_FILE,
+    monarchEmail: overrides.monarchEmail ?? process.env.MONARCH_EMAIL,
+    monarchPassword: overrides.monarchPassword ?? process.env.MONARCH_PASSWORD,
+    monarchMfaSecret: overrides.monarchMfaSecret ?? process.env.MONARCH_MFA_SECRET,
     monarchSyncEnabled:
       overrides.monarchSyncEnabled ?? (process.env.MONARCH_SYNC_ENABLED ?? "true") === "true",
     model: overrides.model ?? process.env.LIFECOACH_MODEL ?? DEFAULT_MODEL,

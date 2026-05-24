@@ -82,8 +82,40 @@ const recipeDetect = (text: string): boolean => {
   return hasIngredients && hasMethod;
 };
 
+const spendingAlertDetect = (text: string): boolean => {
+  const lower = text.toLowerCase();
+  return (
+    /(over\s*budget|spending\s*(too\s*much|spike|increase)|budget\s*(exceeded|overage)|category.{0,30}(over|exceed))/.test(lower)
+  );
+};
+
+const debtPayoffDetect = (text: string): boolean => {
+  const lower = text.toLowerCase();
+  return (
+    /(credit\s*card.{0,40}balance|pay\s*(off|down)\s*(debt|loan|card)|debt\s*payoff|payoff\s*plan|interest\s*rate.{0,30}(apr|%))/.test(lower)
+  );
+};
+
+const cashflowDetect = (text: string): boolean => {
+  const lower = text.toLowerCase();
+  return (
+    /(savings\s*rate|cash\s*flow|net\s*(income|savings)|runway.{0,20}(month|week)|emergency\s*fund)/.test(lower)
+  );
+};
+
+const portfolioDetect = (text: string): boolean => {
+  const lower = text.toLowerCase();
+  return (
+    /(portfolio.{0,30}(allocation|snapshot|value|balance)|unrealized\s*(gain|loss)|(VTI|VXUS|BND|VGRO|VOO|QQQ).{0,20}(percent|%|\$)|holdings\s*(breakdown|by|across))/.test(text)
+  );
+};
+
 export const ARTIFACT_DESCRIPTORS: ArtifactTypeDescriptor[] = [
   { id: "recipe", label: "Recipe", badgeColor: "warning", detect: recipeDetect },
+  { id: "spending-alert", label: "Spending Alert", badgeColor: "warning", detect: spendingAlertDetect },
+  { id: "debt-payoff-plan", label: "Debt Payoff Plan", badgeColor: "destructive", detect: debtPayoffDetect },
+  { id: "cashflow-summary", label: "Cashflow Summary", badgeColor: "success", detect: cashflowDetect },
+  { id: "portfolio-snapshot", label: "Portfolio Snapshot", badgeColor: "accent", detect: portfolioDetect },
 ];
 
 export const getArtifactDescriptor = (id: string): ArtifactTypeDescriptor | undefined =>

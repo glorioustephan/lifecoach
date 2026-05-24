@@ -99,7 +99,7 @@ const gatherFinancialContext = (storage: Storage): FinancialContextData => {
 
   // Get latest holdings snapshot
   const allHoldings = storage.financial.queryHoldings();
-  const latestSnapshot = allHoldings.length > 0 ? allHoldings[0].snapshotDate : 0;
+  const latestSnapshot = allHoldings[0]?.snapshotDate ?? 0;
   const holdings = allHoldings.filter((h) => h.snapshotDate === latestSnapshot);
 
   const priorInsights = storage.financial.listInsights().slice(0, 10);

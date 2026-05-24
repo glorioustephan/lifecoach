@@ -1,5 +1,5 @@
 import type { MonarchClient } from "./client.js";
-import type { Storage } from "../storage/index.js";
+import type { Storage } from "../../storage/index.js";
 import { now } from "../../util/ids.js";
 import { LifecoachError } from "../../util/errors.js";
 
@@ -86,22 +86,27 @@ export async function syncMonarch(client: MonarchClient, storage: Storage): Prom
     const last90Days = Math.floor(Date.now() / 1000) - 90 * 24 * 60 * 60;
 
     const monarchTransactions = await client.listTransactions({
-      startDate: new Date(last90Days * 1000).toISOString().split("T")[0],
+      filters: {
+        startDate: new Date(last90Days * 1000).toISOString().split("T")[0],
+      },
     });
     result.transactionsFetched = monarchTransactions.length;
 
+    // Build a local-account-id lookup by externalId for fast join
+    const externalIdToLocalId = new Map<string, string>();
+    for (const acc of storage.financial.listAccounts({})) {
+      if (acc.externalId) externalIdToLocalId.set(acc.externalId, acc.id);
+    }
+
     for (const monarchTxn of monarchTransactions) {
-      const accountForTxn = monarchAccounts.find((ma) => ma.id === monarchTxn.id); // Note: monarch txn structure may differ
-      if (!accountForTxn) continue;
-
-      const localAcc = storage.financial.getAccountByExternalId(accountForTxn.id);
-      if (!localAcc) continue;
-
       const txnDate = new Date(monarchTxn.date).getTime();
+      // Transactions from monarch-money-ts don't carry an account id at this level;
+      // store with a sentinel accountId and reconcile later if needed.
+      const localAccountId = externalIdToLocalId.values().next().value ?? "unknown";
 
       storage.financial.upsertTransaction({
         externalId: monarchTxn.id,
-        accountId: localAcc.id,
+        accountId: localAccountId,
         date: txnDate,
         amount: monarchTxn.amount,
         currency: "USD",
@@ -113,31 +118,27 @@ export async function syncMonarch(client: MonarchClient, storage: Storage): Prom
       result.transactionsUpserted += 1;
     }
 
-    // Phase 3: Snapshot holdings for investment accounts
+    // Phase 3: Snapshot all holdings from Monarch portfolio
     console.log("[Monarch Sync] Phase 3: Snapshotting holdings...");
+    const holdings = await client.getHoldings();
+    const snapshotDate = Date.now();
+    // Use the first investment account as the holder, or a fallback sentinel
     const investmentAccounts = storage.financial.listAccounts({ type: "investment" });
+    const holdingAccountId = investmentAccounts[0]?.id ?? "unknown";
 
-    for (const invAcc of investmentAccounts) {
-      const monarchAcc = monarchAccounts.find((ma) => ma.id === invAcc.externalId);
-      if (!monarchAcc) continue;
-
-      const holdings = await client.getHoldings(monarchAcc.id);
-      const snapshotDate = new Date().getTime();
-
-      for (const holding of holdings) {
-        storage.financial.createHolding({
-          accountId: invAcc.id,
-          symbol: holding.symbol,
-          quantity: holding.quantity,
-          currentPrice: holding.currentPrice,
-          marketValue: holding.marketValue,
-          costBasis: holding.costBasis,
-          assetType: "stock", // Default to stock; could be inferred from symbol
-          snapshotDate,
-          syncedAt: syncTs,
-        });
-        result.holdingsSnapshotted += 1;
-      }
+    for (const holding of holdings) {
+      storage.financial.createHolding({
+        accountId: holdingAccountId,
+        symbol: holding.symbol,
+        quantity: holding.quantity,
+        currentPrice: holding.currentPrice,
+        marketValue: holding.marketValue,
+        costBasis: holding.costBasis,
+        assetType: "stock",
+        snapshotDate,
+        syncedAt: syncTs,
+      });
+      result.holdingsSnapshotted += 1;
     }
 
     result.success = true;

@@ -114,15 +114,15 @@ export const insightCategory = z.enum([
 ]);
 export type InsightCategory = z.infer<typeof insightCategory>;
 
-export const insightPriority = z.union([z.literal(1), z.literal(2), z.literal(3)]);
-export type FinancialInsightPriority = z.infer<typeof insightPriority>;
+export const financialInsightPriority = z.union([z.literal(1), z.literal(2), z.literal(3)]);
+export type FinancialInsightPriority = z.infer<typeof financialInsightPriority>;
 
 export const financialInsightSchema = z.object({
   id: z.string(),
   topic: z.string().min(1),
   body: z.string().min(1),
   category: insightCategory,
-  priority: insightPriority.default(1),
+  priority: financialInsightPriority.default(1),
   recommendation: z.string().optional(),
   sourceDataIds: z.array(z.string()).default([]), // transaction/account IDs that anchored this insight
   dismissedAt: z.number().int().nullable().optional(),

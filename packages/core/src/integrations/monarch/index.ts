@@ -2,7 +2,6 @@ export { MonarchClient } from "./client.js";
 export type {
   MonarchAccount,
   MonarchTransaction,
-  MonarchBudgetData,
   MonarchNetWorth,
   MonarchHolding,
 } from "./client.js";

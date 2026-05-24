@@ -5,8 +5,6 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  TextContent,
-  ToolResultBlockSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { AlpacaClient, InvestmentRecommender, type PortfolioContext, type InvestmentGoal } from "@lifecoach/core";
 

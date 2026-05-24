@@ -1,48 +1,60 @@
 import { z } from "zod";
-import type { ArtifactPlugin } from "../index.js";
+import { getArtifactDescriptor } from "@lifecoach/schemas";
+import type { ArtifactPlugin, FormattedArtifact } from "../types.js";
 
-export const spendingAlertPayloadSchema = z.object({
-  category: z.string().describe("Category with increased spending (e.g., 'Dining', 'Groceries')"),
-  amount_this_month: z.number().describe("Total spent in category this month"),
-  average_amount: z.number().describe("Average monthly spend in this category (rolling 3-month)"),
-  variance_percent: z.number().describe("Percentage increase from average"),
-  recommendation: z.string().describe("Actionable recommendation to reduce spending"),
+const spendingAlertSchema = z.object({
+  category: z.string().min(1),
+  amount_this_month: z.number(),
+  average_amount: z.number(),
+  variance_percent: z.number(),
+  recommendation: z.string(),
+  confidence: z.number().min(0).max(1),
 });
 
-export type SpendingAlertPayload = z.infer<typeof spendingAlertPayloadSchema>;
+type SpendingAlert = z.infer<typeof spendingAlertSchema>;
+
+const itemSchema: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    category: { type: "string", description: "Category with increased spending (e.g., 'Dining')." },
+    amount_this_month: { type: "number", description: "Total spent in this category this month." },
+    average_amount: { type: "number", description: "3-month rolling average for this category." },
+    variance_percent: { type: "number", description: "Percentage above average, e.g. 42 for 42%." },
+    recommendation: { type: "string", description: "One concrete action to reduce spending." },
+    confidence: {
+      type: "number",
+      description: "0–1: how confident you are this is a genuine spending alert, not a passing mention.",
+    },
+  },
+  required: ["category", "amount_this_month", "average_amount", "variance_percent", "recommendation", "confidence"],
+};
+
+const format = (data: SpendingAlert): FormattedArtifact => {
+  const over = data.variance_percent > 0 ? `+${data.variance_percent.toFixed(0)}%` : `${data.variance_percent.toFixed(0)}%`;
+  return {
+    title: `${data.category} spending up ${over}`,
+    body: [
+      `# ${data.category} Spending Alert`,
+      "",
+      `Spent **$${data.amount_this_month.toFixed(2)}** this month vs. **$${data.average_amount.toFixed(2)}** average (${over}).`,
+      "",
+      `💡 ${data.recommendation}`,
+    ].join("\n"),
+    tags: ["spending", data.category.toLowerCase(), "budget"],
+    category: "finance",
+  };
+};
 
 export const spendingAlertPlugin: ArtifactPlugin = {
-  id: "spending-alert",
-  name: "Spending Alert",
-  description:
-    "Alerts when category spending exceeds 3-month average by >20%. Includes recommendations to reduce.",
-  badgeColor: "warning",
-  keywords: ["spending", "budget", "overspend", "too much"],
-  detectionPrompt: `Look for mentions of spending increases, budget overages, or concerns about spending in specific categories. The user might mention "I spent way too much on dining" or "Groceries are eating my budget." Flag if the amount is notably higher than their typical pattern.`,
-  payloadSchema: {
-    type: "object",
-    properties: {
-      category: {
-        type: "string",
-        description: "Category with increased spending",
-      },
-      amount_this_month: {
-        type: "number",
-        description: "Total spent in category this month",
-      },
-      average_amount: {
-        type: "number",
-        description: "Average monthly spend in this category (3-month rolling)",
-      },
-      variance_percent: {
-        type: "number",
-        description: "Percentage increase from average",
-      },
-      recommendation: {
-        type: "string",
-        description: "Actionable recommendation to reduce spending",
-      },
-    },
-    required: ["category", "amount_this_month", "average_amount", "variance_percent", "recommendation"],
+  descriptor: getArtifactDescriptor("spending-alert")!,
+  collectionKey: "spending_alerts",
+  itemSchema,
+  promptHint:
+    "spending_alerts: category spending that is meaningfully above the user's usual pattern. " +
+    "Only flag genuine overages, not routine mentions of spending.",
+  extractItem: (input) => {
+    const parsed = spendingAlertSchema.safeParse(input);
+    if (!parsed.success) return null;
+    return { confidence: parsed.data.confidence, formatted: format(parsed.data) };
   },
 };

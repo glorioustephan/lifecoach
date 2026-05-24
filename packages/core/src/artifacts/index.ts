@@ -1,8 +1,18 @@
 import { registerArtifactPlugin } from "./registry.js";
 import { recipePlugin } from "./plugins/recipe.js";
+import {
+  spendingAlertPlugin,
+  debtPayoffPlanPlugin,
+  cashflowSummaryPlugin,
+  portfolioSnapshotPlugin,
+} from "./plugins/index.js";
 
 // Register built-in artifact plugins. Adding a type = one import + one call.
 registerArtifactPlugin(recipePlugin);
+registerArtifactPlugin(spendingAlertPlugin);
+registerArtifactPlugin(debtPayoffPlanPlugin);
+registerArtifactPlugin(cashflowSummaryPlugin);
+registerArtifactPlugin(portfolioSnapshotPlugin);
 
 export { ArtifactExtractor, type ArtifactExtractorOptions } from "./extractor.js";
 export {

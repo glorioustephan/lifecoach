@@ -135,18 +135,21 @@ export const registerSync = (program: Command): void => {
         const monarchSessionFile = lc.config.monarchSessionFile || ".mm/mm_session.json";
         const client = new MonarchClient(monarchSessionFile);
 
-        // Try to load existing session
+        // Try to load existing session first; fall back to email/password from env
         const sessionLoaded = await client.loadSession();
         if (!sessionLoaded) {
-          spinner.fail(
-            "Monarch session not found. Please authenticate first with: lifecoach auth monarch",
-          );
-          console.error(
-            chalk.dim("  Or set MONARCH_SESSION_FILE in your .env to the path of your Monarch session."),
-          );
-          lc.close();
-          process.exitCode = 1;
-          return;
+          const { monarchEmail, monarchPassword, monarchMfaSecret } = lc.config;
+          if (!monarchEmail || !monarchPassword) {
+            spinner.fail("Monarch: no active session and no credentials configured.");
+            console.error(
+              chalk.dim("  Add MONARCH_EMAIL and MONARCH_PASSWORD to your .env file."),
+            );
+            lc.close();
+            process.exitCode = 1;
+            return;
+          }
+          spinner.text = "Authenticating with Monarch Money…";
+          await client.authenticate(monarchEmail, monarchPassword, monarchMfaSecret);
         }
 
         const result = await syncMonarch(client, lc.storage);
