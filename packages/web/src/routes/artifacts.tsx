@@ -148,29 +148,31 @@ function ArtifactsRoute(): JSX.Element {
       />
 
       {/* Filter tabs and search */}
-      <nav className="flex items-center gap-2 border-b border-border-subtle px-4 md:px-6">
-        <div className="flex-1 min-w-0 overflow-x-auto">
-          <TabNav
-            tabs={[
-              { id: "all", label: "All" },
-              ...ARTIFACT_DESCRIPTORS.map((d) => ({ id: d.id, label: d.label })),
-            ] as Array<{ id: string; label: string }>}
-            active={typeFilter}
-            onChange={handleTypeChange}
-            variant="underline"
-          />
-        </div>
-        {/* Search — pushed to the right, width-constrained to prevent overflow on mobile */}
-        <div className="shrink-0">
-          <label htmlFor="artifact-search" className="sr-only">Search artifacts</label>
-          <input
-            id="artifact-search"
-            type="search"
-            placeholder="Search…"
-            value={searchInput}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="w-32 md:w-56 rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint outline-none focus:border-accent/40 transition-colors"
-          />
+      <nav className="border-b border-border-subtle">
+        <div className="mx-auto max-w-2xl flex items-center gap-2 px-4 md:px-6">
+          <div className="flex-1 min-w-0 overflow-x-auto">
+            <TabNav
+              tabs={[
+                { id: "all", label: "All" },
+                ...ARTIFACT_DESCRIPTORS.map((d) => ({ id: d.id, label: d.label })),
+              ] as Array<{ id: string; label: string }>}
+              active={typeFilter}
+              onChange={handleTypeChange}
+              variant="underline"
+            />
+          </div>
+          {/* Search — pushed to the right, width-constrained to prevent overflow on mobile */}
+          <div className="shrink-0">
+            <label htmlFor="artifact-search" className="sr-only">Search artifacts</label>
+            <input
+              id="artifact-search"
+              type="search"
+              placeholder="Search…"
+              value={searchInput}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="w-32 md:w-56 rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint outline-none focus:border-accent/40 transition-colors"
+            />
+          </div>
         </div>
       </nav>
 
@@ -430,6 +432,7 @@ function EditArtifactSheet({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [tagsRaw, setTagsRaw] = useState("");
+  const [tab, setTab] = useState<"view" | "edit">("view");
 
   // Seed form state when artifact changes
   useEffect(() => {
@@ -437,6 +440,7 @@ function EditArtifactSheet({
       setTitle(artifact.title);
       setBody(artifact.body);
       setTagsRaw(artifact.tags.join(", "));
+      setTab("view");
     }
   }, [artifact]);
 
@@ -485,15 +489,15 @@ function EditArtifactSheet({
         }
       />
       <SheetBody>
-        <div className="space-y-4 px-4 py-4">
+        <div className="px-4 py-4">
           {save.isError && (
-            <div className="rounded-md border border-destructive-500/40 bg-destructive-500/5 px-3 py-2 text-xs text-destructive-300">
+            <div className="rounded-md border border-destructive-500/40 bg-destructive-500/5 px-3 py-2 text-xs text-destructive-300 mb-4">
               {save.error instanceof Error ? save.error.message : "Save failed"}
             </div>
           )}
 
           {/* Title */}
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 mb-4">
             <label htmlFor="artifact-title" className="text-xs uppercase tracking-wide text-fg-faint">Title</label>
             <input
               id="artifact-title"
@@ -505,7 +509,7 @@ function EditArtifactSheet({
           </div>
 
           {/* Tags */}
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 mb-4">
             <label htmlFor="artifact-tags" className="text-xs uppercase tracking-wide text-fg-faint">
               Tags <span className="normal-case text-fg-faint">(comma-separated)</span>
             </label>
@@ -519,23 +523,37 @@ function EditArtifactSheet({
             />
           </div>
 
-          {/* Body editor + preview — stacked on mobile, side-by-side on md+ */}
-          <div className="md:grid md:grid-cols-2 md:gap-4 space-y-4 md:space-y-0">
-            <div className="space-y-1.5">
-              <label htmlFor="artifact-body" className="text-xs uppercase tracking-wide text-fg-faint">Body</label>
-              <textarea
-                id="artifact-body"
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                className="w-full min-h-[240px] md:min-h-[300px] rounded-md border border-border-subtle bg-surface px-3 py-2 font-mono text-xs text-fg outline-none focus:border-accent/40 resize-y transition-colors"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <p className="text-xs uppercase tracking-wide text-fg-faint">Preview</p>
-              <div className="min-h-[240px] md:min-h-[300px] rounded-md border border-border-subtle bg-surface/50 px-4 py-3 text-sm text-fg overflow-y-auto">
+          {/* Body tabs — view vs edit */}
+          <div className="mb-3">
+            <TabNav
+              tabs={[
+                { id: "view" as const, label: "View" },
+                { id: "edit" as const, label: "Edit" },
+              ]}
+              active={tab}
+              onChange={setTab}
+              variant="pill"
+            />
+          </div>
+
+          {/* Body content — full width in selected tab */}
+          <div>
+            {tab === "view" && (
+              <div className="min-h-[300px] rounded-md border border-border-subtle bg-surface/50 px-4 py-3 text-sm text-fg overflow-y-auto">
                 <Markdown>{body}</Markdown>
               </div>
-            </div>
+            )}
+            {tab === "edit" && (
+              <div className="space-y-1.5">
+                <label htmlFor="artifact-body" className="text-xs uppercase tracking-wide text-fg-faint">Body</label>
+                <textarea
+                  id="artifact-body"
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  className="w-full min-h-[300px] rounded-md border border-border-subtle bg-surface px-3 py-2 font-mono text-xs text-fg outline-none focus:border-accent/40 resize-y transition-colors"
+                />
+              </div>
+            )}
           </div>
         </div>
       </SheetBody>
