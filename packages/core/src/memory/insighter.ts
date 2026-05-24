@@ -1,8 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import type { Insight, InsightPriority } from "@lifecoach/schemas";
+import {
+  evidenceRefSchema,
+  type EvidenceRef,
+  type Insight,
+  type InsightPriority,
+} from "@lifecoach/schemas";
 import type { Storage } from "../storage/index.js";
 import type { IdentityMemory } from "./identity.js";
+import { refreshAttentionSignals } from "./attention.js";
 import { withRetry } from "../util/retry.js";
 import { LifecoachError } from "../util/errors.js";
 
@@ -15,6 +21,7 @@ const insightPayloadSchema = z.object({
         rationale: z.string().optional(),
         priority: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(1),
         sourceFactIds: z.array(z.string()).default([]),
+        evidenceRefs: z.array(evidenceRefSchema).default([]),
       }),
     )
     .max(5),
@@ -55,7 +62,37 @@ const TOOL_INPUT_SCHEMA = {
             type: "array",
             items: { type: "string" },
             description:
-              "Optional: fact IDs that anchor this insight. Use the IDs visible in the input data.",
+              "Backwards-compatible fact IDs that anchor this insight. Prefer evidenceRefs when possible.",
+          },
+          evidenceRefs: {
+            type: "array",
+            description:
+              "Specific evidence behind the insight. Use visible ref IDs from attention signals and data.",
+            items: {
+              type: "object",
+              properties: {
+                refType: {
+                  type: "string",
+                  enum: [
+                    "fact",
+                    "goal",
+                    "task",
+                    "measurement",
+                    "document",
+                    "message",
+                    "reflection",
+                    "insight",
+                  ],
+                },
+                refId: { type: "string" },
+                quote: {
+                  type: "string",
+                  description: "Short quote, measurement value, or task title that supports the insight.",
+                },
+                score: { type: "number" },
+              },
+              required: ["refType", "refId"],
+            },
           },
         },
         required: ["topic", "body", "priority"],
@@ -69,19 +106,40 @@ const TOOL_INPUT_SCHEMA = {
 
 interface ContextData {
   facts: Array<{ id: string; category: string; subject: string; body: string }>;
-  recentMessages: Array<{ role: string; content: string; createdAt: number }>;
-  activeTasks: Array<{ content: string; priority: number | null; dueAt: number | null; projectName: string | null; labels: string[] }>;
-  recentlyCompletedTasks: Array<{ content: string; completedAt: number | null }>;
-  recentMeasurements: Array<{ metric: string; value: number; unit: string | null; recordedAt: number }>;
-  latestReflections: Array<{ kind: string; body: string; periodEnd: number }>;
-  recentInsights: Array<{ topic: string; body: string; createdAt: number; state: string }>;
+  attentionSignals: Array<{
+    id: string;
+    kind: string;
+    title: string;
+    body: string;
+    priority: number;
+    evidenceRefs: EvidenceRef[];
+  }>;
+  recentMessages: Array<{ id: string; role: string; content: string; createdAt: number }>;
+  activeTasks: Array<{ id: string; content: string; priority: number | null; dueAt: number | null; projectName: string | null; labels: string[] }>;
+  recentlyCompletedTasks: Array<{ id: string; content: string; completedAt: number | null }>;
+  recentMeasurements: Array<{ id: string; metric: string; value: number; unit: string | null; recordedAt: number }>;
+  latestReflections: Array<{ id: string; kind: string; body: string; periodEnd: number; openThreads: string[]; concerns: string[] }>;
+  recentInsights: Array<{ id: string; topic: string; body: string; createdAt: number; state: string }>;
 }
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
 
+const parseStringArray = (raw: string): string[] => {
+  const parsed = JSON.parse(raw) as unknown;
+  return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
+};
+
 const gather = (storage: Storage): ContextData => {
   const db = storage.handle.db;
   const nowMs = Date.now();
+  const attentionSignals = refreshAttentionSignals(storage).map((signal) => ({
+    id: signal.id,
+    kind: signal.kind,
+    title: signal.title,
+    body: signal.body,
+    priority: signal.priority,
+    evidenceRefs: signal.evidenceRefs,
+  }));
 
   const facts = db
     .prepare(
@@ -93,7 +151,7 @@ const gather = (storage: Storage): ContextData => {
 
   const recentMessages = db
     .prepare(
-      `SELECT role, content, created_at AS createdAt
+      `SELECT id, role, content, created_at AS createdAt
        FROM messages WHERE created_at >= ?
        ORDER BY created_at DESC LIMIT 60`,
     )
@@ -102,6 +160,7 @@ const gather = (storage: Storage): ContextData => {
   const activeTasks = storage.tasks
     .list({ status: "active", limit: 100 })
     .map((t) => ({
+      id: t.id,
       content: t.content,
       priority: t.priority ?? null,
       dueAt: t.dueAt ?? null,
@@ -111,7 +170,7 @@ const gather = (storage: Storage): ContextData => {
 
   const recentlyCompletedTasks = db
     .prepare(
-      `SELECT content, completed_at AS completedAt
+      `SELECT id, content, completed_at AS completedAt
        FROM tasks WHERE completed_at IS NOT NULL AND completed_at >= ?
        ORDER BY completed_at DESC LIMIT 40`,
     )
@@ -119,7 +178,7 @@ const gather = (storage: Storage): ContextData => {
 
   const recentMeasurements = db
     .prepare(
-      `SELECT metric, value, unit, recorded_at AS recordedAt
+      `SELECT id, metric, value, unit, recorded_at AS recordedAt
        FROM measurements WHERE recorded_at >= ?
        ORDER BY metric, recorded_at ASC LIMIT 200`,
     )
@@ -127,15 +186,34 @@ const gather = (storage: Storage): ContextData => {
 
   const latestReflections = db
     .prepare(
-      `SELECT kind, body, period_end AS periodEnd
+      `SELECT id, kind, body, open_threads AS openThreads, concerns,
+              period_end AS periodEnd
        FROM reflections
        ORDER BY period_end DESC LIMIT 4`,
     )
-    .all() as ContextData["latestReflections"];
+    .all()
+    .map((row) => {
+      const r = row as {
+        id: string;
+        kind: string;
+        body: string;
+        openThreads: string;
+        concerns: string;
+        periodEnd: number;
+      };
+      return {
+        id: r.id,
+        kind: r.kind,
+        body: r.body,
+        openThreads: parseStringArray(r.openThreads),
+        concerns: parseStringArray(r.concerns),
+        periodEnd: r.periodEnd,
+      };
+    }) as ContextData["latestReflections"];
 
   const recentInsights = db
     .prepare(
-      `SELECT topic, body, created_at AS createdAt,
+      `SELECT id, topic, body, created_at AS createdAt,
               CASE
                 WHEN acted_on_at IS NOT NULL THEN 'acted'
                 WHEN dismissed_at IS NOT NULL THEN 'dismissed'
@@ -149,6 +227,7 @@ const gather = (storage: Storage): ContextData => {
 
   return {
     facts,
+    attentionSignals,
     recentMessages,
     activeTasks,
     recentlyCompletedTasks,
@@ -166,10 +245,29 @@ const formatTimestamp = (ms: number): string =>
 const renderContext = (data: ContextData): string => {
   const parts: string[] = [];
 
+  if (data.attentionSignals.length > 0) {
+    parts.push("## SQLite attention signals (ranked candidates)");
+    for (const s of data.attentionSignals) {
+      const evidence = s.evidenceRefs
+        .map((e) => `${e.refType}:${e.refId}${e.quote ? ` "${e.quote.slice(0, 120)}"` : ""}`)
+        .join("; ");
+      parts.push(
+        `- [signal=${s.id}] [${s.kind}] p${s.priority} ${s.title}: ${s.body}` +
+          (evidence ? `\n  evidence: ${evidence}` : ""),
+      );
+    }
+  }
+
   if (data.latestReflections.length > 0) {
     parts.push("## Recent reflections (newest first)");
     for (const r of data.latestReflections) {
-      parts.push(`### ${r.kind} (ending ${formatTimestamp(r.periodEnd)})`);
+      parts.push(`### ${r.kind} [id=${r.id}] (ending ${formatTimestamp(r.periodEnd)})`);
+      if (r.openThreads.length > 0) {
+        parts.push(`open threads: ${r.openThreads.join("; ")}`);
+      }
+      if (r.concerns.length > 0) {
+        parts.push(`concerns: ${r.concerns.join("; ")}`);
+      }
       parts.push(r.body);
     }
   }
@@ -189,14 +287,14 @@ const renderContext = (data: ContextData): string => {
       if (t.dueAt) meta.push(`due ${new Date(t.dueAt).toISOString().slice(0, 10)}`);
       if (t.projectName) meta.push(t.projectName);
       if (t.labels.length > 0) meta.push("#" + t.labels.join(" #"));
-      parts.push(`- ${t.content}${meta.length ? ` (${meta.join(" · ")})` : ""}`);
+      parts.push(`- [id=${t.id}] ${t.content}${meta.length ? ` (${meta.join(" · ")})` : ""}`);
     }
   }
 
   if (data.recentlyCompletedTasks.length > 0) {
     parts.push("\n## Recently completed tasks (last 14d)");
     for (const t of data.recentlyCompletedTasks) {
-      parts.push(`- ${t.content}`);
+      parts.push(`- [id=${t.id}] ${t.content}`);
     }
   }
 
@@ -209,7 +307,10 @@ const renderContext = (data: ContextData): string => {
     }
     for (const [metric, rows] of byMetric) {
       const series = rows
-        .map((r) => `${new Date(r.recordedAt).toISOString().slice(0, 10)}=${r.value}${r.unit ?? ""}`)
+        .map(
+          (r) =>
+            `${new Date(r.recordedAt).toISOString().slice(0, 10)}[id=${r.id}]=${r.value}${r.unit ?? ""}`,
+        )
         .join(", ");
       parts.push(`- ${metric}: ${series}`);
     }
@@ -219,14 +320,14 @@ const renderContext = (data: ContextData): string => {
     parts.push("\n## Recent messages (last 7d, newest first)");
     for (const m of data.recentMessages) {
       const content = m.content.length > 400 ? m.content.slice(0, 400) + "…" : m.content;
-      parts.push(`[${formatTimestamp(m.createdAt)}] ${m.role}: ${content}`);
+      parts.push(`[${formatTimestamp(m.createdAt)}] ${m.role} [id=${m.id}]: ${content}`);
     }
   }
 
   if (data.recentInsights.length > 0) {
     parts.push("\n## Prior insights (so you don't repeat yourself)");
     for (const i of data.recentInsights) {
-      parts.push(`- [${i.state}] ${i.topic}: ${i.body.slice(0, 120)}…`);
+      parts.push(`- [${i.state}] [id=${i.id}] ${i.topic}: ${i.body.slice(0, 120)}…`);
     }
   }
 
@@ -254,9 +355,9 @@ Call \`record_insights\` with **0–3 high-quality insights**. Quality bar:
 
 1. **Specific.** Cite numbers, dates, named patterns. "Sleep onset drifted from 9:30 to 11:00 over 5 days" beats "your sleep is off."
 2. **Trigger-relevant.** Don't restate static facts. Insight = a thing that's CHANGED or that the user hasn't noticed about themselves.
-3. **Non-redundant.** Check the "Prior insights" section — if it's already been surfaced and acted/dismissed, skip it.
-4. **Honest but not alarmist.** A 12% HRV dip is worth flagging; a 2% one isn't.
-5. **Connectable.** Where possible, link the source facts/measurements by including their IDs in \`sourceFactIds\`.
+3. **Evidence-backed.** Prefer the SQLite attention signals, and include concrete \`evidenceRefs\` with refType/refId/quote so the user can see why this surfaced.
+4. **Non-redundant.** Check the "Prior insights" section. No nagging: don't repeat an old insight unless the evidence changed materially.
+5. **Honest but not alarmist.** Health-related observations should cite the measurements and avoid medical authority. A 12% HRV dip is worth flagging; a 2% one isn't.
 
 If genuinely nothing notable jumps out, return an empty array. That's a valid answer.`;
 
@@ -319,15 +420,41 @@ export class Insighter {
 
 const persist = (storage: Storage, payload: InsightPayload): Insight[] => {
   const created: Insight[] = [];
+  const sinceMs = Date.now() - 30 * ONE_DAY;
   for (const item of payload.insights) {
+    const evidenceRefs = item.evidenceRefs ?? [];
+    if (isDuplicateInsight(storage, item.topic, evidenceRefs, sinceMs)) continue;
     const ins = storage.insights.create({
       topic: item.topic,
       body: item.body,
       ...(item.rationale ? { rationale: item.rationale } : {}),
       sourceFactIds: item.sourceFactIds ?? [],
+      evidenceRefs,
       priority: item.priority as InsightPriority,
     });
     created.push(ins);
   }
   return created;
+};
+
+const evidenceKey = (ref: EvidenceRef): string => `${ref.refType}:${ref.refId}`;
+
+const isDuplicateInsight = (
+  storage: Storage,
+  topic: string,
+  evidenceRefs: EvidenceRef[],
+  sinceMs: number,
+): boolean => {
+  const recent = storage.insights.recentByTopic(topic, sinceMs);
+  if (recent.length === 0) return false;
+  if (evidenceRefs.length === 0) return true;
+  const incoming = new Set(evidenceRefs.map(evidenceKey));
+  return recent.some((existing) => {
+    if (existing.evidenceRefs.length === 0) return false;
+    const existingKeys = new Set(existing.evidenceRefs.map(evidenceKey));
+    for (const key of incoming) {
+      if (!existingKeys.has(key)) return false;
+    }
+    return true;
+  });
 };

@@ -13,12 +13,25 @@ import { NotImplementedError } from "../util/errors.js";
  */
 export class LocalEmbedder implements Embedder {
   readonly enabled = true;
-  constructor(readonly dimension: number) {}
+  readonly metadata: Embedder["metadata"];
+
+  constructor(readonly dimension: number) {
+    this.metadata = { provider: "local", dimension };
+  }
 
   async embed(_texts: string[]): Promise<number[][]> {
     throw new NotImplementedError(
       "LocalEmbedder.embed",
       "see packages/core/src/embeddings/local.ts for wiring instructions",
     );
+  }
+
+  async embedDocuments(texts: string[]): Promise<number[][]> {
+    return this.embed(texts);
+  }
+
+  async embedQuery(text: string): Promise<number[]> {
+    const [vec] = await this.embed([text]);
+    return vec ?? [];
   }
 }

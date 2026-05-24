@@ -7,15 +7,30 @@ interface ReflectionRow {
   period_start: number;
   period_end: number;
   kind: string;
+  title: string | null;
+  themes: string;
+  wins: string;
+  concerns: string;
+  open_threads: string;
   body: string;
   created_at: number;
 }
+
+const parseStringArray = (raw: string): string[] => {
+  const parsed = JSON.parse(raw) as unknown;
+  return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
+};
 
 const rowToReflection = (row: ReflectionRow): Reflection => ({
   id: row.id,
   periodStart: row.period_start,
   periodEnd: row.period_end,
   kind: row.kind as ReflectionKind,
+  title: row.title ?? undefined,
+  themes: parseStringArray(row.themes),
+  wins: parseStringArray(row.wins),
+  concerns: parseStringArray(row.concerns),
+  openThreads: parseStringArray(row.open_threads),
   body: row.body,
   createdAt: row.created_at,
 });
@@ -28,17 +43,40 @@ export class ReflectionRepository {
     const createdAt = now();
     this.db
       .prepare(
-        `INSERT INTO reflections(id, period_start, period_end, kind, body, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO reflections(
+           id, period_start, period_end, kind, title, themes, wins, concerns,
+           open_threads, body, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(id, r.periodStart, r.periodEnd, r.kind, r.body, createdAt);
-    return { id, createdAt, ...r };
+      .run(
+        id,
+        r.periodStart,
+        r.periodEnd,
+        r.kind,
+        r.title ?? null,
+        JSON.stringify(r.themes ?? []),
+        JSON.stringify(r.wins ?? []),
+        JSON.stringify(r.concerns ?? []),
+        JSON.stringify(r.openThreads ?? []),
+        r.body,
+        createdAt,
+      );
+    return {
+      id,
+      createdAt,
+      ...r,
+      themes: r.themes ?? [],
+      wins: r.wins ?? [],
+      concerns: r.concerns ?? [],
+      openThreads: r.openThreads ?? [],
+    };
   }
 
   latest(kind: ReflectionKind): Reflection | undefined {
     const row = this.db
       .prepare(
-        `SELECT id, period_start, period_end, kind, body, created_at
+        `SELECT id, period_start, period_end, kind, title, themes, wins,
+                concerns, open_threads, body, created_at
          FROM reflections WHERE kind = ?
          ORDER BY period_end DESC LIMIT 1`,
       )

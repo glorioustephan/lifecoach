@@ -1,5 +1,6 @@
 import type { Database } from "better-sqlite3";
 import type { RecallHit } from "@lifecoach/schemas";
+import { createHash } from "node:crypto";
 import { now } from "../../util/ids.js";
 
 export type RefType = "fact" | "document" | "message" | "reflection" | "task";
@@ -10,7 +11,19 @@ export interface EmbeddingInsert {
   chunkIndex: number;
   text: string;
   embedding: number[];
+  model?: string;
+  dimension?: number;
+  sourceUpdatedAt?: number;
 }
+
+export interface EmbeddingSearchOptions {
+  limit?: number;
+  refType?: RefType;
+  maxCandidates?: number;
+}
+
+const hashText = (text: string): string =>
+  createHash("sha256").update(text).digest("hex");
 
 export class EmbeddingRepository {
   constructor(private readonly db: Database, private readonly dim: number) {}
@@ -26,12 +39,27 @@ export class EmbeddingRepository {
       .prepare("INSERT INTO embeddings(embedding) VALUES (?)")
       .run(buf);
     const rowid = Number(result.lastInsertRowid);
+    const ts = now();
     this.db
       .prepare(
-        `INSERT INTO embedding_refs(embedding_rowid, ref_type, ref_id, chunk_index, text, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO embedding_refs(
+           embedding_rowid, ref_type, ref_id, chunk_index, text, created_at,
+           model, dimension, text_hash, embedded_at, source_updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(rowid, input.refType, input.refId, input.chunkIndex, input.text, now());
+      .run(
+        rowid,
+        input.refType,
+        input.refId,
+        input.chunkIndex,
+        input.text,
+        ts,
+        input.model ?? null,
+        input.dimension ?? input.embedding.length,
+        hashText(input.text),
+        ts,
+        input.sourceUpdatedAt ?? null,
+      );
   }
 
   deleteForRef(refType: RefType, refId: string): void {
@@ -48,7 +76,7 @@ export class EmbeddingRepository {
 
   search(
     queryEmbedding: number[],
-    opts: { limit?: number; refType?: RefType } = {},
+    opts: EmbeddingSearchOptions = {},
   ): RecallHit[] {
     if (queryEmbedding.length !== this.dim) {
       throw new Error(
@@ -57,12 +85,23 @@ export class EmbeddingRepository {
     }
     const limit = opts.limit ?? 10;
     const buf = Buffer.from(new Float32Array(queryEmbedding).buffer);
+    const maxCandidates = opts.maxCandidates ?? Math.max(limit * 12, 100);
 
     // sqlite-vec requires `k = ?` (or LIMIT) directly on the virtual-table query,
     // before any JOINs. Use a CTE for the KNN, then join + filter, then truncate.
-    // When filtering by refType, over-fetch so post-filter results aren't starved.
-    const knnK = opts.refType ? Math.max(limit * 5, 25) : limit;
-    const sql = `
+    // When filtering by refType, adaptively over-fetch so rare scopes aren't
+    // starved by a global nearest-neighbor pool.
+    const initialK = opts.refType ? Math.max(limit * 8, 50) : limit;
+    let knnK = Math.min(Math.max(initialK, limit), maxCandidates);
+
+    const fetch = (k: number): RecallHit[] => {
+      const where: string[] = [
+        "(r.ref_type != 'fact' OR (f.id IS NOT NULL AND f.valid_to IS NULL))",
+        "(r.ref_type != 'task' OR (t.id IS NOT NULL AND t.completed_at IS NULL))",
+      ];
+      if (opts.refType) where.push("r.ref_type = ?");
+
+      const sql = `
       WITH knn AS (
         SELECT rowid, distance
         FROM embeddings
@@ -73,29 +112,39 @@ export class EmbeddingRepository {
              r.chunk_index as chunk_index, r.text as text
       FROM knn
       JOIN embedding_refs r ON r.embedding_rowid = knn.rowid
-      ${opts.refType ? "WHERE r.ref_type = ?" : ""}
+      LEFT JOIN facts f ON r.ref_type = 'fact' AND f.id = r.ref_id
+      LEFT JOIN tasks t ON r.ref_type = 'task' AND t.id = r.ref_id
+      WHERE ${where.join(" AND ")}
       ORDER BY knn.distance ASC
       LIMIT ?
     `;
-    const params: unknown[] = opts.refType
-      ? [buf, knnK, opts.refType, limit]
-      : [buf, knnK, limit];
-    const rows = this.db.prepare(sql).all(...params) as {
-      rowid: number;
-      distance: number;
-      ref_type: string;
-      ref_id: string;
-      chunk_index: number;
-      text: string;
-    }[];
+      const params: unknown[] = opts.refType
+        ? [buf, k, opts.refType, limit]
+        : [buf, k, limit];
+      const rows = this.db.prepare(sql).all(...params) as {
+        rowid: number;
+        distance: number;
+        ref_type: string;
+        ref_id: string;
+        chunk_index: number;
+        text: string;
+      }[];
 
-    return rows.map((r) => ({
-      refType: r.ref_type as RefType,
-      refId: r.ref_id,
-      text: r.text,
-      score: 1 / (1 + r.distance),
-      chunkIndex: r.chunk_index,
-    }));
+      return rows.map((r) => ({
+        refType: r.ref_type as RefType,
+        refId: r.ref_id,
+        text: r.text,
+        score: 1 / (1 + r.distance),
+        chunkIndex: r.chunk_index,
+      }));
+    };
+
+    let hits = fetch(knnK);
+    while (opts.refType && hits.length < limit && knnK < maxCandidates) {
+      knnK = Math.min(knnK * 2, maxCandidates);
+      hits = fetch(knnK);
+    }
+    return hits;
   }
 
   count(): number {

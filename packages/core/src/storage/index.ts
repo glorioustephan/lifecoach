@@ -10,6 +10,8 @@ import {
   ReflectionRepository,
   InsightRepository,
   EmbeddingRepository,
+  AttentionSignalRepository,
+  JobRepository,
   IngestedFileRepository,
   TaskRepository,
   GoalRepository,
@@ -28,6 +30,8 @@ export interface Storage {
   reflections: ReflectionRepository;
   insights: InsightRepository;
   embeddings: EmbeddingRepository;
+  signals: AttentionSignalRepository;
+  jobs: JobRepository;
   ingestedFiles: IngestedFileRepository;
   tasks: TaskRepository;
   goals: GoalRepository;
@@ -50,6 +54,8 @@ export const createStorage = (config: LifecoachConfig): Storage => {
     reflections: new ReflectionRepository(db),
     insights: new InsightRepository(db),
     embeddings: new EmbeddingRepository(db, embeddingDim),
+    signals: new AttentionSignalRepository(db),
+    jobs: new JobRepository(db),
     ingestedFiles: new IngestedFileRepository(db),
     tasks: new TaskRepository(db),
     goals: new GoalRepository(db),

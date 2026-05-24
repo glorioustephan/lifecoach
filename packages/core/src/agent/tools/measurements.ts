@@ -1,7 +1,6 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import type { Memory } from "../../memory/index.js";
-import { NotImplementedError } from "../../util/errors.js";
+import type { Storage } from "../../storage/index.js";
 
 /**
  * Measurement tools are partially scaffolded.
@@ -10,7 +9,7 @@ import { NotImplementedError } from "../../util/errors.js";
  *   - The richer "ingest a lab PDF and extract a bunch of measurements" flow
  *     belongs in the ingest pipeline (see ingest.ts and ingest/pipeline.ts).
  */
-export const buildMeasurementTools = (memory: Memory) => [
+export const buildMeasurementTools = (storage: Storage) => [
   tool(
     "query_measurements",
     "Read a time-series of measurements for a given metric (e.g. 'fasting_glucose', 'hrv', 'weight').",
@@ -20,17 +19,20 @@ export const buildMeasurementTools = (memory: Memory) => [
       to: z.number().int().optional().describe("Unix ms"),
     },
     async ({ metric, from, to }) => {
-      // The semantic memory doesn't own this — call the repo directly via storage.
-      // We expose this via the underlying repository on the memory object's storage indirectly,
-      // but for now keep it here as a focused tool. If/when we want richer summarization,
-      // do it in a dedicated helper.
-      throw new NotImplementedError(
-        "query_measurements",
-        "wire to storage.measurements.query — see packages/core/src/storage/repositories/measurements.ts. " +
-          "Stubbed at the tool layer; the repository works.",
-      );
-      // Reachable once implemented:
-      // return { content: [{ type: "text", text: JSON.stringify(rows) }] };
+      const range = {
+        ...(from !== undefined ? { from } : {}),
+        ...(to !== undefined ? { to } : {}),
+      };
+      const rows = storage.measurements.query(metric, range);
+      const summary = storage.measurements.summarize(metric, range);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ summary, measurements: rows }, null, 2),
+          },
+        ],
+      };
     },
   ),
 
@@ -44,10 +46,20 @@ export const buildMeasurementTools = (memory: Memory) => [
       recordedAt: z.number().int().optional().describe("Unix ms; defaults to now"),
     },
     async ({ metric, value, unit, recordedAt }) => {
-      throw new NotImplementedError(
-        "record_measurement",
-        "wire to storage.measurements.create — repo is implemented, just call it",
-      );
+      const measurement = storage.measurements.create({
+        metric,
+        value,
+        ...(unit ? { unit } : {}),
+        recordedAt: recordedAt ?? Date.now(),
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Recorded ${measurement.metric}=${measurement.value}${measurement.unit ? ` ${measurement.unit}` : ""} at ${new Date(measurement.recordedAt).toISOString()} (${measurement.id}).`,
+          },
+        ],
+      };
     },
   ),
 ];

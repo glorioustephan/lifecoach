@@ -25,9 +25,22 @@ export const registerInsights = (program: Command): void => {
         process.exitCode = 1;
         return;
       }
+      const insighter = lc.insighter;
       const spinner = ora({ text: "scanning your data…", color: "cyan" }).start();
       try {
-        const out = await lc.insighter.generate(lc.storage, lc.memory.identity);
+        const run = await lc.storage.jobs.run(
+          "insights.generate",
+          async () => insighter.generate(lc.storage, lc.memory.identity),
+          {
+            generatedRefs: (out) =>
+              out.map((insight) => ({ refType: "insight", refId: insight.id })),
+          },
+        );
+        if (run.status === "skipped") {
+          spinner.succeed(`Insight generation already running (${run.activeRunId}).`);
+          return;
+        }
+        const out = run.result;
         if (out.length === 0) {
           spinner.succeed("Nothing notable surfaced this pass.");
         } else {

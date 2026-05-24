@@ -47,14 +47,30 @@ export const registerArtifacts = (program: Command): void => {
       const sinceMs = settings.lastScanAt ?? Date.now() - SEVEN_DAYS;
       const spinner = ora({ text: "scanning conversations for artifacts…", color: "cyan" }).start();
       try {
-        const result = await scanArtifacts(
-          { storage: lc.storage, extractor: lc.artifactExtractor },
-          { sinceMs, minConfidence: MIN_CRON_CONFIDENCE, origin: "cron" },
+        const extractor = lc.artifactExtractor;
+        const job = await lc.storage.jobs.run(
+          "artifacts.extract",
+          async () => {
+            const result = await scanArtifacts(
+              { storage: lc.storage, extractor },
+              { sinceMs, minConfidence: MIN_CRON_CONFIDENCE, origin: "cron" },
+            );
+            const run = recordCronRun(lc.storage, {
+              scannedUntil: result.scannedUntil,
+              created: result.created.length,
+            });
+            return { result, run };
+          },
+          {
+            generatedRefs: ({ result }) =>
+              result.created.map((artifact) => ({ refType: "artifact", refId: artifact.id })),
+          },
         );
-        const run = recordCronRun(lc.storage, {
-          scannedUntil: result.scannedUntil,
-          created: result.created.length,
-        });
+        if (job.status === "skipped") {
+          spinner.succeed(`Artifact extraction already running (${job.activeRunId}).`);
+          return;
+        }
+        const { result, run } = job.result;
 
         if (result.created.length === 0) {
           spinner.succeed(

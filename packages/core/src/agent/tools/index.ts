@@ -39,7 +39,7 @@ export const buildAllTools = (deps: ToolDeps) => [
   buildRecallTool(deps.memory),
   ...buildRememberTools(deps.memory),
   ...buildEpisodicTools(deps.memory),
-  ...buildMeasurementTools(deps.memory),
+  ...buildMeasurementTools(deps.storage),
   ...buildReflectionTools({
     memory: deps.memory,
     storage: deps.storage,

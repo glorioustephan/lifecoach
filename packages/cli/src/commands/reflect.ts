@@ -49,13 +49,44 @@ export const registerReflect = (program: Command): void => {
 
         const spinner = ora({ text: `reflecting on ${kind}…`, color: "cyan" }).start();
         try {
-          const reflection = await lc.reflector.generate(
-            lc.storage,
-            lc.memory.identity,
-            kind,
-            from,
-            to,
+          const reflector = lc.reflector;
+          const run = await lc.storage.jobs.run(
+            `reflect.${kind}`,
+            async () => {
+              const reflection = await reflector.generate(
+                lc.storage,
+                lc.memory.identity,
+                kind,
+                from,
+                to,
+              );
+              await lc.memory.semantic.indexReflection(reflection);
+
+              // Capacities write-back — only attempt for daily/weekly (monthly is
+              // typically too long for a daily note entry). Caller can override
+              // with --no-capacities.
+              const writebackEligible = (kind === "daily" || kind === "weekly")
+                && opts.capacities !== false;
+              const writeback = writebackEligible
+                ? await pushReflectionToCapacities(reflection, {
+                    enabled: true,
+                    client: lc.capacities,
+                    spaceId: lc.config.capacitiesDefaultSpaceId,
+                  })
+                : null;
+              return { reflection, writeback };
+            },
+            {
+              generatedRefs: ({ reflection }) => [
+                { refType: "reflection", refId: reflection.id },
+              ],
+            },
           );
+          if (run.status === "skipped") {
+            spinner.succeed(`Reflection already running (${run.activeRunId}).`);
+            return;
+          }
+          const { reflection, writeback } = run.result;
           spinner.succeed(`Wrote ${kind} reflection ${reflection.id}`);
           console.log(
             chalk.dim(
@@ -63,24 +94,14 @@ export const registerReflect = (program: Command): void => {
             ),
           );
 
-          // Capacities write-back — only attempt for daily/weekly (monthly is
-          // typically too long for a daily note entry). Caller can override
-          // with --no-capacities.
-          const writebackEligible = (kind === "daily" || kind === "weekly")
-            && opts.capacities !== false;
-          if (writebackEligible) {
-            const result = await pushReflectionToCapacities(reflection, {
-              enabled: true,
-              client: lc.capacities,
-              spaceId: lc.config.capacitiesDefaultSpaceId,
-            });
-            if (result.pushed) {
+          if (writeback) {
+            if (writeback.pushed) {
               console.log(chalk.dim("  → pushed to Capacities daily note"));
-            } else if (result.reason === "no_default_space") {
+            } else if (writeback.reason === "no_default_space") {
               console.log(
                 chalk.dim("  · skipped Capacities write-back (CAPACITIES_DEFAULT_SPACE_ID not set)"),
               );
-            } else if (result.reason === "capacities_not_configured") {
+            } else if (writeback.reason === "capacities_not_configured") {
               // Quiet — user hasn't opted into Capacities at all.
             }
           }

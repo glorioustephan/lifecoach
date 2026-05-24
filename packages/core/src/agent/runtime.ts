@@ -75,11 +75,12 @@ export class AgentRuntime {
     const { memory, storage, embedder, extractor, todoist, capacities, reflector, insighter, config } =
       this.deps;
 
-    memory.episodic.appendMessage({
+    const userMessage = memory.episodic.appendMessage({
       sessionId: input.sessionId,
       role: "user",
       content: input.userMessage,
     });
+    await memory.semantic.indexMessage(userMessage);
 
     const tools = buildAllTools({
       memory,
@@ -125,11 +126,12 @@ export class AgentRuntime {
       }
     }
 
-    memory.episodic.appendMessage({
+    const assistantMessage = memory.episodic.appendMessage({
       sessionId: input.sessionId,
       role: "assistant",
       content: assistantText.trim(),
     });
+    await memory.semantic.indexMessage(assistantMessage);
 
     return { assistantText: assistantText.trim(), toolCalls };
   }

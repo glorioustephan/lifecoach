@@ -112,6 +112,8 @@ pnpm lifecoach chat
 |---|---|---|
 | `ANTHROPIC_API_KEY` | ✓ | Chat, extraction, reflection, insight generation |
 | `VOYAGE_API_KEY` | recommended | Embeddings; without it recall falls back to keyword search |
+| `VOYAGE_EMBEDDING_MODEL` | optional | Override the Voyage embedding model (default: `voyage-3`) |
+| `VOYAGE_RERANK_MODEL` | optional | Override the Voyage reranker used after SQLite candidate search |
 | `TODOIST_API_TOKEN` | optional | Todoist task sync |
 | `CAPACITIES_API_TOKEN` | optional | Capacities workspace mirror + reflection write-back |
 | `CAPACITIES_DEFAULT_SPACE_ID` | optional | Default Capacities space for daily notes and reflection write-back |
@@ -158,15 +160,14 @@ pnpm dev:reset
 
 ```bash
 pnpm dev
-# → Web UI: http://localhost:5173 (Vite dev server with HMR)
+# → Web UI: http://localhost:3718 (Vite dev server with HMR)
 # → API:    http://localhost:3717
 ```
 
 ### Web UI (production build)
 
 ```bash
-pnpm --filter @lifecoach/web build
-pnpm --filter @lifecoach/server start
+pnpm start
 # → http://localhost:3717
 ```
 
@@ -269,6 +270,7 @@ See [`docs/pm2-setup.md`](docs/pm2-setup.md) for the full PM2 reference. Summary
 
 - All structured data lives in `data-{env}/lifecoach.db` on your machine. Gitignored.
 - All ingested raw files (PDFs, notes, etc.) live in `data-{env}/raw/`. Gitignored.
+- Background jobs record start/finish/failure state in SQLite (`job_runs`) so PM2 cron behavior is auditable beyond log files.
 - Outbound calls: Anthropic API (chat, extraction, reflection, insights) and optionally Voyage (embeddings) and Todoist / Capacities APIs. No other third party sees your data.
 - Web UI is reachable via Tailscale only — never exposed to the public internet by default. Email allow-list auth is layered on top for defense in depth.
 

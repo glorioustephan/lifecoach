@@ -14,7 +14,7 @@ If you already use PM2 for other services, Lifecoach slots in next to them — n
 | `lifecoach-insights` | 07:30 daily | `lifecoach insights generate` (runs after the morning reflection so it has fresh context) |
 | `lifecoach-weekly-reflect` | 19:00 Sunday | `lifecoach reflect weekly` |
 
-Logs land in `data-{env}/logs/<name>.{out,err}.log` — the directory is created automatically by the ecosystem config on startup; gitignored.
+Logs land in `data-{env}/logs/<name>.{out,err}.log` — the directory is created automatically by the ecosystem config on startup; gitignored. Cron-style commands also record a durable run ledger in SQLite (`job_runs` + `job_locks`) with status, duration, error summary, and generated row references.
 
 The `{env}` prefix comes from `LIFECOACH_ENV` (or `NODE_ENV`) in the environment. On a production Mac Mini you'd set `LIFECOACH_ENV=production`, so logs land in `data-production/logs/`. In local dev they land in `data-development/logs/`.
 

@@ -19,7 +19,7 @@
     "server": "pnpm --filter @lifecoach/server start",
     "web:dev": "pnpm --filter @lifecoach/web dev",
     "web:build": "pnpm --filter @lifecoach/web build",
-    "start": "pnpm web:build && pnpm server",
+    "start": "pnpm web:build && LIFECOACH_SERVE_BUILT_WEB=1 pnpm --filter @lifecoach/server start",
     "typecheck": "pnpm -r typecheck",
     "build": "pnpm -r build",
     "test": "pnpm -r test"

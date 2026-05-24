@@ -21,6 +21,7 @@ export default defineConfig({
   },
   server: {
     port: 3718,
+    strictPort: true,
     proxy: {
       // Forward API + health to the Hono server during dev.
       "/api": "http://localhost:3717",

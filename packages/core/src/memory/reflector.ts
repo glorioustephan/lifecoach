@@ -296,6 +296,11 @@ export class Reflector {
       periodStart: from,
       periodEnd: to,
       kind,
+      ...(parsed.data.title ? { title: parsed.data.title } : {}),
+      themes: parsed.data.themes,
+      wins: parsed.data.wins,
+      concerns: parsed.data.concerns,
+      openThreads: parsed.data.openThreads,
       body,
     });
     return reflection;

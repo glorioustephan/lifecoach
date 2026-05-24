@@ -12,6 +12,18 @@ interface MeasurementRow {
   created_at: number;
 }
 
+export interface MeasurementSummary {
+  metric: string;
+  count: number;
+  unit: string | null;
+  latest: Measurement | null;
+  previous: Measurement | null;
+  delta: number | null;
+  deltaPercent: number | null;
+  rollingAverage: number | null;
+  unitMismatch: boolean;
+}
+
 const rowToMeasurement = (row: MeasurementRow): Measurement => ({
   id: row.id,
   metric: row.metric,
@@ -62,6 +74,48 @@ export class MeasurementRepository {
                  ORDER BY recorded_at ASC`;
     const rows = this.db.prepare(sql).all(...params) as MeasurementRow[];
     return rows.map(rowToMeasurement);
+  }
+
+  latest(metric: string): Measurement | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id, metric, value, unit, recorded_at, source_document_id, created_at
+         FROM measurements
+         WHERE metric = ?
+         ORDER BY recorded_at DESC
+         LIMIT 1`,
+      )
+      .get(metric) as MeasurementRow | undefined;
+    return row ? rowToMeasurement(row) : undefined;
+  }
+
+  summarize(metric: string, range: MeasurementRange = {}, rollingWindow = 7): MeasurementSummary {
+    const rows = this.query(metric, range);
+    const latest = rows.at(-1) ?? null;
+    const previous = rows.length >= 2 ? rows.at(-2)! : null;
+    const units = new Set(rows.map((m) => m.unit ?? null));
+    const unitMismatch = units.size > 1;
+    const delta = !unitMismatch && latest && previous ? latest.value - previous.value : null;
+    const deltaPercent =
+      delta !== null && previous && previous.value !== 0
+        ? (delta / Math.abs(previous.value)) * 100
+        : null;
+    const windowRows = rows.slice(-rollingWindow);
+    const rollingAverage =
+      !unitMismatch && windowRows.length >= 2
+        ? windowRows.reduce((sum, m) => sum + m.value, 0) / windowRows.length
+        : null;
+    return {
+      metric,
+      count: rows.length,
+      unit: unitMismatch ? null : latest?.unit ?? null,
+      latest,
+      previous,
+      delta,
+      deltaPercent,
+      rollingAverage,
+      unitMismatch,
+    };
   }
 
   count(): number {

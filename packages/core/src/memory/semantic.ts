@@ -1,12 +1,13 @@
 import type {
   Fact,
+  Message,
   NewFact,
   RecallHit,
   RecallScope,
+  Reflection,
 } from "@lifecoach/schemas";
 import type { Storage, RefType } from "../storage/index.js";
 import type { Embedder } from "../embeddings/index.js";
-import type { VoyageEmbedder } from "../embeddings/voyage.js";
 
 export interface SemanticMemoryDeps {
   storage: Storage;
@@ -53,36 +54,106 @@ export class SemanticMemory {
       return this.keywordFallback(query, scope, limit);
     }
 
-    const queryVec = await this.embedQuery(query);
+    const queryVec = await this.embedder.embedQuery(query);
     const refType = this.scopeToRefType(scope);
-    return this.storage.embeddings.search(queryVec, {
-      limit,
+    const candidateLimit = this.embedder.rerank ? Math.max(limit * 8, 50) : limit;
+    const candidates = this.storage.embeddings.search(queryVec, {
+      limit: candidateLimit,
+      maxCandidates: Math.max(candidateLimit * 3, 150),
       ...(refType ? { refType } : {}),
     });
-  }
-
-  private async embedQuery(text: string): Promise<number[]> {
-    // VoyageEmbedder has a query-flavored helper; fall back to plain embed().
-    const maybeVoyage = this.embedder as Partial<VoyageEmbedder>;
-    if (typeof maybeVoyage.embedQuery === "function") {
-      return maybeVoyage.embedQuery(text);
+    if (!this.embedder.rerank || candidates.length <= limit) {
+      return candidates.slice(0, limit);
     }
-    const [vec] = await this.embedder.embed([text]);
-    return vec ?? [];
+
+    const ids = candidates.map(
+      (hit, index) => `${hit.refType}:${hit.refId}:${hit.chunkIndex ?? 0}:${index}`,
+    );
+    const reranked = await this.embedder.rerank(
+      query,
+      candidates.map((hit, index) => ({ id: ids[index]!, text: hit.text })),
+      { topK: limit },
+    );
+    const byId = new Map(ids.map((id, index) => [id, candidates[index]!]));
+    return reranked
+      .map((result) => {
+        const hit = byId.get(result.id);
+        return hit ? { ...hit, score: result.score } : null;
+      })
+      .filter((hit): hit is RecallHit => hit !== null)
+      .slice(0, limit);
   }
 
   private async indexFact(fact: Fact): Promise<void> {
-    if (!this.embedder.enabled) return;
     const text = `[${fact.category}/${fact.subject}] ${fact.body}`;
-    const [vec] = await this.embedder.embed([text]);
-    if (!vec) return;
-    this.storage.embeddings.insert({
+    await this.indexRef({
       refType: "fact",
       refId: fact.id,
-      chunkIndex: 0,
       text,
-      embedding: vec,
+      sourceUpdatedAt: fact.validFrom ?? fact.createdAt,
     });
+  }
+
+  async indexMessage(message: Message): Promise<void> {
+    if (!this.shouldIndexMessage(message)) return;
+    const text = `[message/${message.role}] ${new Date(message.createdAt).toISOString()}\n${message.content.trim()}`;
+    await this.indexRef({
+      refType: "message",
+      refId: message.id,
+      text,
+      sourceUpdatedAt: message.createdAt,
+    });
+  }
+
+  async indexReflection(reflection: Reflection): Promise<void> {
+    const sections: string[] = [
+      `[reflection/${reflection.kind}] ${new Date(reflection.periodEnd).toISOString().slice(0, 10)}`,
+    ];
+    if (reflection.title) sections.push(`title: ${reflection.title}`);
+    if (reflection.themes.length > 0) sections.push(`themes: ${reflection.themes.join(", ")}`);
+    if (reflection.wins.length > 0) sections.push(`wins: ${reflection.wins.join("; ")}`);
+    if (reflection.concerns.length > 0) {
+      sections.push(`concerns: ${reflection.concerns.join("; ")}`);
+    }
+    if (reflection.openThreads.length > 0) {
+      sections.push(`open threads: ${reflection.openThreads.join("; ")}`);
+    }
+    sections.push(reflection.body);
+    await this.indexRef({
+      refType: "reflection",
+      refId: reflection.id,
+      text: sections.join("\n"),
+      sourceUpdatedAt: reflection.createdAt,
+    });
+  }
+
+  private async indexRef(input: {
+    refType: RefType;
+    refId: string;
+    text: string;
+    sourceUpdatedAt?: number;
+  }): Promise<void> {
+    if (!this.embedder.enabled) return;
+    this.storage.embeddings.deleteForRef(input.refType, input.refId);
+    const [vec] = await this.embedder.embedDocuments([input.text]);
+    if (!vec) return;
+    this.storage.embeddings.insert({
+      refType: input.refType,
+      refId: input.refId,
+      chunkIndex: 0,
+      text: input.text,
+      embedding: vec,
+      model: this.embedder.metadata.model,
+      dimension: this.embedder.metadata.dimension,
+      sourceUpdatedAt: input.sourceUpdatedAt,
+    });
+  }
+
+  private shouldIndexMessage(message: Message): boolean {
+    const content = message.content.trim();
+    if (content.length < 80) return false;
+    if (message.role === "user") return true;
+    return content.length >= 240;
   }
 
   private scopeToRefType(scope: RecallScope): RefType | undefined {

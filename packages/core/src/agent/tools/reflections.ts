@@ -58,6 +58,7 @@ export const buildReflectionTools = (deps: ReflectionToolDeps) => [
         fromTs,
         toTs,
       );
+      await deps.memory.semantic.indexReflection(reflection);
       return {
         content: [
           {

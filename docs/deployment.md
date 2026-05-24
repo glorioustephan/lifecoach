@@ -41,6 +41,8 @@ Keep these values on the Mac Mini, not in git and not in GitHub Actions:
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude chat, extraction, reflection, and insight calls |
 | `VOYAGE_API_KEY` | Embeddings |
+| `VOYAGE_EMBEDDING_MODEL` | Optional Voyage embedding model override |
+| `VOYAGE_RERANK_MODEL` | Optional Voyage reranker override |
 | `TODOIST_API_TOKEN` | Todoist sync |
 | `CAPACITIES_API_TOKEN` | Capacities lookup, sync, and write-back API access |
 | `CAPACITIES_DEFAULT_SPACE_ID` | Default Capacities target for daily notes and reflection write-back |

@@ -27,6 +27,10 @@ import { loadAuthConfig, requireAuth } from "./middleware/auth.js";
 
 const lc = createLifecoach();
 const authConfig = loadAuthConfig();
+const serveBuiltFrontend =
+  process.env.LIFECOACH_SERVE_BUILT_WEB === "1" ||
+  process.env.LIFECOACH_ENV === "production" ||
+  process.env.NODE_ENV === "production";
 
 const app = new Hono();
 app.use("*", logger());
@@ -59,11 +63,11 @@ app.route("/api", api);
 
 app.get("/health", (c) => c.text("ok"));
 
-// Static frontend bundle — only served when the built dist exists. In dev,
-// Vite serves the frontend on a separate port and proxies /api here.
+// Static frontend bundle — only served in production-style web mode.
+// In dev, Vite serves the frontend on a separate port and proxies /api here.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, "../../web/dist");
-if (fs.existsSync(webDist)) {
+if (serveBuiltFrontend && fs.existsSync(webDist)) {
   app.use(
     "/*",
     serveStatic({
@@ -91,8 +95,12 @@ const server = serve(
     console.log(`  todoist: ${lc.todoist ? "connected" : "not configured"}`);
     console.log(`  capacities: ${lc.capacities ? "connected" : "not configured"}`);
     console.log(`  embedder: ${lc.embedder.enabled ? "on" : "off"}`);
-    if (!fs.existsSync(webDist)) {
-      console.log(`  web bundle: not built — run \`pnpm --filter @lifecoach/web dev\` for the dev server`);
+    if (serveBuiltFrontend) {
+      if (!fs.existsSync(webDist)) {
+        console.log(`  web bundle: not built — run \`pnpm --filter @lifecoach/web build\``);
+      }
+    } else {
+      console.log(`  web ui: http://localhost:3718 (Vite dev server with HMR)`);
     }
   },
 );

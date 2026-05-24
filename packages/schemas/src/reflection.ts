@@ -8,6 +8,11 @@ export const reflectionSchema = z.object({
   periodStart: z.number().int(),
   periodEnd: z.number().int(),
   kind: reflectionKind,
+  title: z.string().optional(),
+  themes: z.array(z.string()).default([]),
+  wins: z.array(z.string()).default([]),
+  concerns: z.array(z.string()).default([]),
+  openThreads: z.array(z.string()).default([]),
   body: z.string(),
   createdAt: z.number().int(),
 });
@@ -17,4 +22,4 @@ export const newReflectionSchema = reflectionSchema.omit({
   id: true,
   createdAt: true,
 });
-export type NewReflection = z.infer<typeof newReflectionSchema>;
+export type NewReflection = z.input<typeof newReflectionSchema>;

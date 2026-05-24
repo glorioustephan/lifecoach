@@ -28,7 +28,15 @@ export const registerSync = (program: Command): void => {
       }
       const spinner = ora({ text: "syncing Todoist…", color: "cyan" }).start();
       try {
-        const result = await syncTodoist(lc.todoist, lc.storage, lc.embedder);
+        const todoist = lc.todoist;
+        const run = await lc.storage.jobs.run("sync.todoist", async () =>
+          syncTodoist(todoist, lc.storage, lc.embedder),
+        );
+        if (run.status === "skipped") {
+          spinner.succeed(`Todoist sync already running (${run.activeRunId}).`);
+          return;
+        }
+        const result = run.result;
         spinner.succeed(
           `Todoist sync — ${result.fetched} fetched, ${result.upserted} upserted, ${result.newlyCompleted} newly completed, ${result.embedded} embedded`,
         );
@@ -71,17 +79,25 @@ export const registerSync = (program: Command): void => {
       }
       const spinner = ora({ text: "sweeping Capacities…", color: "cyan" }).start();
       try {
-        const result = await syncCapacities(lc.capacities, lc.storage, lc.embedder, {
-          pruneMissing: opts.prune === true,
-          ...(opts.terms
-            ? {
-                searchTerms: opts.terms
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter((s) => s.length > 0),
-              }
-            : {}),
-        });
+        const capacities = lc.capacities;
+        const run = await lc.storage.jobs.run("sync.capacities", async () =>
+          syncCapacities(capacities, lc.storage, lc.embedder, {
+            pruneMissing: opts.prune === true,
+            ...(opts.terms
+              ? {
+                  searchTerms: opts.terms
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter((s) => s.length > 0),
+                }
+              : {}),
+          }),
+        );
+        if (run.status === "skipped") {
+          spinner.succeed(`Capacities sync already running (${run.activeRunId}).`);
+          return;
+        }
+        const result = run.result;
         spinner.succeed(
           `Capacities sync — ${result.spacesScanned} space(s), ${result.structuresIndexed} structure(s), ${result.objectsDiscovered} object(s) via ${result.searchTermsUsed} lookups`,
         );

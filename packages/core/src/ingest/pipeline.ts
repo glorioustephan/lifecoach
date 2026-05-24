@@ -174,8 +174,8 @@ export class IngestPipeline {
           batch: Math.floor(i / batchSize) + 1,
           totalBatches,
         });
-        const vectors = await embedder.embed(batch.map((c) => c.text));
-        this.persistBatch(document.id, batch, vectors);
+        const vectors = await embedder.embedDocuments(batch.map((c) => c.text));
+        this.persistBatch(document.id, document.ingestedAt, batch, vectors);
       }
     }
 
@@ -268,8 +268,13 @@ export class IngestPipeline {
     return { factsExtracted, measurementsExtracted };
   }
 
-  private persistBatch(documentId: string, chunks: Chunk[], vectors: number[][]): void {
-    const { storage } = this.deps;
+  private persistBatch(
+    documentId: string,
+    documentUpdatedAt: number,
+    chunks: Chunk[],
+    vectors: number[][],
+  ): void {
+    const { embedder, storage } = this.deps;
     // better-sqlite3 transactions are sync — wrap the inserts.
     const tx = storage.handle.db.transaction(() => {
       for (let i = 0; i < chunks.length; i += 1) {
@@ -282,6 +287,9 @@ export class IngestPipeline {
           chunkIndex: chunk.index,
           text: chunk.text,
           embedding: vec,
+          model: embedder.metadata.model,
+          dimension: embedder.metadata.dimension,
+          sourceUpdatedAt: documentUpdatedAt,
         });
       }
     });

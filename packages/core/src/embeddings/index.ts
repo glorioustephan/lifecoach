@@ -3,7 +3,13 @@ import type { Embedder } from "./embedder.js";
 import { NullEmbedder } from "./embedder.js";
 import { VoyageEmbedder } from "./voyage.js";
 
-export { type Embedder, NullEmbedder } from "./embedder.js";
+export {
+  type Embedder,
+  type EmbeddingProviderMetadata,
+  type RerankDocument,
+  type RerankResult,
+  NullEmbedder,
+} from "./embedder.js";
 export { VoyageEmbedder } from "./voyage.js";
 export { LocalEmbedder } from "./local.js";
 
@@ -16,6 +22,8 @@ export const createEmbedder = (config: LifecoachConfig): Embedder => {
     return new VoyageEmbedder({
       apiKey: config.voyageApiKey,
       dimension: config.embeddingDim,
+      ...(config.voyageEmbeddingModel ? { model: config.voyageEmbeddingModel } : {}),
+      ...(config.voyageRerankModel ? { rerankModel: config.voyageRerankModel } : {}),
     });
   }
   return new NullEmbedder(config.embeddingDim);

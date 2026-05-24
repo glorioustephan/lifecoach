@@ -33,7 +33,7 @@ export const indexTask = async (
   const text = renderForEmbedding(task);
   // Replace existing embedding(s) for this task — content may have changed.
   storage.embeddings.deleteForRef("task", task.id);
-  const [vec] = await embedder.embed([text]);
+  const [vec] = await embedder.embedDocuments([text]);
   if (!vec || vec.length === 0) return;
   storage.embeddings.insert({
     refType: "task",
@@ -41,6 +41,9 @@ export const indexTask = async (
     chunkIndex: 0,
     text,
     embedding: vec,
+    model: embedder.metadata.model,
+    dimension: embedder.metadata.dimension,
+    sourceUpdatedAt: task.updatedAt,
   });
 };
 
@@ -54,7 +57,7 @@ export const indexTasks = async (
 ): Promise<void> => {
   if (!embedder.enabled || tasks.length === 0) return;
   const texts = tasks.map(renderForEmbedding);
-  const vectors = await embedder.embed(texts);
+  const vectors = await embedder.embedDocuments(texts);
   for (let i = 0; i < tasks.length; i += 1) {
     const task = tasks[i];
     const vec = vectors[i];
@@ -66,6 +69,9 @@ export const indexTasks = async (
       chunkIndex: 0,
       text: texts[i]!,
       embedding: vec,
+      model: embedder.metadata.model,
+      dimension: embedder.metadata.dimension,
+      sourceUpdatedAt: task.updatedAt,
     });
   }
 };

@@ -10,6 +10,8 @@ export interface LifecoachConfig {
   snapshotsDir: string;
   anthropicApiKey: string | undefined;
   voyageApiKey: string | undefined;
+  voyageEmbeddingModel: string | undefined;
+  voyageRerankModel: string | undefined;
   todoistApiToken: string | undefined;
   capacitiesApiToken: string | undefined;
   /**
@@ -105,6 +107,10 @@ export const loadConfig = (overrides: Partial<LifecoachConfig> = {}): LifecoachC
     snapshotsDir: overrides.snapshotsDir ?? path.join(dataDir, "snapshots"),
     anthropicApiKey: overrides.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY,
     voyageApiKey: overrides.voyageApiKey ?? process.env.VOYAGE_API_KEY,
+    voyageEmbeddingModel:
+      overrides.voyageEmbeddingModel ?? process.env.VOYAGE_EMBEDDING_MODEL,
+    voyageRerankModel:
+      overrides.voyageRerankModel ?? process.env.VOYAGE_RERANK_MODEL,
     todoistApiToken: overrides.todoistApiToken ?? process.env.TODOIST_API_TOKEN,
     capacitiesApiToken: overrides.capacitiesApiToken ?? process.env.CAPACITIES_API_TOKEN,
     capacitiesDefaultSpaceId:

@@ -161,7 +161,7 @@ const syncSpace = async (
     for (let start = 0; start < upserted.length; start += EMBED_BATCH) {
       const slice = upserted.slice(start, start + EMBED_BATCH);
       const sliceTexts = texts.slice(start, start + EMBED_BATCH);
-      const vectors = await embedder.embed(sliceTexts);
+      const vectors = await embedder.embedDocuments(sliceTexts);
       for (let i = 0; i < slice.length; i += 1) {
         const doc = slice[i]!;
         const vec = vectors[i];
@@ -173,6 +173,9 @@ const syncSpace = async (
           chunkIndex: 0,
           text: sliceTexts[i]!,
           embedding: vec,
+          model: embedder.metadata.model,
+          dimension: embedder.metadata.dimension,
+          sourceUpdatedAt: doc.ingestedAt,
         });
       }
     }
