@@ -79,9 +79,12 @@ interface PeriodData {
   completedTasks: Array<{ content: string; completedAt: number | null }>;
   measurements: Array<{ metric: string; value: number; unit: string | null; recordedAt: number }>;
   priorReflections: Array<{ kind: string; body: string; periodEnd: number }>;
+  financialAccounts?: Array<{ displayName: string; type: string; balance: number }>;
+  financialInsights?: Array<{ topic: string; body: string; category: string; priority: number }>;
+  financialTransactionSummary?: { totalSpent: number; topCategories: Array<{ category: string; amount: number }> };
 }
 
-const gatherPeriodData = (storage: Storage, from: number, to: number): PeriodData => {
+const gatherPeriodData = (storage: Storage, from: number, to: number, includeFinancial = false): PeriodData => {
   const db = storage.handle.db;
 
   const messages = db
@@ -131,7 +134,51 @@ const gatherPeriodData = (storage: Storage, from: number, to: number): PeriodDat
     )
     .all(from, to) as PeriodData["priorReflections"];
 
-  return { messages, facts, completedTasks, measurements, priorReflections };
+  const data: PeriodData = { messages, facts, completedTasks, measurements, priorReflections };
+
+  // Include financial data for weekly/monthly reflections
+  if (includeFinancial) {
+    const financialAccounts = db
+      .prepare(
+        `SELECT display_name AS displayName, type, balance
+         FROM accounts
+         WHERE status = 'active'
+         ORDER BY type ASC`,
+      )
+      .all() as Array<{ displayName: string; type: string; balance: number }>;
+
+    const financialInsights = db
+      .prepare(
+        `SELECT topic, body, category, priority
+         FROM financial_insights
+         WHERE dismissed_at IS NULL
+         ORDER BY priority DESC, created_at DESC
+         LIMIT 5`,
+      )
+      .all() as Array<{ topic: string; body: string; category: string; priority: number }>;
+
+    const txns = db
+      .prepare(
+        `SELECT category, SUM(ABS(amount)) as total
+         FROM transactions
+         WHERE date >= ? AND date < ?
+         GROUP BY category
+         ORDER BY total DESC
+         LIMIT 5`,
+      )
+      .all(from, to) as Array<{ category: string; total: number }>;
+
+    const totalSpent = txns.reduce((sum, t) => sum + t.total, 0);
+
+    data.financialAccounts = financialAccounts;
+    data.financialInsights = financialInsights;
+    data.financialTransactionSummary = {
+      totalSpent,
+      topCategories: txns.map((t) => ({ category: t.category || "uncategorized", amount: t.total })),
+    };
+  }
+
+  return data;
 };
 
 // ─── Prompt composition ──────────────────────────────────────────────────────
@@ -181,6 +228,35 @@ const renderData = (data: PeriodData): string => {
       const ts = formatTimestamp(m.createdAt);
       const content = m.content.length > 800 ? m.content.slice(0, 800) + "…[truncated]" : m.content;
       parts.push(`[${ts}] ${m.role}: ${content}`);
+    }
+  }
+
+  // Include financial data for weekly/monthly reflections
+  if (data.financialAccounts && data.financialAccounts.length > 0) {
+    parts.push("\n## Financial Status");
+    const totalAssets = data.financialAccounts
+      .filter((a) => a.type !== "debt" && a.type !== "credit_card")
+      .reduce((sum, a) => sum + a.balance, 0);
+    const totalLiabilities = data.financialAccounts
+      .filter((a) => a.type === "debt" || a.type === "credit_card")
+      .reduce((sum, a) => sum + Math.abs(a.balance), 0);
+    parts.push(`- Net worth: $${(totalAssets - totalLiabilities).toFixed(2)}`);
+
+    if (data.financialTransactionSummary) {
+      parts.push(`- Spending this period: $${data.financialTransactionSummary.totalSpent.toFixed(2)}`);
+      if (data.financialTransactionSummary.topCategories.length > 0) {
+        parts.push("- Top categories: " + data.financialTransactionSummary.topCategories
+          .map((c) => `${c.category} ($${c.amount.toFixed(2)})`)
+          .join(", "));
+      }
+    }
+
+    if (data.financialInsights && data.financialInsights.length > 0) {
+      parts.push("\n## Financial Insights");
+      for (const insight of data.financialInsights) {
+        const priorityLabel = insight.priority === 3 ? "URGENT" : insight.priority === 2 ? "WATCH" : "NOTE";
+        parts.push(`- [${priorityLabel}] ${insight.topic}`);
+      }
     }
   }
 
@@ -254,7 +330,8 @@ export class Reflector {
       );
     }
 
-    const data = gatherPeriodData(storage, from, to);
+    const includeFinancial = kind === "weekly" || kind === "monthly";
+    const data = gatherPeriodData(storage, from, to, includeFinancial);
     const rendered = renderData(data);
     const prompt = buildPrompt(kind, from, to, identity.render(), rendered);
 
