@@ -274,7 +274,7 @@ function InsightCard({ insight }: { insight: InsightRow }): JSX.Element {
       </div>
 
       {insight.rationale && (
-        <p className="mt-3 border-t border-border-subtle pt-2 text-xs text-fg-muted">
+        <p className="mt-3 text-xs text-fg-muted">
           <span className="text-fg-faint">why now:</span> {insight.rationale}
         </p>
       )}
@@ -285,7 +285,7 @@ function InsightCard({ insight }: { insight: InsightRow }): JSX.Element {
         </p>
       )}
 
-      <footer className="mt-3 flex flex-wrap items-center gap-1 border-t border-border-subtle pt-3">
+      <footer className="mt-4 flex flex-wrap items-center gap-1">
         {!isClosed ? (
           <>
             <ActionButton

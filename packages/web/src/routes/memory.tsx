@@ -402,7 +402,7 @@ function ReflectionCard({ reflection }: { reflection: ReflectionRow }): JSX.Elem
 
   return (
     <article className="rounded-md border border-border bg-surface px-5 py-4">
-      <header className="mb-3 flex items-baseline justify-between gap-3 border-b border-border-subtle pb-2">
+      <header className="mb-3 flex items-baseline justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="rounded-sm border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent">
             {KIND_LABEL[reflection.kind]}
