@@ -1,6 +1,13 @@
 // Same-origin fetch helpers. In dev, Vite proxies /api → http://localhost:3717.
 
 export interface StatusResponse {
+  deployment?: {
+    gitSha: string;
+    gitBranch: string;
+    builtAt: string | null;
+    dataDir: string;
+    environment: string;
+  };
   model: string;
   embedder: { enabled: boolean; dim: number };
   todoist: boolean;

@@ -47,6 +47,17 @@ git merge --ff-only origin/main
 after_sha="$(git rev-parse --short HEAD)"
 echo "Production checkout: $before_sha -> $after_sha"
 
+export LIFECOACH_GIT_SHA="$after_sha"
+export LIFECOACH_GIT_BRANCH="$current_branch"
+export LIFECOACH_BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "Deployment fingerprint: $LIFECOACH_GIT_BRANCH@$LIFECOACH_GIT_SHA built $LIFECOACH_BUILD_TIME"
+
+for env_file in ".env.production" ".env"; do
+  if [ -f "$env_file" ] && grep -Eq '^[[:space:]]*LIFECOACH_DATA_DIR=' "$env_file"; then
+    echo "Warning: $env_file sets LIFECOACH_DATA_DIR, which overrides LIFECOACH_ENV data-directory selection." >&2
+  fi
+done
+
 echo "Installing dependencies..."
 pnpm install --frozen-lockfile
 

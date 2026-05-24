@@ -99,6 +99,11 @@ function SettingsRoute(): JSX.Element {
                 <h2 className="text-sm font-medium text-fg">System</h2>
               </header>
               <dl className="divide-y divide-border-subtle">
+                <Row k="Version" v={status?.deployment?.gitSha} />
+                <Row k="Branch" v={status?.deployment?.gitBranch} />
+                <Row k="Built" v={status?.deployment?.builtAt} />
+                <Row k="Environment" v={status?.deployment?.environment} />
+                <Row k="Data dir" v={status?.deployment?.dataDir} />
                 <Row k="Model" v={status?.model} />
                 <Row
                   k="Embedder"

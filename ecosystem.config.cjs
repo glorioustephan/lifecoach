@@ -88,6 +88,10 @@ const base = (label) => ({
   interpreter: "none",
   env: {
     NODE_ENV: "production",
+    LIFECOACH_ENV: process.env.LIFECOACH_ENV || "production",
+    LIFECOACH_GIT_SHA: process.env.LIFECOACH_GIT_SHA || "",
+    LIFECOACH_GIT_BRANCH: process.env.LIFECOACH_GIT_BRANCH || "",
+    LIFECOACH_BUILD_TIME: process.env.LIFECOACH_BUILD_TIME || "",
     PATH: childPath,
   },
   out_file: path.join(logsDir, `${label}.out.log`),
