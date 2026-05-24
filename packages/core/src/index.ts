@@ -8,6 +8,7 @@ import { TodoistClient, CapacitiesClient } from "./integrations/index.js";
 import { Reflector } from "./memory/reflector.js";
 import { Insighter } from "./memory/insighter.js";
 import { ArtifactExtractor } from "./artifacts/index.js";
+import { AlpacaClient, InvestmentRecommender } from "./integrations/alpaca/index.js";
 
 export interface Lifecoach {
   config: LifecoachConfig;
@@ -118,6 +119,19 @@ export { forgetDocument, type ForgetDocumentResult } from "./memory/forget.js";
 export { refreshAttentionSignals } from "./memory/attention.js";
 export { Reflector, kindWindow, type ReflectionPayload } from "./memory/reflector.js";
 export { Insighter } from "./memory/insighter.js";
+export {
+  AlpacaClient,
+  AlpacaApiError,
+  InvestmentRecommender,
+  type AlpacaAsset,
+  type AlpacaQuote,
+  type AlpacaBar,
+  type AlpacaClientOptions,
+  type PortfolioContext,
+  type InvestmentGoal,
+  type InvestmentRecommendation,
+  type RecommenderOptions,
+} from "./integrations/alpaca/index.js";
 export {
   ArtifactExtractor,
   type ArtifactExtractorOptions,

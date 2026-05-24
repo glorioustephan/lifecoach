@@ -1,0 +1,25 @@
+{
+  "name": "@lifecoach/mcp-alpaca",
+  "version": "0.1.0",
+  "description": "MCP server for Alpaca investment recommendations",
+  "type": "module",
+  "main": "./dist/server.js",
+  "bin": {
+    "mcp-alpaca": "./dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/server.ts",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "@modelcontextprotocol/sdk": "^0.8.0",
+    "@lifecoach/core": "workspace:*",
+    "@lifecoach/schemas": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.0"
+  }
+}
