@@ -322,7 +322,7 @@ function ArtifactCard({
 
       {/* Tags */}
       {a.tags.length > 0 && (
-        <div className="mt-1.5 flex flex-wrap gap-1">
+        <div className="mt-2 flex flex-wrap gap-1">
           {a.tags.map((tag) => (
             <TagBadge key={tag} tag={tag} />
           ))}
@@ -338,7 +338,7 @@ function ArtifactCard({
       </div>
 
       {/* Action row — always visible on touch, hover-reveal on desktop */}
-      <div className="mt-2 flex items-center gap-1 md:opacity-0 md:group-hover/card:opacity-100 md:focus-within:opacity-100 transition-opacity duration-150">
+      <div className="mt-3 flex items-center gap-1 md:opacity-0 md:group-hover/card:opacity-100 md:focus-within:opacity-100 transition-opacity duration-150">
         {/* Copy */}
         <IconButton
           variant="default"

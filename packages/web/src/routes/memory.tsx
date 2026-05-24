@@ -103,7 +103,7 @@ function FactsTab({ page, onPageChange }: { page: number; onPageChange: (p: numb
                 {f.category}
               </span>
             </div>
-            <p className="mt-0.5 text-xs text-fg-muted">{f.body}</p>
+            <p className="mt-1 text-xs text-fg-muted">{f.body}</p>
           </li>
         ))}
       </ul>
@@ -198,7 +198,7 @@ function DocumentsTab({ page, onPageChange }: { page: number; onPageChange: (p: 
                   {formatRelative(d.ingested_at)}
                 </span>
               </div>
-              <p className="mt-0.5 truncate text-xs text-fg-muted">
+              <p className="mt-1 truncate text-xs text-fg-muted">
                 {d.source} · {d.mime ?? "unknown"} · {d.body_chars.toLocaleString()} chars
               </p>
               <p className="mt-0.5 truncate font-mono text-[10px] text-fg-faint">{d.id}</p>

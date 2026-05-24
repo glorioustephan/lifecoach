@@ -63,7 +63,7 @@ function SettingsRoute(): JSX.Element {
                 {(profile?.profile ?? []).map((entry) => (
                   <div
                     key={entry.key}
-                    className="grid grid-cols-[max-content_1fr] items-center gap-3 px-4 py-3"
+                    className="grid grid-cols-[140px_1fr] items-start gap-4 px-4 py-3"
                   >
                     <span className="text-xs uppercase tracking-wide text-fg-faint">
                       {entry.key}
@@ -74,7 +74,9 @@ function SettingsRoute(): JSX.Element {
                   </div>
                 ))}
               </div>
-              <ArtifactExtractionSection />
+              <div className="border-t border-border-subtle">
+                <ArtifactExtractionSection />
+              </div>
             </section>
           )}
 
@@ -183,7 +185,7 @@ function SourceRow({ source }: { source: Source }): JSX.Element {
           <p className="text-sm font-medium text-fg">{source.name}</p>
           <p
             className={cn(
-              "mt-0.5 text-[11px] uppercase tracking-wide",
+              "mt-1 text-[11px] uppercase tracking-wide",
               source.connected ? "text-success-500" : "text-fg-faint",
             )}
           >
@@ -242,19 +244,19 @@ function ArtifactExtractionSection(): JSX.Element {
   const enabled = settings?.enabled ?? false;
 
   return (
-    <section className="rounded-md border border-border bg-surface">
-      <header className="border-b border-border-subtle px-4 py-3">
-        <h2 className="text-sm font-medium text-fg">Artifact extraction</h2>
-      </header>
-      <div className="px-4 py-3">
+    <div className="grid grid-cols-[140px_1fr] items-start gap-4 px-4 py-4">
+      <label htmlFor="artifact-extract-label" className="text-xs uppercase tracking-wide text-fg-faint">
+        Daily auto-extraction
+      </label>
+      <div className="min-w-0">
         <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p id="artifact-extract-label" className="text-sm text-fg">Daily auto-extraction</p>
-            <p className="mt-0.5 text-xs text-fg-muted">
+            <p className="mt-1 text-xs text-fg-muted">
               Scans recent conversations each day and saves new recipes &amp; artifacts automatically.
             </p>
             {settings?.autoDisabled && (
-              <p className="mt-1.5 text-[11px] text-warning-200">
+              <p className="mt-2 text-[11px] text-warning-200">
                 Paused automatically after 5 empty runs. Toggle on to resume.
               </p>
             )}
@@ -289,7 +291,7 @@ function ArtifactExtractionSection(): JSX.Element {
           </button>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -317,7 +319,7 @@ function ArchivedSessionRow({
     <div className="flex items-start justify-between gap-3 px-4 py-3">
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-fg">{label}</p>
-        <p className="mt-0.5 text-xs text-fg-faint">
+        <p className="mt-1 text-xs text-fg-faint">
           Archived {formatRelative(session.archivedAt ?? 0)} · {session.messageCount} messages
         </p>
       </div>
@@ -334,7 +336,7 @@ function ArchivedSessionRow({
 }
 
 const Row = ({ k, v }: { k: string; v: unknown }): JSX.Element => (
-  <div className="grid grid-cols-[max-content_1fr] items-center gap-3 px-4 py-3">
+  <div className="grid grid-cols-[140px_1fr] items-start gap-4 px-4 py-3">
     <dt className="text-xs uppercase tracking-wide text-fg-faint">{k}</dt>
     <dd className="text-sm text-fg">{String(v ?? "—")}</dd>
   </div>

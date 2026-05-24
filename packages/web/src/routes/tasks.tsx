@@ -117,7 +117,7 @@ function TasksRoute(): JSX.Element {
                       <p className={cn("truncate text-sm", t.completedAt ? "text-fg-faint line-through" : "text-fg")}>
                         {t.content}
                       </p>
-                      <p className="mt-0.5 flex items-center gap-1.5 text-xs text-fg-muted">
+                      <p className="mt-1 flex items-center gap-1.5 text-xs text-fg-muted">
                         {t.priority && (
                           <span
                             aria-hidden
