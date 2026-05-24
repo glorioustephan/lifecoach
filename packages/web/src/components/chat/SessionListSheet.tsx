@@ -96,8 +96,8 @@ export const SessionListSheet = ({
                           isActive && "bg-surface-elevated/60"
                         )}
                       >
-                        <div className="flex items-baseline justify-between gap-3">
-                          <span className="truncate text-sm text-fg">{label}</span>
+                        <div className="flex min-w-0 items-baseline justify-between gap-2">
+                          <span className="min-w-0 truncate text-sm text-fg">{label}</span>
                           <span className="shrink-0 font-mono text-[10px] text-fg-faint">
                             {formatRelative(s.startedAt)}
                           </span>
