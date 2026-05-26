@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { MessageCircle, Archive } from "lucide-react";
+import { MessageCircle, Archive, Plus } from "lucide-react";
 import { api } from "~/lib/api";
 import { formatRelative } from "~/lib/time";
 import { cn } from "~/lib/cn";
@@ -11,12 +11,15 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   /** Used to highlight the currently-active session in the list. */
   activeSessionId?: string;
+  /** Starts a fresh conversation from inside the drawer (replaces the old header "+ New"). */
+  onNewConversation?: () => void;
 }
 
 export const SessionListSheet = ({
   open,
   onOpenChange,
   activeSessionId,
+  onNewConversation,
 }: Props): JSX.Element => {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -54,6 +57,21 @@ export const SessionListSheet = ({
     <Sheet open={open} onOpenChange={onOpenChange} side="left" width="md:w-[400px] w-[85vw]">
       <SheetHeader title="Past conversations" onClose={() => onOpenChange(false)} />
       <SheetBody>
+        {onNewConversation && (
+          <div className="px-4 pt-3">
+            <button
+              type="button"
+              onClick={() => {
+                onNewConversation();
+                onOpenChange(false);
+              }}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border-subtle px-3 py-2 text-sm text-fg-muted transition-colors hover:border-accent/40 hover:bg-surface-elevated hover:text-fg"
+            >
+              <Plus className="size-4" strokeWidth={1.75} />
+              New conversation
+            </button>
+          </div>
+        )}
         {isLoading && (
           <div className="px-4 py-6 space-y-2">
             {Array.from({ length: 6 }).map((_, i) => (

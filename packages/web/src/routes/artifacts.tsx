@@ -94,7 +94,7 @@ function GenerateButton(): JSX.Element {
         loading={generate.isPending}
       >
         <Sparkles className="size-3.5" strokeWidth={1.75} />
-        {generate.isPending ? "scanning…" : "Generate now"}
+        {generate.isPending ? "extracting…" : "Extract Artifacts"}
       </Button>
     </div>
   );
@@ -170,7 +170,7 @@ function ArtifactsRoute(): JSX.Element {
               </span>
               <ChevronDown className="size-4 text-fg-muted" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="min-w-48">
+            <DropdownMenuContent align="start" className="min-w-48 border-accent/40">
               <DropdownMenuLabel>Filter by type</DropdownMenuLabel>
               <DropdownMenuRadioGroup value={typeFilter} onValueChange={(v) => handleTypeChange(v)}>
                 <DropdownMenuRadioItem value="all">All types</DropdownMenuRadioItem>
@@ -218,7 +218,7 @@ function ArtifactsRoute(): JSX.Element {
                 <ul className="mt-2 space-y-1 text-left text-xs text-fg-faint">
                   <li>• Press <span className="text-fg-muted">Save</span> under a coach reply that contains one (e.g. a recipe).</li>
                   <li>• A daily background scan surfaces them from past conversations.</li>
-                  <li>• Run <span className="text-fg-muted">Generate now</span> above to scan immediately.</li>
+                  <li>• Run <span className="text-fg-muted">Extract Artifacts</span> above to scan immediately.</li>
                 </ul>
               </div>
             )

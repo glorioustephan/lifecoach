@@ -95,7 +95,7 @@ function InboxRoute(): JSX.Element {
             )}
           >
             <Sparkles className="size-3.5" strokeWidth={1.75} />
-            {generate.isPending ? "thinking…" : "Generate"}
+            {generate.isPending ? "generating…" : "Generate Insights"}
           </button>
         }
       />

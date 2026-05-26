@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Menu, Plus } from "lucide-react";
+import { History } from "lucide-react";
 import { sendChat, type ChatEvent } from "~/lib/chat-stream";
 import { useProfileName } from "~/lib/use-profile";
 import { getGreeting } from "~/lib/greeting";
@@ -19,6 +19,7 @@ import {
 } from "~/components/ui/chat-container";
 import { ScrollButton } from "~/components/ui/scroll-button";
 import { PromptSuggestion } from "~/components/ui/prompt-suggestion";
+import { ViewHeader } from "~/components/ui/ViewHeader";
 
 interface Props {
   /** When set, this ChatView is bound to a specific session (the /c/$id route).
@@ -220,32 +221,26 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="relative flex h-16 items-center justify-between border-b border-border px-4">
-        <button
-          type="button"
-          onClick={() => setHistoryOpen(true)}
-          aria-label="Open conversation history"
-          className="flex size-9 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg"
-        >
-          <Menu className="size-4" strokeWidth={1.75} />
-        </button>
-        <h1 className="absolute left-1/2 -translate-x-1/2 text-sm font-medium text-fg-muted">
-          {ctxSessionId ? "Conversation" : "New conversation"}
-        </h1>
-        <button
-          type="button"
-          onClick={handleNewConversation}
-          aria-label="New conversation"
-          className="flex h-9 items-center gap-1 rounded-md px-2.5 text-xs text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg"
-        >
-          <Plus className="size-4" strokeWidth={1.75} />
-          <span className="hidden md:inline">New</span>
-        </button>
-      </header>
+      <ViewHeader
+        title="Chat"
+        subtitle={ctxSessionId ? "Continuing your conversation" : "Start a new conversation"}
+        actions={
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(true)}
+            aria-label="View conversation history"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-xs text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg"
+          >
+            <History className="size-4" strokeWidth={1.75} />
+            <span>View History</span>
+          </button>
+        }
+      />
 
       <SessionListSheet
         open={historyOpen}
         onOpenChange={setHistoryOpen}
+        onNewConversation={handleNewConversation}
         {...(ctxSessionId ? { activeSessionId: ctxSessionId } : {})}
       />
 
