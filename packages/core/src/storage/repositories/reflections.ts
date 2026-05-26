@@ -84,6 +84,43 @@ export class ReflectionRepository {
     return row ? rowToReflection(row) : undefined;
   }
 
+  /**
+   * Find a reflection already generated for the exact (kind, period) window.
+   * Used to dedup re-runs — a repeated cron fire over the same window should
+   * reuse the existing reflection rather than generate (and re-push) another.
+   */
+  findByPeriod(
+    kind: ReflectionKind,
+    periodStart: number,
+    periodEnd: number,
+  ): Reflection | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id, period_start, period_end, kind, title, themes, wins,
+                concerns, open_threads, body, created_at
+         FROM reflections
+         WHERE kind = ? AND period_start = ? AND period_end = ?
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(kind, periodStart, periodEnd) as ReflectionRow | undefined;
+    return row ? rowToReflection(row) : undefined;
+  }
+
+  /** Whether this reflection has already been written to a Capacities daily note. */
+  wasPushedToCapacities(id: string): boolean {
+    const row = this.db
+      .prepare("SELECT pushed_to_capacities_at FROM reflections WHERE id = ?")
+      .get(id) as { pushed_to_capacities_at: number | null } | undefined;
+    return !!row && row.pushed_to_capacities_at !== null;
+  }
+
+  /** Mark this reflection as pushed to Capacities. Idempotent. */
+  markPushedToCapacities(id: string, at: number = now()): void {
+    this.db
+      .prepare("UPDATE reflections SET pushed_to_capacities_at = ? WHERE id = ?")
+      .run(at, id);
+  }
+
   count(): number {
     const row = this.db.prepare("SELECT COUNT(*) as c FROM reflections").get() as {
       c: number;

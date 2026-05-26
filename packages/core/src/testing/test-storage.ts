@@ -23,6 +23,8 @@ export const createTestStorage = (embeddingDim = 2): TestStorageHandle => {
     todoistApiToken: undefined,
     capacitiesApiToken: undefined,
     capacitiesDefaultSpaceId: undefined,
+    capacitiesMcpUrl: undefined,
+    capacitiesMcpToken: undefined,
     monarchSessionFile: undefined,
     monarchEmail: undefined,
     monarchPassword: undefined,

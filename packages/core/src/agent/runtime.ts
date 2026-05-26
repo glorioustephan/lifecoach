@@ -14,6 +14,7 @@ import type { Insighter } from "../memory/insighter.js";
 import type { Session } from "@lifecoach/schemas";
 import { buildAllTools } from "./tools/index.js";
 import { buildSystemPrompt } from "./system-prompt.js";
+import { buildMcpServers } from "./mcp-servers.js";
 import { LifecoachError } from "../util/errors.js";
 
 export interface AgentRuntimeDeps {
@@ -46,9 +47,11 @@ export interface ChatTurnOutput {
  *   - persists user + assistant messages to episodic memory
  *   - returns the final assistant text for display
  *
- * Each call to `chat()` is one logical turn. Multi-turn coherence comes from the
- * SDK's session/`continue` mechanics combined with our persisted episodic memory,
- * which we re-inject as context on subsequent sessions.
+ * Each call to `chat()` is one logical turn. Multi-turn coherence comes from
+ * resuming the SDK's own session transcript: we persist the SDK session id on
+ * the first turn and pass it back as `options.resume` on later turns so the
+ * model sees the full conversation. Episodic memory is persisted in parallel
+ * for our own recall/reflection features, not for in-conversation context.
  */
 export class AgentRuntime {
   constructor(private readonly deps: AgentRuntimeDeps) {}
@@ -101,18 +104,25 @@ export class AgentRuntime {
 
     const systemPrompt = buildSystemPrompt(memory);
 
+    // Resume the SDK's conversation transcript on subsequent turns so the model
+    // retains what was said earlier in this session. See class doc comment.
+    const resumeId = storage.sessions.get(input.sessionId)?.sdkSessionId ?? undefined;
     const options: Options = {
       model: config.model,
       systemPrompt: { type: "preset", preset: "claude_code", append: systemPrompt },
-      mcpServers: { "lifecoach-memory": mcpServer },
+      mcpServers: buildMcpServers(config, mcpServer),
       permissionMode: "bypassPermissions",
       includePartialMessages: false,
+      ...(resumeId ? { resume: resumeId } : {}),
     };
 
     let assistantText = "";
     let toolCalls = 0;
+    let capturedSdkSessionId: string | undefined;
 
     for await (const event of query({ prompt: input.userMessage, options })) {
+      const sid = (event as { session_id?: string }).session_id;
+      if (typeof sid === "string" && sid.length > 0) capturedSdkSessionId = sid;
       if (event.type === "assistant") {
         // The SDK emits assistant message blocks incrementally.
         const blocks = event.message?.content ?? [];
@@ -124,6 +134,10 @@ export class AgentRuntime {
           }
         }
       }
+    }
+
+    if (capturedSdkSessionId && capturedSdkSessionId !== resumeId) {
+      storage.sessions.setSdkSessionId(input.sessionId, capturedSdkSessionId);
     }
 
     const assistantMessage = memory.episodic.appendMessage({

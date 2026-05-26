@@ -4,7 +4,6 @@ import type { Memory } from "../../memory/index.js";
 import type { Storage } from "../../storage/index.js";
 import type { Reflector } from "../../memory/reflector.js";
 import { kindWindow } from "../../memory/reflector.js";
-import { NotImplementedError } from "../../util/errors.js";
 
 export interface ReflectionToolDeps {
   memory: Memory;
@@ -117,23 +116,34 @@ export const buildReflectionTools = (deps: ReflectionToolDeps) => [
 
   tool(
     "record_insight",
-    "Save a generated recommendation/insight tied to the facts that support it.",
+    "Save a generated recommendation/insight tied to the facts that support it. The insight lands in the Inbox where the user can act on or dismiss it.",
     {
-      topic: z.string().min(1),
-      body: z.string().min(1),
-      rationale: z.string().optional(),
-      sourceFactIds: z.array(z.string()).default([]),
+      topic: z.string().min(1).describe("Short title (3-7 words)"),
+      body: z.string().min(1).describe("1-2 paragraph insight body addressed to the user"),
+      rationale: z.string().optional().describe("One sentence explaining why this matters now"),
+      sourceFactIds: z.array(z.string()).default([]).describe("Fact IDs that anchor this insight"),
+      priority: z
+        .union([z.literal(1), z.literal(2), z.literal(3)])
+        .optional()
+        .describe("1=nice to notice, 2=worth noticing, 3=needs attention soon. Default 1."),
     },
-    async ({ topic, body, rationale, sourceFactIds }) => {
-      // Stays stubbed for now — landed in Phase 4.2 (insights loop).
-      void topic;
-      void body;
-      void rationale;
-      void sourceFactIds;
-      throw new NotImplementedError(
-        "record_insight",
-        "wire to storage.insights.create — coming in Phase 4.2 (insight loop)",
-      );
+    async ({ topic, body, rationale, sourceFactIds, priority }) => {
+      const insight = deps.storage.insights.create({
+        topic,
+        body,
+        ...(rationale ? { rationale } : {}),
+        sourceFactIds: sourceFactIds ?? [],
+        evidenceRefs: [],
+        priority: (priority ?? 1) as 1 | 2 | 3,
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Saved insight ${insight.id} [p${insight.priority}] — ${insight.topic}`,
+          },
+        ],
+      };
     },
   ),
 ];

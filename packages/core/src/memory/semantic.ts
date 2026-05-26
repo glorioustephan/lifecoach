@@ -179,13 +179,115 @@ export class SemanticMemory {
     scope: RecallScope,
     limit: number,
   ): RecallHit[] {
-    if (scope !== "facts" && scope !== "all") return [];
-    const facts = this.storage.facts.keywordSearch(query, limit);
-    return facts.map<RecallHit>((f) => ({
-      refType: "fact",
-      refId: f.id,
-      text: `[${f.category}/${f.subject}] ${f.body}`,
-      score: 0.5,
-    }));
+    const hits: RecallHit[] = [];
+    const lower = query.toLowerCase();
+
+    // Facts: full-text substring match on subject + body.
+    if (scope === "facts" || scope === "all") {
+      const facts = this.storage.facts.keywordSearch(query, limit);
+      for (const f of facts) {
+        hits.push({
+          refType: "fact",
+          refId: f.id,
+          text: `[${f.category}/${f.subject}] ${f.body}`,
+          score: 0.5,
+        });
+      }
+    }
+
+    // Messages: substring match on content. Mirrors keywordSearch pattern.
+    if (scope === "messages" || scope === "all") {
+      const db = this.storage.handle.db;
+      const pattern = `%${lower}%`;
+      const rows = db
+        .prepare(
+          `SELECT id, role, content, created_at AS createdAt
+           FROM messages
+           WHERE LOWER(content) LIKE ?
+           ORDER BY created_at DESC
+           LIMIT ?`,
+        )
+        .all(pattern, limit) as { id: string; role: string; content: string; createdAt: number }[];
+      for (const m of rows) {
+        hits.push({
+          refType: "message",
+          refId: m.id,
+          text: `[message/${m.role}] ${m.content.slice(0, 300)}`,
+          score: 0.4,
+        });
+      }
+    }
+
+    // Documents: substring match on title + body prefix.
+    if (scope === "documents" || scope === "all") {
+      const db = this.storage.handle.db;
+      const pattern = `%${lower}%`;
+      const rows = db
+        .prepare(
+          `SELECT id, source, title, SUBSTR(body, 1, 300) AS bodyPreview
+           FROM documents
+           WHERE LOWER(COALESCE(title,'')) LIKE ? OR LOWER(body) LIKE ?
+           ORDER BY ingested_at DESC
+           LIMIT ?`,
+        )
+        .all(pattern, pattern, limit) as { id: string; source: string; title: string | null; bodyPreview: string }[];
+      for (const d of rows) {
+        hits.push({
+          refType: "document",
+          refId: d.id,
+          text: `[document] ${d.title ?? d.source}: ${d.bodyPreview}`,
+          score: 0.4,
+        });
+      }
+    }
+
+    // Reflections: substring match on body.
+    if (scope === "reflections" || scope === "all") {
+      const db = this.storage.handle.db;
+      const pattern = `%${lower}%`;
+      const rows = db
+        .prepare(
+          `SELECT id, kind, period_end AS periodEnd, SUBSTR(body, 1, 300) AS bodyPreview
+           FROM reflections
+           WHERE LOWER(body) LIKE ?
+           ORDER BY period_end DESC
+           LIMIT ?`,
+        )
+        .all(pattern, limit) as { id: string; kind: string; periodEnd: number; bodyPreview: string }[];
+      for (const r of rows) {
+        hits.push({
+          refType: "reflection",
+          refId: r.id,
+          text: `[reflection/${r.kind}] ${new Date(r.periodEnd).toISOString().slice(0, 10)}: ${r.bodyPreview}`,
+          score: 0.4,
+        });
+      }
+    }
+
+    // Tasks: substring match on content + description.
+    if (scope === "tasks" || scope === "all") {
+      const db = this.storage.handle.db;
+      const pattern = `%${lower}%`;
+      const rows = db
+        .prepare(
+          `SELECT id, content, COALESCE(description,'') AS description
+           FROM tasks
+           WHERE completed_at IS NULL
+             AND (LOWER(content) LIKE ? OR LOWER(COALESCE(description,'')) LIKE ?)
+           ORDER BY created_at DESC
+           LIMIT ?`,
+        )
+        .all(pattern, pattern, limit) as { id: string; content: string; description: string }[];
+      for (const t of rows) {
+        hits.push({
+          refType: "task",
+          refId: t.id,
+          text: `[task] ${t.content}${t.description ? ": " + t.description.slice(0, 200) : ""}`,
+          score: 0.4,
+        });
+      }
+    }
+
+    return hits.slice(0, limit);
   }
 }

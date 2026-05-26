@@ -35,6 +35,9 @@ data-prod/
 .idea/
 .vscode/
 
+# Ephemeral Claude Code agent worktrees
+.claude/worktrees/
+
 # Logs
 *.log
 npm-debug.log*

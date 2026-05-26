@@ -161,7 +161,7 @@ export const buildCapacitiesTools = (deps: CapacitiesToolDeps) => [
 
   tool(
     "list_local_capacities_directory",
-    "List Capacities objects we've already mirrored locally via `lifecoach sync capacities`. Faster than lookup_in_capacities for browsing — no API call.",
+    "List Capacities objects we've mirrored locally via `lifecoach sync capacities`. This is a TITLE-ONLY directory — it tells you a page exists and its type/space/URL, but NOT its contents. Faster than lookup_in_capacities for browsing (no API call). To read a page's body, use the Capacities MCP content tools (if configured) or open the capacities:// URL; never infer contents from a title here.",
     {
       limit: z.number().int().min(1).max(200).optional().describe("Default: 50"),
     },

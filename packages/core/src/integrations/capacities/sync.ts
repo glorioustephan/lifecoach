@@ -68,24 +68,40 @@ const toNewDocument = (
   result: CapacitiesLookupResult,
   structure: CapacitiesStructure | undefined,
   space: CapacitiesSpace,
-): NewDocument => ({
-  source: CAPACITIES_SOURCE,
-  mime: "application/vnd.capacities.object+json",
-  title: result.title,
-  // Body is intentionally minimal — Capacities doesn't expose object content.
-  // Embedding text is built from this + structure name; full detail lives in Capacities.
-  body: `${structure?.title ?? "Object"}: ${result.title}`,
-  metadata: {
-    spaceId: space.id,
-    spaceTitle: space.title,
-    structureId: result.structureId,
-    structureTitle: structure?.title ?? null,
-    structurePluralName: structure?.pluralName ?? null,
-    url: CapacitiesClient.buildObjectUrl(space.id, result.id),
-  },
-  externalId: result.id,
-  externalSource: CAPACITIES_SOURCE,
-});
+): NewDocument => {
+  const typeLabel = structure?.title ?? "object";
+  // The body is deliberately a SELF-DESCRIBING STUB, not a claim of content.
+  // The REST /lookup sweep that builds this directory only returns titles —
+  // it has no access to page bodies. Spelling that out here means that when
+  // recall surfaces this document, the model reads an honest note instead of
+  // assuming it holds the page's contents (which previously led the coach to
+  // confidently "summarize" a page it had only the title of).
+  const body =
+    `Capacities ${typeLabel} titled "${result.title}" (directory entry).\n\n` +
+    `Only the title is mirrored locally — the page body is NOT stored here. ` +
+    `To read its actual contents: use the Capacities MCP tools (search / get_capacities_object_content) ` +
+    `if configured, open it in Capacities, or ask the user to paste/export it. ` +
+    `Do not infer or fabricate the body from the title alone.`;
+  return {
+    source: CAPACITIES_SOURCE,
+    mime: "application/vnd.capacities.object+json",
+    title: result.title,
+    body,
+    metadata: {
+      spaceId: space.id,
+      spaceTitle: space.title,
+      structureId: result.structureId,
+      structureTitle: structure?.title ?? null,
+      structurePluralName: structure?.pluralName ?? null,
+      url: CapacitiesClient.buildObjectUrl(space.id, result.id),
+      // Explicit flag so other code (artifact scan, recall) can tell this is a
+      // title-only stub and skip treating it as real content.
+      contentMirrored: false,
+    },
+    externalId: result.id,
+    externalSource: CAPACITIES_SOURCE,
+  };
+};
 
 /**
  * Sweep one space: run every `searchTerm` through /lookup, dedupe by object id,

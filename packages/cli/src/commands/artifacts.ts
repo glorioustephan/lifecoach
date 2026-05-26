@@ -4,6 +4,7 @@ import { Command } from "commander";
 import {
   createLifecoach,
   scanArtifacts,
+  scanDocumentArtifacts,
   getArtifactSettings,
   recordCronRun,
   MIN_CRON_CONFIDENCE,
@@ -20,9 +21,10 @@ export const registerArtifacts = (program: Command): void => {
 
   artifacts
     .command("extract")
-    .description("Daily pass: scan recent conversations and save high-confidence artifacts")
+    .description("Daily pass: scan recent conversations AND ingested documents, saving high-confidence artifacts")
     .option("--force", "Run even when auto-extract is disabled in settings")
-    .action(async (opts: { force?: boolean }) => {
+    .option("--backfill", "Scan the entire document corpus (since the beginning), not just recently ingested ones")
+    .action(async (opts: { force?: boolean; backfill?: boolean }) => {
       const lc = createLifecoach();
       if (!lc.artifactExtractor) {
         console.error(chalk.red("ANTHROPIC_API_KEY isn't set — artifact extraction can't run."));
@@ -55,26 +57,41 @@ export const registerArtifacts = (program: Command): void => {
               { storage: lc.storage, extractor },
               { sinceMs, minConfidence: MIN_CRON_CONFIDENCE, origin: "cron" },
             );
+            // Also sweep ingested documents (recipes living in exported/dropped
+            // files, not just chat). Backfill from the beginning on demand.
+            const docResult = await scanDocumentArtifacts(
+              { storage: lc.storage, extractor },
+              {
+                sinceMs: opts.backfill ? 0 : sinceMs,
+                minConfidence: MIN_CRON_CONFIDENCE,
+                origin: "cron",
+              },
+            );
             const run = recordCronRun(lc.storage, {
               scannedUntil: result.scannedUntil,
-              created: result.created.length,
+              created: result.created.length + docResult.created.length,
             });
-            return { result, run };
+            return { result, docResult, run };
           },
           {
-            generatedRefs: ({ result }) =>
-              result.created.map((artifact) => ({ refType: "artifact", refId: artifact.id })),
+            generatedRefs: ({ result, docResult }) =>
+              [...result.created, ...docResult.created].map((artifact) => ({
+                refType: "artifact",
+                refId: artifact.id,
+              })),
           },
         );
         if (job.status === "skipped") {
           spinner.succeed(`Artifact extraction already running (${job.activeRunId}).`);
           return;
         }
-        const { result, run } = job.result;
+        const { result, docResult, run } = job.result;
+        const allCreated = [...result.created, ...docResult.created];
 
-        if (result.created.length === 0) {
+        if (allCreated.length === 0) {
           spinner.succeed(
-            `No new artifacts (${result.sessionsScanned} session(s), ${result.candidateSessions} candidate(s)). ` +
+            `No new artifacts (${result.sessionsScanned} session(s), ${result.candidateSessions} candidate(s); ` +
+              `${docResult.documentsScanned} doc(s), ${docResult.candidateDocuments} candidate(s)). ` +
               `Empty-run streak: ${run.emptyStreak}/${EMPTY_RUN_LIMIT}.`,
           );
           if (run.autoDisabled) {
@@ -86,9 +103,10 @@ export const registerArtifacts = (program: Command): void => {
           }
         } else {
           spinner.succeed(
-            `Saved ${result.created.length} artifact(s) from ${result.candidateSessions} candidate session(s).`,
+            `Saved ${allCreated.length} artifact(s) — ${result.created.length} from ${result.candidateSessions} session(s), ` +
+              `${docResult.created.length} from ${docResult.candidateDocuments} document(s).`,
           );
-          for (const a of result.created) {
+          for (const a of allCreated) {
             const label = getArtifactDescriptor(a.type)?.label ?? a.type;
             console.log(`${chalk.dim(`[${label}]`)} ${chalk.bold(a.title)}`);
           }

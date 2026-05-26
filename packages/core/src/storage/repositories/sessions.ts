@@ -8,7 +8,11 @@ interface SessionRow {
   ended_at: number | null;
   summary: string | null;
   archived_at: number | null;
+  sdk_session_id: string | null;
 }
+
+const SELECT_COLUMNS =
+  "id, started_at, ended_at, summary, archived_at, sdk_session_id";
 
 const rowToSession = (row: SessionRow): Session => ({
   id: row.id,
@@ -16,6 +20,7 @@ const rowToSession = (row: SessionRow): Session => ({
   endedAt: row.ended_at,
   summary: row.summary,
   archivedAt: row.archived_at,
+  sdkSessionId: row.sdk_session_id,
 });
 
 export class SessionRepository {
@@ -27,7 +32,7 @@ export class SessionRepository {
     this.db
       .prepare("INSERT INTO sessions(id, started_at) VALUES (?, ?)")
       .run(id, startedAt);
-    return { id, startedAt, endedAt: null, summary: null };
+    return { id, startedAt, endedAt: null, summary: null, sdkSessionId: null };
   }
 
   end(id: string, summary?: string): void {
@@ -36,11 +41,20 @@ export class SessionRepository {
       .run(now(), summary ?? null, id);
   }
 
+  /**
+   * Record (or update) the Claude Agent SDK session id for this conversation.
+   * Called once the first turn's init event reveals it; updated if a later turn
+   * forks to a new id. Idempotent — writing the same id is a no-op.
+   */
+  setSdkSessionId(id: string, sdkSessionId: string): void {
+    this.db
+      .prepare("UPDATE sessions SET sdk_session_id = ? WHERE id = ?")
+      .run(sdkSessionId, id);
+  }
+
   get(id: string): Session | undefined {
     const row = this.db
-      .prepare(
-        "SELECT id, started_at, ended_at, summary, archived_at FROM sessions WHERE id = ?"
-      )
+      .prepare(`SELECT ${SELECT_COLUMNS} FROM sessions WHERE id = ?`)
       .get(id) as SessionRow | undefined;
     return row ? rowToSession(row) : undefined;
   }
@@ -49,7 +63,7 @@ export class SessionRepository {
     const whereClause = includeArchived ? "" : "WHERE archived_at IS NULL";
     const rows = this.db
       .prepare(
-        `SELECT id, started_at, ended_at, summary, archived_at FROM sessions ${whereClause} ORDER BY started_at DESC LIMIT ?`
+        `SELECT ${SELECT_COLUMNS} FROM sessions ${whereClause} ORDER BY started_at DESC LIMIT ?`
       )
       .all(limit) as SessionRow[];
     return rows.map(rowToSession);
@@ -58,7 +72,7 @@ export class SessionRepository {
   archived(limit = 20): Session[] {
     const rows = this.db
       .prepare(
-        "SELECT id, started_at, ended_at, summary, archived_at FROM sessions WHERE archived_at IS NOT NULL ORDER BY archived_at DESC LIMIT ?"
+        `SELECT ${SELECT_COLUMNS} FROM sessions WHERE archived_at IS NOT NULL ORDER BY archived_at DESC LIMIT ?`
       )
       .all(limit) as SessionRow[];
     return rows.map(rowToSession);

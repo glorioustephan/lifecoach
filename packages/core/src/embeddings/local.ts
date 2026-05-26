@@ -1,5 +1,4 @@
 import type { Embedder } from "./embedder.js";
-import { NotImplementedError } from "../util/errors.js";
 
 /**
  * Local on-device embedder fallback using @xenova/transformers (BGE-small).
@@ -10,9 +9,13 @@ import { NotImplementedError } from "../util/errors.js";
  *      with 'Xenova/bge-small-en-v1.5'.
  *   3. Pool the token embeddings (mean pool) and L2-normalize to get a 384-d vector.
  *   4. Make sure LIFECOACH_EMBEDDING_DIM matches the model output dimension.
+ *
+ * Until those steps are complete, LocalEmbedder has enabled=false so callers
+ * degrade to keyword search rather than throwing at runtime.
  */
 export class LocalEmbedder implements Embedder {
-  readonly enabled = true;
+  /** False until the @xenova/transformers pipeline is wired in. */
+  readonly enabled = false;
   readonly metadata: Embedder["metadata"];
 
   constructor(readonly dimension: number) {
@@ -20,18 +23,14 @@ export class LocalEmbedder implements Embedder {
   }
 
   async embed(_texts: string[]): Promise<number[][]> {
-    throw new NotImplementedError(
-      "LocalEmbedder.embed",
-      "see packages/core/src/embeddings/local.ts for wiring instructions",
-    );
+    return [];
   }
 
   async embedDocuments(texts: string[]): Promise<number[][]> {
     return this.embed(texts);
   }
 
-  async embedQuery(text: string): Promise<number[]> {
-    const [vec] = await this.embed([text]);
-    return vec ?? [];
+  async embedQuery(_text: string): Promise<number[]> {
+    return [];
   }
 }

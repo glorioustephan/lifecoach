@@ -19,6 +19,15 @@ export interface LifecoachConfig {
    * When unset, write-back tools fail unless the agent specifies a spaceId.
    */
   capacitiesDefaultSpaceId: string | undefined;
+  /**
+   * Capacities MCP server URL (default https://api.capacities.io/mcp). When a
+   * token is also set, the agent gains live `search` / `getObjectContent` tools
+   * that CAN read page bodies — the one thing the REST API can't do. Requires
+   * completing Capacities' MCP OAuth authorization (see env.example).
+   */
+  capacitiesMcpUrl: string | undefined;
+  /** Bearer token for the Capacities MCP server. When unset, the MCP is not wired in. */
+  capacitiesMcpToken: string | undefined;
   monarchSessionFile: string | undefined;
   /** Email for Monarch Money login (MONARCH_EMAIL). Used when no session file exists. */
   monarchEmail: string | undefined;
@@ -123,6 +132,11 @@ export const loadConfig = (overrides: Partial<LifecoachConfig> = {}): LifecoachC
     capacitiesApiToken: overrides.capacitiesApiToken ?? process.env.CAPACITIES_API_TOKEN,
     capacitiesDefaultSpaceId:
       overrides.capacitiesDefaultSpaceId ?? process.env.CAPACITIES_DEFAULT_SPACE_ID,
+    capacitiesMcpUrl:
+      overrides.capacitiesMcpUrl
+      ?? process.env.CAPACITIES_MCP_URL
+      ?? "https://api.capacities.io/mcp",
+    capacitiesMcpToken: overrides.capacitiesMcpToken ?? process.env.CAPACITIES_MCP_TOKEN,
     monarchSessionFile: overrides.monarchSessionFile ?? process.env.MONARCH_SESSION_FILE,
     monarchEmail: overrides.monarchEmail ?? process.env.MONARCH_EMAIL,
     monarchPassword: overrides.monarchPassword ?? process.env.MONARCH_PASSWORD,

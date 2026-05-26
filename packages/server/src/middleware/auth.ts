@@ -30,9 +30,13 @@ export const requireAuth = (config: AuthConfig): MiddlewareHandler => async (c, 
     await next();
     return;
   }
-  // Placeholder: a real session check goes here in Phase 2.B.
-  const cookieEmail = c.req.header("x-lifecoach-email")?.toLowerCase();
-  if (cookieEmail && config.allowedEmails.includes(cookieEmail)) {
+  // Phase 2.A: Tailscale is the primary security boundary. When LIFECOACH_ALLOWED_EMAILS
+  // is set, we add a soft identity check using the `x-lifecoach-email` header.
+  // This is NOT a cryptographic session — it only acts as an additional convenience
+  // gate for personal deployments already behind Tailscale's device trust.
+  // Phase 2.B will replace this with Google OAuth + httpOnly session cookies.
+  const requestEmail = c.req.header("x-lifecoach-email")?.toLowerCase();
+  if (requestEmail && config.allowedEmails.includes(requestEmail)) {
     await next();
     return;
   }

@@ -53,18 +53,26 @@ export const registerReflect = (program: Command): void => {
           const run = await lc.storage.jobs.run(
             `reflect.${kind}`,
             async () => {
-              const reflection = await reflector.generate(
-                lc.storage,
-                lc.memory.identity,
-                kind,
-                from,
-                to,
-              );
-              await lc.memory.semantic.indexReflection(reflection);
+              // Dedup: if a reflection for this exact window already exists
+              // (e.g. a repeated cron fire), reuse it instead of generating —
+              // and re-pushing — a duplicate.
+              const existing = lc.storage.reflections.findByPeriod(kind, from, to);
+              const reflection =
+                existing ??
+                (await reflector.generate(
+                  lc.storage,
+                  lc.memory.identity,
+                  kind,
+                  from,
+                  to,
+                ));
+              if (!existing) {
+                await lc.memory.semantic.indexReflection(reflection);
+              }
 
               // Capacities write-back — only attempt for daily/weekly (monthly is
               // typically too long for a daily note entry). Caller can override
-              // with --no-capacities.
+              // with --no-capacities. The tracker makes the push idempotent.
               const writebackEligible = (kind === "daily" || kind === "weekly")
                 && opts.capacities !== false;
               const writeback = writebackEligible
@@ -72,9 +80,10 @@ export const registerReflect = (program: Command): void => {
                     enabled: true,
                     client: lc.capacities,
                     spaceId: lc.config.capacitiesDefaultSpaceId,
+                    tracker: lc.storage.reflections,
                   })
                 : null;
-              return { reflection, writeback };
+              return { reflection, writeback, reused: !!existing };
             },
             {
               generatedRefs: ({ reflection }) => [
@@ -86,8 +95,12 @@ export const registerReflect = (program: Command): void => {
             spinner.succeed(`Reflection already running (${run.activeRunId}).`);
             return;
           }
-          const { reflection, writeback } = run.result;
-          spinner.succeed(`Wrote ${kind} reflection ${reflection.id}`);
+          const { reflection, writeback, reused } = run.result;
+          spinner.succeed(
+            reused
+              ? `Reused existing ${kind} reflection ${reflection.id} (already generated for this window)`
+              : `Wrote ${kind} reflection ${reflection.id}`,
+          );
           console.log(
             chalk.dim(
               `  ${new Date(from).toISOString().slice(0, 10)} → ${new Date(to).toISOString().slice(0, 10)}`,
@@ -97,6 +110,8 @@ export const registerReflect = (program: Command): void => {
           if (writeback) {
             if (writeback.pushed) {
               console.log(chalk.dim("  → pushed to Capacities daily note"));
+            } else if (writeback.reason === "already_pushed") {
+              console.log(chalk.dim("  · already in Capacities daily note (skipped)"));
             } else if (writeback.reason === "no_default_space") {
               console.log(
                 chalk.dim("  · skipped Capacities write-back (CAPACITIES_DEFAULT_SPACE_ID not set)"),

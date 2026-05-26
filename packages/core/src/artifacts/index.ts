@@ -22,7 +22,13 @@ export {
   artifactPluginsFor,
 } from "./registry.js";
 export type { ArtifactPlugin, FormattedArtifact, ExtractedArtifact } from "./types.js";
-export { scanArtifacts, type ScanOptions, type ScanResult } from "./scan.js";
+export {
+  scanArtifacts,
+  scanDocumentArtifacts,
+  type ScanOptions,
+  type ScanResult,
+  type DocumentScanResult,
+} from "./scan.js";
 export {
   ARTIFACT_PROFILE_KEYS,
   EMPTY_RUN_LIMIT,

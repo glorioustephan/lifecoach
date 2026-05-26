@@ -390,7 +390,7 @@ export class FinancialRepository {
     const ts = now();
     this.db
       .prepare(
-        `INSERT INTO budgets(id, category, month, limit, spent, status, created_at, updated_at)
+        `INSERT INTO budgets(id, category, month, "limit", spent, status, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(id, budget.category, budget.month, budget.limit, budget.spent ?? 0, budget.status, ts, ts);
@@ -405,7 +405,7 @@ export class FinancialRepository {
     if (existing) {
       const ts = now();
       this.db
-        .prepare(`UPDATE budgets SET limit = ?, spent = ?, status = ?, updated_at = ? WHERE id = ?`)
+        .prepare(`UPDATE budgets SET "limit" = ?, spent = ?, status = ?, updated_at = ? WHERE id = ?`)
         .run(budget.limit, budget.spent ?? 0, budget.status, ts, existing.id);
       return this.getBudget(existing.id)!;
     }
@@ -415,7 +415,7 @@ export class FinancialRepository {
   getBudget(id: string): Budget | undefined {
     const row = this.db
       .prepare(
-        `SELECT id, category, month, limit, spent, status, created_at, updated_at FROM budgets WHERE id = ?`,
+        `SELECT id, category, month, "limit", spent, status, created_at, updated_at FROM budgets WHERE id = ?`,
       )
       .get(id) as BudgetRow | undefined;
     return row ? rowToBudget(row) : undefined;
@@ -424,14 +424,14 @@ export class FinancialRepository {
   getBudgetByMonthAndCategory(month: string, category: string): Budget | undefined {
     const row = this.db
       .prepare(
-        `SELECT id, category, month, limit, spent, status, created_at, updated_at FROM budgets WHERE month = ? AND category = ?`,
+        `SELECT id, category, month, "limit", spent, status, created_at, updated_at FROM budgets WHERE month = ? AND category = ?`,
       )
       .get(month, category) as BudgetRow | undefined;
     return row ? rowToBudget(row) : undefined;
   }
 
   listBudgets(month?: string): Budget[] {
-    let sql = `SELECT id, category, month, limit, spent, status, created_at, updated_at FROM budgets WHERE 1=1`;
+    let sql = `SELECT id, category, month, "limit", spent, status, created_at, updated_at FROM budgets WHERE 1=1`;
     const params: unknown[] = [];
 
     if (month) {

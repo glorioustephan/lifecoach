@@ -13,6 +13,7 @@ interface ArtifactRow {
   origin: string;
   source_session_id: string | null;
   source_message_ids: string;
+  source_document_id: string | null;
   dedup_key: string | null;
   created_at: number;
   updated_at: number;
@@ -20,7 +21,7 @@ interface ArtifactRow {
 
 const FULL =
   "id, type, title, body, category, tags, confidence, origin, " +
-  "source_session_id, source_message_ids, dedup_key, created_at, updated_at";
+  "source_session_id, source_message_ids, source_document_id, dedup_key, created_at, updated_at";
 
 const rowToArtifact = (row: ArtifactRow): Artifact => ({
   id: row.id,
@@ -33,6 +34,7 @@ const rowToArtifact = (row: ArtifactRow): Artifact => ({
   origin: row.origin as ArtifactOrigin,
   sourceSessionId: row.source_session_id,
   sourceMessageIds: JSON.parse(row.source_message_ids) as string[],
+  sourceDocumentId: row.source_document_id,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -60,7 +62,7 @@ export class ArtifactRepository {
     const dedupKey = artifactDedupKey(a.type, a.title);
     this.db
       .prepare(
-        `INSERT INTO artifacts(${FULL}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO artifacts(${FULL}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -73,6 +75,7 @@ export class ArtifactRepository {
         a.origin ?? "manual",
         a.sourceSessionId ?? null,
         JSON.stringify(sourceMessageIds),
+        a.sourceDocumentId ?? null,
         dedupKey,
         ts,
         ts,
@@ -88,6 +91,7 @@ export class ArtifactRepository {
       origin: (a.origin ?? "manual") as ArtifactOrigin,
       sourceSessionId: a.sourceSessionId ?? null,
       sourceMessageIds,
+      sourceDocumentId: a.sourceDocumentId ?? null,
       createdAt: ts,
       updatedAt: ts,
     };

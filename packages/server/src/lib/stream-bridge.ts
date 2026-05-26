@@ -6,6 +6,7 @@ import {
 import type { Lifecoach } from "@lifecoach/core";
 import { buildAllTools } from "@lifecoach/core/agent";
 import { buildSystemPrompt } from "@lifecoach/core/agent";
+import { buildMcpServers } from "@lifecoach/core/agent";
 
 /**
  * Streams a chat turn from the Claude Agent SDK and yields events suitable
@@ -64,16 +65,30 @@ export async function* streamChatTurn(
   });
 
   const systemPrompt = buildSystemPrompt(memory);
-  const options: Options = {
+  const baseOptions: Options = {
     model: config.model,
     systemPrompt: { type: "preset", preset: "claude_code", append: systemPrompt },
-    mcpServers: { "lifecoach-memory": mcpServer },
+    mcpServers: buildMcpServers(config, mcpServer),
     permissionMode: "bypassPermissions",
     includePartialMessages: true,
   };
 
+  // Multi-turn coherence: the SDK owns the conversation transcript under its own
+  // session id. On the first turn there is none; on later turns we resume so the
+  // model actually sees what was said earlier in THIS conversation. Without this
+  // every turn was stateless and the coach would "forget" mid-conversation.
+  const resumeId = lc.storage.sessions.get(input.sessionId)?.sdkSessionId ?? undefined;
+  // If a resume target is stale (transcript cleared, moved machines), fall back
+  // to a fresh session rather than hard-failing the turn — but only before we've
+  // emitted anything, so the client never sees a half-rendered, restarted reply.
+  const attempts: Options[] = resumeId
+    ? [{ ...baseOptions, resume: resumeId }, baseOptions]
+    : [baseOptions];
+
   let assistantText = "";
   let toolCallCount = 0;
+  let capturedSdkSessionId: string | undefined;
+  let emittedAny = false;
   // Tracks whether the most recent event was a tool call (or its result). When
   // text resumes after that, we need to inject paragraph spacing — otherwise
   // the text block immediately preceding the tool ("Logging this…") concats
@@ -81,75 +96,112 @@ export async function* streamChatTurn(
   // separator. The Anthropic SDK emits these as distinct content blocks, but
   // delta-level streaming doesn't expose the boundary.
   let pendingTextSeparator = false;
+  let streamError: unknown;
 
-  try {
-    for await (const event of query({ prompt: input.userMessage, options })) {
-      if (event.type === "stream_event") {
-        // Streaming text delta from the assistant.
-        const delta = event.event;
-        if (delta?.type === "content_block_delta" && delta.delta?.type === "text_delta") {
-          let text = delta.delta.text ?? "";
-          if (text.length > 0) {
-            if (pendingTextSeparator) {
-              // Only inject if the accumulated text doesn't already end in
-              // whitespace and the incoming delta doesn't start with it.
-              const needsSep =
-                assistantText.length > 0 &&
-                !/\s$/.test(assistantText) &&
-                !/^\s/.test(text);
-              if (needsSep) text = "\n\n" + text;
-              pendingTextSeparator = false;
+  for (let attempt = 0; attempt < attempts.length; attempt += 1) {
+    const options = attempts[attempt]!;
+    const isLast = attempt === attempts.length - 1;
+    streamError = undefined;
+    try {
+      for await (const event of query({ prompt: input.userMessage, options })) {
+        // Every SDK message carries the session id; capture it so we can resume
+        // this conversation on the next turn. The init event is the earliest.
+        const sid = (event as { session_id?: string }).session_id;
+        if (typeof sid === "string" && sid.length > 0) capturedSdkSessionId = sid;
+
+        if (event.type === "stream_event") {
+          // Streaming text delta from the assistant.
+          const delta = event.event;
+          if (delta?.type === "content_block_delta" && delta.delta?.type === "text_delta") {
+            let text = delta.delta.text ?? "";
+            if (text.length > 0) {
+              if (pendingTextSeparator) {
+                // Only inject if the accumulated text doesn't already end in
+                // whitespace and the incoming delta doesn't start with it.
+                const needsSep =
+                  assistantText.length > 0 &&
+                  !/\s$/.test(assistantText) &&
+                  !/^\s/.test(text);
+                if (needsSep) text = "\n\n" + text;
+                pendingTextSeparator = false;
+              }
+              assistantText += text;
+              emittedAny = true;
+              yield { type: "text-delta", text };
             }
-            assistantText += text;
-            yield { type: "text-delta", text };
           }
+          continue;
         }
-        continue;
-      }
-      if (event.type === "assistant") {
-        const blocks = event.message?.content ?? [];
-        for (const block of blocks) {
-          if (block.type === "tool_use") {
-            toolCallCount += 1;
-            // After a tool use, the next text block should be visually
-            // separated from the prior text block.
-            pendingTextSeparator = true;
+        if (event.type === "assistant") {
+          const blocks = event.message?.content ?? [];
+          for (const block of blocks) {
+            if (block.type === "tool_use") {
+              toolCallCount += 1;
+              // After a tool use, the next text block should be visually
+              // separated from the prior text block.
+              pendingTextSeparator = true;
+              emittedAny = true;
+              yield {
+                type: "tool-start",
+                toolUseId: block.id,
+                name: block.name,
+                input: block.input,
+              };
+            }
+          }
+          continue;
+        }
+        if (event.type === "user") {
+          // Tool results come back as 'user' messages in the SDK protocol.
+          const content = event.message?.content;
+          const blocks = Array.isArray(content) ? content : [];
+          for (const block of blocks) {
+            if (typeof block !== "object" || block === null) continue;
+            const b = block as {
+              type?: string;
+              tool_use_id?: string;
+              content?: unknown;
+              is_error?: boolean;
+            };
+            if (b.type !== "tool_result" || !b.tool_use_id) continue;
+            const error = b.is_error ? extractErrorText(b.content) : undefined;
+            emittedAny = true;
             yield {
-              type: "tool-start",
-              toolUseId: block.id,
-              name: block.name,
-              input: block.input,
+              type: "tool-result",
+              toolUseId: b.tool_use_id,
+              ...(b.content !== undefined && !error ? { output: b.content } : {}),
+              ...(error ? { error } : {}),
             };
           }
         }
+      }
+      break; // stream completed without throwing
+    } catch (err) {
+      streamError = err;
+      // Retry fresh only if we were resuming and haven't shown the user
+      // anything yet — otherwise surface the error.
+      if (!isLast && !emittedAny) {
+        assistantText = "";
+        toolCallCount = 0;
+        pendingTextSeparator = false;
+        capturedSdkSessionId = undefined;
         continue;
       }
-      if (event.type === "user") {
-        // Tool results come back as 'user' messages in the SDK protocol.
-        const content = event.message?.content;
-        const blocks = Array.isArray(content) ? content : [];
-        for (const block of blocks) {
-          if (typeof block !== "object" || block === null) continue;
-          const b = block as {
-            type?: string;
-            tool_use_id?: string;
-            content?: unknown;
-            is_error?: boolean;
-          };
-          if (b.type !== "tool_result" || !b.tool_use_id) continue;
-          const error = b.is_error ? extractErrorText(b.content) : undefined;
-          yield {
-            type: "tool-result",
-            toolUseId: b.tool_use_id,
-            ...(b.content !== undefined && !error ? { output: b.content } : {}),
-            ...(error ? { error } : {}),
-          };
-        }
-      }
+      break;
     }
-  } catch (err) {
-    yield { type: "error", message: err instanceof Error ? err.message : String(err) };
+  }
+
+  if (streamError) {
+    yield {
+      type: "error",
+      message: streamError instanceof Error ? streamError.message : String(streamError),
+    };
     return;
+  }
+
+  // Persist the SDK session id so the next turn can resume this conversation.
+  if (capturedSdkSessionId && capturedSdkSessionId !== resumeId) {
+    lc.storage.sessions.setSdkSessionId(input.sessionId, capturedSdkSessionId);
   }
 
   // Persist the assistant turn.

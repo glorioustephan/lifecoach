@@ -114,3 +114,73 @@ export const scanArtifacts = async (
     scannedUntil,
   };
 };
+
+/** Documents shorter than this aren't worth an extraction call. */
+const MIN_DOC_BODY_CHARS = 200;
+
+export interface DocumentScanResult {
+  documentsScanned: number;
+  /** Documents whose body tripped a detection heuristic (and cost a model call). */
+  candidateDocuments: number;
+  created: Artifact[];
+}
+
+/**
+ * Sweep ingested DOCUMENTS for artifacts — the counterpart to `scanArtifacts`,
+ * which only ever looked at chat. Without this, a recipe living in an ingested
+ * markdown/Capacities-export document could never reach the Recipes view; the
+ * only path was the user re-typing it into a conversation.
+ *
+ * Title-only stubs (Capacities directory entries, flagged `contentMirrored:false`)
+ * and trivially short bodies are skipped before any token is spent. Dedup by
+ * (type, normalized title) keeps re-runs idempotent. Pass `sinceMs: 0` for a
+ * one-time backfill of the whole corpus; the cron passes the incremental cursor.
+ */
+export const scanDocumentArtifacts = async (
+  deps: ScanDeps,
+  opts: ScanOptions = {},
+): Promise<DocumentScanResult> => {
+  const { storage, extractor } = deps;
+  const since = opts.sinceMs ?? Date.now() - 7 * ONE_DAY;
+  const minConfidence = opts.minConfidence ?? 0.7;
+  const origin = opts.origin ?? "cron";
+  const limit = opts.sessionLimit ?? 500;
+
+  const docs = storage.documents.list({ limit });
+  let candidateDocuments = 0;
+  const created: Artifact[] = [];
+
+  for (const doc of docs) {
+    // list() is ordered newest-first; once we pass the cursor, the rest are older.
+    if (doc.ingestedAt < since) break;
+    // Skip title-only stubs and bodies too short to plausibly hold an artifact.
+    if (doc.metadata?.["contentMirrored"] === false) continue;
+    const body = doc.body ?? "";
+    if (body.length < MIN_DOC_BODY_CHARS) continue;
+
+    const text = body.length > MAX_TEXT_CHARS ? body.slice(0, MAX_TEXT_CHARS) : body;
+    const types = detectArtifactTypes(text);
+    if (types.length === 0) continue; // no tokens spent
+    candidateDocuments += 1;
+
+    const extracted = await extractor.extractFromText(text, { types });
+    for (const art of extracted) {
+      if (art.confidence < minConfidence) continue;
+      if (storage.artifacts.findByDedup(art.type, art.formatted.title)) continue;
+      const row = storage.artifacts.create({
+        type: art.type,
+        title: art.formatted.title,
+        body: art.formatted.body,
+        category: art.formatted.category ?? null,
+        tags: art.formatted.tags,
+        confidence: art.confidence,
+        origin,
+        sourceDocumentId: doc.id,
+        sourceMessageIds: [],
+      });
+      created.push(row);
+    }
+  }
+
+  return { documentsScanned: docs.length, candidateDocuments, created };
+};

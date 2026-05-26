@@ -17,10 +17,25 @@ import type { CapacitiesClient } from "./client.js";
  * Set `enabled=false` to no-op (useful in tests + when the integration is
  * configured but the user has disabled write-back).
  */
+/**
+ * Minimal slice of the reflection repository the write-back needs to stay
+ * idempotent — kept narrow so this module doesn't depend on the whole Storage.
+ */
+export interface ReflectionPushTracker {
+  wasPushedToCapacities(id: string): boolean;
+  markPushedToCapacities(id: string): void;
+}
+
 export interface ReflectionWritebackOptions {
   enabled: boolean;
   spaceId: string | undefined;
   client: CapacitiesClient | null;
+  /**
+   * When provided, guarantees a given reflection is appended to the daily note
+   * at most once. Without it the call still pushes (back-compat), but callers
+   * should pass it to prevent duplicate entries on repeated/retried runs.
+   */
+  tracker?: ReflectionPushTracker;
 }
 
 const HEADER_BY_KIND: Record<string, string> = {
@@ -48,10 +63,18 @@ export const pushReflectionToCapacities = async (
   if (!options.client) return { pushed: false, reason: "capacities_not_configured" };
   if (!options.spaceId) return { pushed: false, reason: "no_default_space" };
 
+  // Idempotency: never append the same reflection to the daily note twice.
+  if (options.tracker?.wasPushedToCapacities(reflection.id)) {
+    return { pushed: false, reason: "already_pushed" };
+  }
+
   await options.client.saveToDailyNote({
     spaceId: options.spaceId,
     mdText: composeMarkdown(reflection),
     origin: "mcp",
   });
+
+  // Mark only after a successful append, so a failed push can be retried.
+  options.tracker?.markPushedToCapacities(reflection.id);
   return { pushed: true };
 };

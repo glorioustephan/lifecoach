@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS budgets (
   id TEXT PRIMARY KEY,
   category TEXT NOT NULL,
   month TEXT NOT NULL,                    -- YYYY-MM format
-  limit REAL NOT NULL,
+  "limit" REAL NOT NULL,                  -- quoted: LIMIT is a SQLite reserved keyword
   spent REAL NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'archived')),
   created_at INTEGER NOT NULL,

@@ -40,6 +40,8 @@ export const artifactSchema = z.object({
   origin: artifactOrigin.default("manual"),
   sourceSessionId: z.string().nullable().optional(),
   sourceMessageIds: z.array(z.string()).default([]),
+  /** Set when the artifact was extracted from an ingested document rather than a conversation. */
+  sourceDocumentId: z.string().nullable().optional(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
 });

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { detectArtifactTypes, getArtifactDescriptor } from "@lifecoach/schemas";
 import {
   scanArtifacts,
+  scanDocumentArtifacts,
   getArtifactSettings,
   setAutoExtractEnabled,
   MIN_CRON_CONFIDENCE,
@@ -98,11 +99,23 @@ export const artifactRoutes = (lc: Lifecoach) => {
   app.post("/generate", async (c) => {
     if (!lc.artifactExtractor) return c.json({ error: "anthropic_not_configured" }, 400);
     try {
-      const result = await scanArtifacts(
-        { storage: lc.storage, extractor: lc.artifactExtractor },
-        { minConfidence: MIN_CRON_CONFIDENCE, origin: "cron" },
-      );
-      return c.json({ created: result.created, candidateSessions: result.candidateSessions });
+      const deps = { storage: lc.storage, extractor: lc.artifactExtractor };
+      const result = await scanArtifacts(deps, {
+        minConfidence: MIN_CRON_CONFIDENCE,
+        origin: "cron",
+      });
+      // "Generate now" is an explicit ask to populate — sweep the whole document
+      // corpus (sinceMs: 0), not just recent imports, so existing recipes surface.
+      const docResult = await scanDocumentArtifacts(deps, {
+        sinceMs: 0,
+        minConfidence: MIN_CRON_CONFIDENCE,
+        origin: "cron",
+      });
+      return c.json({
+        created: [...result.created, ...docResult.created],
+        candidateSessions: result.candidateSessions,
+        candidateDocuments: docResult.candidateDocuments,
+      });
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
     }
