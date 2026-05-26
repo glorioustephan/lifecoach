@@ -25,6 +25,26 @@ const DEFAULT_RERANK_MODEL = "rerank-2.5-lite";
 const DEFAULT_DIM = 1024;
 const DEFAULT_QUERY_CACHE = 256;
 
+// NUL, C0 control chars (except tab/newline/CR) and DEL. Built from an escaped
+// string so this source file stays plain ASCII (literal control chars would be
+// fragile to edit/grep).
+const CONTROL_CHARS = new RegExp("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]", "g");
+
+/**
+ * Voyage returns a 400 ("ensure your input is encoded in valid UTF-8 … special
+ * characters properly escaped") when text contains invalid UTF-8 (e.g. lone
+ * surrogates) or stray control characters — common in imported/exported
+ * markdown. Normalize to well-formed UTF-16 (lone surrogates → U+FFFD) and strip
+ * control chars so a single odd note can never fail an embedding (and therefore
+ * an import). Empty results fall back to a single space (Voyage rejects empty).
+ */
+const sanitizeForVoyage = (text: string): string => {
+  const toWellFormed = (text as { toWellFormed?: () => string }).toWellFormed;
+  const wellFormed = typeof toWellFormed === "function" ? toWellFormed.call(text) : text;
+  const cleaned = wellFormed.replace(CONTROL_CHARS, "");
+  return cleaned.trim().length > 0 ? cleaned : " ";
+};
+
 export class VoyageEmbedder implements Embedder {
   readonly enabled = true;
   readonly dimension: number;
@@ -70,7 +90,7 @@ export class VoyageEmbedder implements Embedder {
     const resp = await withRetry(
       () =>
         this.client.embed({
-          input: texts,
+          input: texts.map(sanitizeForVoyage),
           model: this.model,
           inputType,
         }),
@@ -105,8 +125,8 @@ export class VoyageEmbedder implements Embedder {
     const resp = await withRetry(
       () =>
         this.client.rerank({
-          query,
-          documents: capped.map((doc) => doc.text),
+          query: sanitizeForVoyage(query),
+          documents: capped.map((doc) => sanitizeForVoyage(doc.text)),
           model: this.rerankModel,
           topK: opts.topK ?? capped.length,
           returnDocuments: false,

@@ -30,6 +30,9 @@ data-dev/
 data-production/
 data-prod/
 
+# Personal import/export staging (journals, health, etc. — never commit)
+imports/
+
 # Editor
 .DS_Store
 .idea/
