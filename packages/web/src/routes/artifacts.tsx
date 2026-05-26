@@ -3,9 +3,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
+  ChevronDown,
   Cloud,
   Copy,
   Pencil,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -16,6 +18,14 @@ import { Button } from "~/components/ui/Button";
 import { IconButton } from "~/components/ui/IconButton";
 import { TypeBadge, TagBadge } from "~/components/ui/Badge";
 import { Sheet, SheetBody, SheetHeader } from "~/components/ui/Sheet";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from "~/components/ui/dropdown-menu";
 import { Markdown } from "~/components/chat/Markdown";
 import { api, type ArtifactRow } from "~/lib/api";
 import { formatRelative } from "~/lib/time";
@@ -147,39 +157,32 @@ function ArtifactsRoute(): JSX.Element {
         actions={<GenerateButton />}
       />
 
-      {/* Filter tabs and search.
-          Mobile: tabs row first (scrollable), search full-width below — avoids collision.
-          Desktop (md+): single row, tabs flex-1 + fixed-width search side by side.
-          The outer border-b serves as the row divider; TabNav uses width="none" so it
-          doesn't add a second border or its own mx-auto wrapper. */}
-      {/* Filter tabs + search. Tabs WRAP (never cut off); first tab is flush
-          with the page title. Search is full-width on mobile, beside the tabs
-          on desktop. mt-8 / no border matches the shared TabNav treatment. */}
-      <div className="mt-8">
-        <div className="mx-auto flex max-w-2xl flex-col gap-2 px-4 md:flex-row md:items-center md:gap-4 md:px-6">
-          <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-            {[
-              { id: "all", label: "All" },
-              ...ARTIFACT_DESCRIPTORS.map((d) => ({ id: d.id, label: d.label })),
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => handleTypeChange(tab.id)}
-                role="tab"
-                aria-selected={typeFilter === tab.id}
-                className={`relative -mb-px px-3 py-2 text-sm transition-colors first:-ml-3 ${
-                  typeFilter === tab.id ? "text-fg" : "text-fg-muted hover:text-fg"
-                }`}
-              >
-                {tab.label}
-                {typeFilter === tab.id && (
-                  <span aria-hidden className="absolute inset-x-2 -bottom-px h-px bg-accent" />
-                )}
-              </button>
-            ))}
-          </nav>
-          <div className="md:shrink-0">
+      <div className="flex-1 overflow-y-auto mobile-safe-bottom">
+        {/* Filter (radio dropdown) + search as siblings; scrolls with content. */}
+        <div className="mx-auto mt-8 flex max-w-2xl items-center gap-2 px-4 md:px-6">
+          <DropdownMenu>
+            <DropdownMenuTrigger className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-sm text-fg outline-none transition-colors hover:bg-surface-elevated focus:border-accent/40 data-[state=open]:border-accent/40">
+              <SlidersHorizontal className="size-4 text-fg-muted" />
+              <span>
+                {typeFilter === "all"
+                  ? "All types"
+                  : ARTIFACT_DESCRIPTORS.find((d) => d.id === typeFilter)?.label ?? "All types"}
+              </span>
+              <ChevronDown className="size-4 text-fg-muted" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-48">
+              <DropdownMenuLabel>Filter by type</DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={typeFilter} onValueChange={(v) => handleTypeChange(v)}>
+                <DropdownMenuRadioItem value="all">All types</DropdownMenuRadioItem>
+                {ARTIFACT_DESCRIPTORS.map((d) => (
+                  <DropdownMenuRadioItem key={d.id} value={d.id}>
+                    {d.label}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <div className="flex-1">
             <label htmlFor="artifact-search" className="sr-only">Search artifacts</label>
             <input
               id="artifact-search"
@@ -187,13 +190,10 @@ function ArtifactsRoute(): JSX.Element {
               placeholder="Search…"
               value={searchInput}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint outline-none focus:border-accent/40 transition-colors md:w-48"
+              className="w-full rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint outline-none focus:border-accent/40 transition-colors"
             />
           </div>
         </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto mobile-safe-bottom">
         <div className="mx-auto max-w-2xl px-4 py-4 md:px-6">
           {isLoading && (
             <ul className="space-y-2">

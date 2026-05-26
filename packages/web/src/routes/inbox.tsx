@@ -99,27 +99,27 @@ function InboxRoute(): JSX.Element {
           </button>
         }
       />
-      <TabNav
-        tabs={[
-          { id: "active" as const, label: "Active" },
-          { id: "snoozed" as const, label: "Snoozed" },
-          { id: "acted" as const, label: "Acted" },
-          { id: "dismissed" as const, label: "Dismissed" },
-        ]}
-        active={filter}
-        onChange={handleFilterChange}
-        variant="underline"
-      />
-
-      {generate.isError && (
-        <div className="mx-auto mt-3 w-full max-w-2xl px-4 md:px-6">
-          <div className="rounded-md border border-destructive-500/40 bg-destructive-500/5 px-3 py-2 text-xs text-destructive-300">
-            {generate.error instanceof Error ? generate.error.message : "Generation failed"}
-          </div>
-        </div>
-      )}
-
       <div className="flex-1 overflow-y-auto mobile-safe-bottom">
+        <TabNav
+          tabs={[
+            { id: "active" as const, label: "Active" },
+            { id: "snoozed" as const, label: "Snoozed" },
+            { id: "acted" as const, label: "Acted" },
+            { id: "dismissed" as const, label: "Dismissed" },
+          ]}
+          active={filter}
+          onChange={handleFilterChange}
+          variant="underline"
+        />
+
+        {generate.isError && (
+          <div className="mx-auto mt-3 w-full max-w-2xl px-4 md:px-6">
+            <div className="rounded-md border border-destructive-500/40 bg-destructive-500/5 px-3 py-2 text-xs text-destructive-300">
+              {generate.error instanceof Error ? generate.error.message : "Generation failed"}
+            </div>
+          </div>
+        )}
+
         <div className="mx-auto max-w-2xl space-y-4 px-4 py-4 md:px-6">
           {filter === "active" && <BriefingPanel />}
 
