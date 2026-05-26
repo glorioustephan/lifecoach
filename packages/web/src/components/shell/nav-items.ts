@@ -3,7 +3,6 @@ import {
   Inbox,
   Brain,
   CheckCircle2,
-  Radio,
   Settings,
   Target,
   FileStack,
@@ -15,7 +14,7 @@ export interface NavItem {
   label: string;
   to: string;
   icon: LucideIcon;
-  /** Show in the bottom tab bar on mobile (5 slots — Sources is rail-only). */
+  /** Show in the bottom tab bar on mobile. */
   inTabBar: boolean;
 }
 
@@ -26,6 +25,5 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "memory", label: "Memory", to: "/memory", icon: Brain, inTabBar: true },
   { id: "artifacts", label: "Artifacts", to: "/artifacts", icon: FileStack, inTabBar: false },
   { id: "tasks", label: "Tasks", to: "/tasks", icon: CheckCircle2, inTabBar: true },
-  { id: "sources", label: "Sources", to: "/sources", icon: Radio, inTabBar: false },
   { id: "settings", label: "Settings", to: "/settings", icon: Settings, inTabBar: true },
 ];

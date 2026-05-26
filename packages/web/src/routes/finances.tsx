@@ -145,7 +145,7 @@ function FinancesRoute(): JSX.Element {
       />
 
       <div className="flex-1 overflow-y-auto mobile-safe-bottom">
-        <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-6">
+        <div className="mx-auto max-w-2xl space-y-6 px-4 pb-6 pt-8 md:px-6">
 
           {/* Account Overview Cards */}
           <section>

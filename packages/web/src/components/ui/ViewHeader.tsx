@@ -13,7 +13,7 @@ export const ViewHeader = ({ title, subtitle, actions, width = "default" }: Prop
   <header className="border-b border-border">
     <div
       className={cn(
-        "mx-auto flex h-12 items-center justify-between px-4 md:px-6",
+        "mx-auto flex h-16 items-center justify-between px-4 md:px-6",
         width === "wide" ? "max-w-3xl" : "max-w-2xl",
       )}
     >

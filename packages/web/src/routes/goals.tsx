@@ -78,7 +78,7 @@ function GoalsRoute(): JSX.Element {
         }
       />
       <div className="flex-1 overflow-y-auto mobile-safe-bottom">
-        <div className="mx-auto max-w-2xl space-y-6 px-4 py-4 md:px-6">
+        <div className="mx-auto max-w-2xl space-y-6 px-4 pb-4 pt-8 md:px-6">
           {projectsData && projectsData.projects.length > 0 && (
             <ProjectsSummary projects={projectsData.projects} />
           )}

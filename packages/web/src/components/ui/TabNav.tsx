@@ -24,7 +24,7 @@ export function TabNav<T extends string>({
   if (variant === "pill") {
     return (
       // Keep border-b full-bleed on the outer element so the rule spans the viewport.
-      <div className="border-b border-border-subtle">
+      <div className="mt-8">
         <nav className={cn(innerWidth, "flex h-10 items-center gap-1.5 overflow-x-auto")}>
           {tabs.map((tab) => (
             <button
@@ -34,7 +34,7 @@ export function TabNav<T extends string>({
               role="tab"
               aria-selected={active === tab.id}
               className={cn(
-                "inline-flex min-h-9 items-center rounded-full px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
+                "inline-flex min-h-9 items-center rounded-full px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap first:-ml-3",
                 active === tab.id
                   ? "bg-surface-elevated text-fg"
                   : "text-fg-muted hover:bg-surface-elevated/40 hover:text-fg",
@@ -50,7 +50,7 @@ export function TabNav<T extends string>({
 
   // underline variant
   return (
-    <div className="border-b border-border-subtle">
+    <div className="mt-8">
       <nav className={cn(innerWidth, "flex h-10 items-center gap-1 overflow-x-auto whitespace-nowrap")}>
         {tabs.map((tab) => (
           <button
@@ -60,7 +60,7 @@ export function TabNav<T extends string>({
             role="tab"
             aria-selected={active === tab.id}
             className={cn(
-              "relative -mb-px px-3 py-2 text-sm transition-colors",
+              "relative -mb-px px-3 py-2 text-sm transition-colors first:-ml-3",
               active === tab.id ? "text-fg" : "text-fg-muted hover:text-fg",
             )}
           >
