@@ -147,34 +147,67 @@ function ArtifactsRoute(): JSX.Element {
         actions={<GenerateButton />}
       />
 
-      {/* Filter tabs and search */}
-      <nav className="border-b border-border-subtle">
-        <div className="mx-auto max-w-2xl flex items-center gap-2 px-4 md:px-6">
-          <div className="flex-1 min-w-0 overflow-x-auto">
-            <TabNav
-              tabs={[
-                { id: "all", label: "All" },
-                ...ARTIFACT_DESCRIPTORS.map((d) => ({ id: d.id, label: d.label })),
-              ] as Array<{ id: string; label: string }>}
-              active={typeFilter}
-              onChange={handleTypeChange}
-              variant="underline"
-            />
+      {/* Filter tabs and search.
+          Mobile: tabs row first (scrollable), search full-width below — avoids collision.
+          Desktop (md+): single row, tabs flex-1 + fixed-width search side by side.
+          The outer border-b serves as the row divider; TabNav uses width="none" so it
+          doesn't add a second border or its own mx-auto wrapper. */}
+      <div className="border-b border-border-subtle">
+        <div className="mx-auto max-w-2xl">
+          {/* Tabs + desktop search in one row */}
+          <div className="flex items-center gap-2 px-4 md:px-6">
+            {/* Scrollable tab strip — hide the scrollbar track for cleaner look */}
+            <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <nav className="flex h-10 items-center gap-1 whitespace-nowrap">
+                {[
+                  { id: "all", label: "All" },
+                  ...ARTIFACT_DESCRIPTORS.map((d) => ({ id: d.id, label: d.label })),
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => handleTypeChange(tab.id)}
+                    role="tab"
+                    aria-selected={typeFilter === tab.id}
+                    className={`relative -mb-px px-3 py-2 text-sm transition-colors ${
+                      typeFilter === tab.id ? "text-fg" : "text-fg-muted hover:text-fg"
+                    }`}
+                  >
+                    {tab.label}
+                    {typeFilter === tab.id && (
+                      <span aria-hidden className="absolute inset-x-2 -bottom-px h-px bg-accent" />
+                    )}
+                  </button>
+                ))}
+              </nav>
+            </div>
+            {/* Desktop search — hidden on mobile */}
+            <div className="hidden shrink-0 md:block">
+              <label htmlFor="artifact-search" className="sr-only">Search artifacts</label>
+              <input
+                id="artifact-search"
+                type="search"
+                placeholder="Search…"
+                value={searchInput}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="w-48 rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint outline-none focus:border-accent/40 transition-colors"
+              />
+            </div>
           </div>
-          {/* Search — pushed to the right, width-constrained to prevent overflow on mobile */}
-          <div className="shrink-0">
-            <label htmlFor="artifact-search" className="sr-only">Search artifacts</label>
+          {/* Mobile search — full width, below the tabs */}
+          <div className="px-4 pb-2.5 md:hidden">
+            <label htmlFor="artifact-search-mobile" className="sr-only">Search artifacts</label>
             <input
-              id="artifact-search"
+              id="artifact-search-mobile"
               type="search"
               placeholder="Search…"
               value={searchInput}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-32 md:w-56 rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint outline-none focus:border-accent/40 transition-colors"
+              className="w-full rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint outline-none focus:border-accent/40 transition-colors"
             />
           </div>
         </div>
-      </nav>
+      </div>
 
       <div className="flex-1 overflow-y-auto mobile-safe-bottom">
         <div className="mx-auto max-w-2xl px-4 py-4 md:px-6">
@@ -533,6 +566,7 @@ function EditArtifactSheet({
               active={tab}
               onChange={setTab}
               variant="pill"
+              width="none"
             />
           </div>
 

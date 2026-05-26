@@ -44,7 +44,7 @@ function MemoryRoute(): JSX.Element {
       <ViewHeader title="Memory" subtitle="What the coach knows about you" />
       <TabNav tabs={tabs} active={tab} onChange={setTab} variant="underline" />
       <div className="flex-1 overflow-y-auto mobile-safe-bottom">
-        <div className="mx-auto max-w-3xl px-4 py-4 md:px-6">
+        <div className="mx-auto max-w-2xl px-4 py-4 md:px-6">
           {tab === "facts" && <FactsTab page={factsPage} onPageChange={setFactsPage} />}
           {tab === "documents" && <DocumentsTab page={docsPage} onPageChange={setDocsPage} />}
           {tab === "reflections" && <ReflectionsTab page={reflectionsPage} onPageChange={setReflectionsPage} />}

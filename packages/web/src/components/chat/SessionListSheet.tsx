@@ -87,12 +87,12 @@ export const SessionListSheet = ({
                       : "(empty conversation)";
                 return (
                   <li key={s.id} className="group">
-                    <div className="flex items-center">
+                    <div className="flex min-w-0 items-center">
                       <button
                         type="button"
                         onClick={() => handlePick(s.id)}
                         className={cn(
-                          "flex-1 px-4 py-3 text-left transition-colors hover:bg-surface-elevated/40",
+                          "min-w-0 flex-1 px-4 py-3 text-left transition-colors hover:bg-surface-elevated/40",
                           isActive && "bg-surface-elevated/60"
                         )}
                       >

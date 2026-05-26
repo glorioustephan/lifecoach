@@ -10,6 +10,11 @@ import { GlobalStatus } from "./GlobalStatus";
 export const RailNav = (): JSX.Element => {
   const { location } = useRouterState();
 
+  // Check if the current location is settings with ?tab=sources (the Sources redirect target).
+  const isSourcesTab =
+    location.pathname === "/settings" &&
+    new URLSearchParams(location.search).get("tab") === "sources";
+
   return (
     <nav
       aria-label="Primary navigation"
@@ -22,10 +27,25 @@ export const RailNav = (): JSX.Element => {
       <ul className="flex flex-1 flex-col gap-0.5 px-3">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
-          const isActive =
-            item.to === "/"
-              ? location.pathname === "/" || location.pathname.startsWith("/c/")
-              : location.pathname.startsWith(item.to);
+
+          let isActive: boolean;
+          if (item.id === "sources") {
+            // Sources is active when: on /sources itself, or on /settings?tab=sources
+            isActive =
+              location.pathname === "/sources" ||
+              location.pathname.startsWith("/sources") ||
+              isSourcesTab;
+          } else if (item.id === "settings") {
+            // Settings is active on /settings only when NOT on the sources tab
+            isActive =
+              location.pathname.startsWith("/settings") && !isSourcesTab;
+          } else if (item.to === "/") {
+            isActive =
+              location.pathname === "/" || location.pathname.startsWith("/c/");
+          } else {
+            isActive = location.pathname.startsWith(item.to);
+          }
+
           return (
             <li key={item.id}>
               <Link

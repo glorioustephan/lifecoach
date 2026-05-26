@@ -347,7 +347,9 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
         </ChatContainerRoot>
       </div>
 
-      <div className="border-t border-border-subtle bg-bg pt-2">
+      {/* Composer — sits outside the scroller, so it needs its own bottom
+          clearance on mobile to clear the fixed TabBar (56px) + safe-area. */}
+      <div className="border-t border-border-subtle bg-bg pt-2 pb-[calc(var(--tab-bar-height,56px)+env(safe-area-inset-bottom,0px))] md:pb-0">
         <Composer onSubmit={handleSubmit} disabled={streaming} />
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "~/lib/api";
@@ -9,12 +9,22 @@ import { formatRelative } from "~/lib/time";
 
 type Tab = "profile" | "sources" | "system" | "archived";
 
+const VALID_TABS: Tab[] = ["profile", "sources", "system", "archived"];
+
+function isValidTab(v: unknown): v is Tab {
+  return typeof v === "string" && (VALID_TABS as string[]).includes(v);
+}
+
 export const Route = createFileRoute("/settings")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: isValidTab(search.tab) ? search.tab : undefined,
+  }),
   component: SettingsRoute,
 });
 
 function SettingsRoute(): JSX.Element {
-  const [tab, setTab] = useState<Tab>("profile");
+  const search = useSearch({ from: "/settings" });
+  const [tab, setTab] = useState<Tab>(search.tab ?? "profile");
   const qc = useQueryClient();
 
   const { data: status } = useQuery({ queryKey: ["status"], queryFn: api.status });
@@ -37,6 +47,17 @@ function SettingsRoute(): JSX.Element {
     if (typeof v === "string") return v;
     return JSON.stringify(v);
   };
+
+  /** Convert camelCase or ALLCAPS keys to "Title case" human labels. */
+  const humanizeKey = (key: string): string =>
+    key
+      // insert space before uppercase runs following a lowercase letter
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      // insert space between adjacent uppercase letters and trailing lowercase (e.g. URLPath → URL Path)
+      .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+      // lowercase everything, then capitalize first letter
+      .toLowerCase()
+      .replace(/^\w/, (c) => c.toUpperCase());
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -63,10 +84,10 @@ function SettingsRoute(): JSX.Element {
                 {(profile?.profile ?? []).map((entry) => (
                   <div
                     key={entry.key}
-                    className="grid grid-cols-[140px_1fr] items-start gap-4 px-4 py-3"
+                    className="flex flex-col gap-0.5 px-4 py-3 md:grid md:grid-cols-[140px_1fr] md:items-start md:gap-4"
                   >
-                    <span className="text-xs uppercase tracking-wide text-fg-faint">
-                      {entry.key}
+                    <span className="text-xs text-fg-faint">
+                      {humanizeKey(entry.key)}
                     </span>
                     <span className="break-words text-sm text-fg">
                       {formatValue(entry.value)}
@@ -249,8 +270,8 @@ function ArtifactExtractionSection(): JSX.Element {
   const enabled = settings?.enabled ?? false;
 
   return (
-    <div className="grid grid-cols-[140px_1fr] items-start gap-4 px-4 py-4">
-      <label htmlFor="artifact-extract-label" className="text-xs uppercase tracking-wide text-fg-faint">
+    <div className="flex flex-col gap-1 px-4 py-4 md:grid md:grid-cols-[140px_1fr] md:items-start md:gap-4">
+      <label htmlFor="artifact-extract-label" className="text-xs text-fg-faint">
         Daily auto-extraction
       </label>
       <div className="min-w-0">
@@ -341,8 +362,8 @@ function ArchivedSessionRow({
 }
 
 const Row = ({ k, v }: { k: string; v: unknown }): JSX.Element => (
-  <div className="grid grid-cols-[140px_1fr] items-start gap-4 px-4 py-3">
-    <dt className="text-xs uppercase tracking-wide text-fg-faint">{k}</dt>
+  <div className="flex flex-col gap-0.5 px-4 py-3 md:grid md:grid-cols-[140px_1fr] md:items-start md:gap-4">
+    <dt className="text-xs text-fg-faint">{k}</dt>
     <dd className="text-sm text-fg">{String(v ?? "—")}</dd>
   </div>
 );
