@@ -1,3 +1,12 @@
+/**
+ * MessageActions — copy + save-artifact row for chat messages.
+ *
+ * Wraps prompt-kit's `MessageAction` sub-component (from components/ui/message.tsx)
+ * for the per-button tooltip pattern. All app-specific logic (copy fallback,
+ * artifact detection, React Query mutation, artifact link) is kept intact.
+ *
+ * Per ui-design-system §1.2 — Decision: Wrap (MessageActions).
+ */
 import { useEffect, useMemo, useState } from "react";
 import { Check, Copy, BookmarkPlus } from "lucide-react";
 import { Link } from "@tanstack/react-router";
@@ -6,6 +15,7 @@ import { detectArtifactTypes, getArtifactDescriptor } from "@lifecoach/schemas";
 import { api } from "~/lib/api";
 import { useChatState } from "./chat-state";
 import { cn } from "~/lib/cn";
+import { MessageAction } from "~/components/ui/message";
 
 interface Props {
   /** Markdown source to copy — for assistant messages this is the raw content,
@@ -25,6 +35,8 @@ interface Props {
  *   - hidden until group-hover or focus-within on desktop
  *   - always visible on mobile (touch has no hover)
  *   - 44px touch targets via p-2 wrapping
+ *
+ * Uses prompt-kit `MessageAction` for tooltip wrapping on each button.
  */
 export const MessageActions = ({
   content,
@@ -117,26 +129,30 @@ export const MessageActions = ({
         align === "right" && "justify-end",
       )}
     >
-      {/* Copy button */}
-      <button
-        type="button"
-        onClick={handleCopy}
-        aria-label={copied ? "Copied" : "Copy message as markdown"}
-        className={cn(
-          "flex size-9 items-center justify-center rounded-md transition-colors",
-          "text-fg-faint hover:text-fg hover:bg-surface-elevated/60",
-        )}
+      {/* Copy button — wrapped with prompt-kit MessageAction for tooltip */}
+      <MessageAction
+        tooltip={copied ? "Copied" : "Copy message as markdown"}
+        side="top"
       >
-        {copied ? (
-          <Check className="size-3.5 text-success-500" strokeWidth={1.75} />
-        ) : (
-          <Copy className="size-3.5" strokeWidth={1.75} />
-        )}
-      </button>
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label={copied ? "Copied" : "Copy message as markdown"}
+          className={cn(
+            "flex size-9 items-center justify-center rounded-md transition-colors",
+            "text-fg-faint hover:text-fg hover:bg-surface-elevated/60",
+          )}
+        >
+          {copied ? (
+            <Check className="size-3.5 text-success-500" strokeWidth={1.75} />
+          ) : (
+            <Copy className="size-3.5" strokeWidth={1.75} />
+          )}
+        </button>
+      </MessageAction>
 
       {/* Save artifact button — only when a type is detected.
-          Once saved, the control becomes a persistent link to the page so the
-          user always has a path to what they just created. */}
+          Once saved, the control becomes a persistent link to the artifacts page. */}
       {artifactSource && descriptor && saveState === "saved" ? (
         <Link
           to="/artifacts"
@@ -151,30 +167,35 @@ export const MessageActions = ({
       ) : (
         artifactSource &&
         descriptor && (
-          <button
-            type="button"
-            onClick={() => saveArtifact.mutate()}
-            disabled={saveArtifact.isPending}
-            aria-label={`Save ${descriptor.label}`}
-            className={cn(
-              "flex items-center gap-1 rounded-md px-2 h-9 text-xs transition-colors",
-              saveState === "error"
-                ? "text-destructive-300"
-                : "text-fg-faint hover:text-fg hover:bg-surface-elevated/60",
-              saveArtifact.isPending && "opacity-60 cursor-not-allowed",
-            )}
+          <MessageAction
+            tooltip={`Save ${descriptor.label}`}
+            side="top"
           >
-            <BookmarkPlus className="size-3.5" strokeWidth={1.75} />
-            <span>
-              {saveState === "nothing"
-                ? "Nothing to save"
-                : saveState === "error"
-                  ? "Couldn't save"
-                  : saveArtifact.isPending
-                    ? "Saving…"
-                    : `Save ${descriptor.label.toLowerCase()}`}
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={() => saveArtifact.mutate()}
+              disabled={saveArtifact.isPending}
+              aria-label={`Save ${descriptor.label}`}
+              className={cn(
+                "flex items-center gap-1 rounded-md px-2 h-9 text-xs transition-colors",
+                saveState === "error"
+                  ? "text-destructive-300"
+                  : "text-fg-faint hover:text-fg hover:bg-surface-elevated/60",
+                saveArtifact.isPending && "opacity-60 cursor-not-allowed",
+              )}
+            >
+              <BookmarkPlus className="size-3.5" strokeWidth={1.75} />
+              <span>
+                {saveState === "nothing"
+                  ? "Nothing to save"
+                  : saveState === "error"
+                    ? "Couldn't save"
+                    : saveArtifact.isPending
+                      ? "Saving…"
+                      : `Save ${descriptor.label.toLowerCase()}`}
+              </span>
+            </button>
+          </MessageAction>
         )
       )}
     </div>

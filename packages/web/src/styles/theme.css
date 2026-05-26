@@ -60,6 +60,153 @@
 
   /* ─── Composer shadow (applied when content scrolls beneath it) ─── */
   --shadow-composer: 0 -1px 0 0 var(--color-border), 0 -8px 24px 0 oklch(0% 0 0 / 0.4);
+
+  /* ─── shadcn ↔ lifecoach token bridge ───────────────────────────────────────
+     prompt-kit components compile against shadcn-standard token names. Tailwind
+     v4 resolves `bg-primary` → `--color-primary`, `text-muted-foreground` →
+     `--color-muted-foreground`, etc. Without these aliases the utilities produce
+     no output and theming breaks entirely.
+
+     Mapping rationale:
+       background  → bg          (page canvas)
+       foreground  → fg          (primary text)
+       card        → surface     (panel / card surface)
+       popover     → surface-elevated (dropdown / tooltip surface)
+       primary     → accent      (brand teal — main action color)
+       secondary   → surface-elevated (secondary action surface)
+       muted       → surface-elevated (de-emphasised / input fill surface)
+       ring        → accent      (focus ring follows brand color)
+       input       → border      (input stroke matches card border)
+       destructive → destructive-500
+
+     ACCENT NAMING COLLISION — decision & rationale:
+       Lifecoach's `--color-accent` already points to the brand teal scale
+       (accent-500 in dark, accent-600 in light). In Tailwind v4 this means
+       `bg-accent` / `text-accent` resolve to the brand teal everywhere —
+       including in shadcn's ghost-button `hover:bg-accent` and prompt-kit's
+       `PromptSuggestion` highlight hover.
+
+       shadcn intends `--color-accent` to be a *muted hover fill* (a subtle
+       surface tint), not a saturated brand color. We deliberately keep our
+       mapping: `--color-accent-foreground` → `--color-fg` and leave
+       `--color-accent` pointing at the brand teal.
+
+       Consequence: ghost buttons and suggestion-chip hovers use the teal tint.
+       At hover opacity (via Tailwind's `/90` modifier in buttonVariants) this
+       reads as a soft accent wash — acceptable and on-brand. Any prompt-kit
+       component where this is too loud must be retoned to `hover:bg-surface-elevated`
+       at adoption time (see ui-design-system.md §2.2). This is the only sanctioned
+       edit to vendored prompt-kit source.
+
+     Dark/light parity: all bridge tokens point at semantic alias vars
+     (`--color-bg`, `--color-surface`, etc.) which are already re-pointed by
+     the `.light` rule below — so the bridge automatically tracks both themes.
+     ──────────────────────────────────────────────────────────────────────── */
+  --color-background:             var(--color-bg);
+  --color-foreground:             var(--color-fg);
+  --color-card:                   var(--color-surface);
+  --color-card-foreground:        var(--color-fg);
+  --color-popover:                var(--color-surface-elevated);
+  --color-popover-foreground:     var(--color-fg);
+  --color-primary:                var(--color-accent);
+  --color-primary-foreground:     var(--color-accent-fg);
+  --color-secondary:              var(--color-surface-elevated);
+  --color-secondary-foreground:   var(--color-fg-muted);
+  --color-muted:                  var(--color-surface-elevated);
+  --color-muted-foreground:       var(--color-fg-muted);
+  /* --color-accent is intentionally left as the lifecoach brand teal scale.
+     See the ACCENT NAMING COLLISION note above. */
+  --color-accent-foreground:      var(--color-fg);
+  --color-destructive:            var(--color-destructive-500);
+  --color-destructive-foreground: var(--color-bg);
+  --color-input:                  var(--color-border);
+  --color-ring:                   var(--color-accent);
+
+  /* ─── prompt-kit animation tokens ─── */
+  /* These animate-* utilities are consumed by Loader and TextShimmer components.
+     Tailwind v4 has no tailwind.config.js, so keyframes must live here.
+     Durations and timing are authored to match the prompt-kit registry defaults. */
+  --animate-typing:        typing 1s ease-in-out infinite;
+  --animate-loading-dots:  loading-dots 1.4s ease-in-out infinite;
+  --animate-wave:          wave 1s ease-in-out infinite;
+  --animate-blink:         blink 1s step-end infinite;
+  --animate-text-blink:    text-blink 1.5s ease-in-out infinite;
+  --animate-bounce-dots:   bounce-dots 1.2s ease-in-out infinite;
+  --animate-thin-pulse:    thin-pulse 2s ease-in-out infinite;
+  --animate-pulse-dot:     pulse-dot 1.5s ease-in-out infinite;
+  --animate-shimmer-text:  shimmer-text 2s linear infinite;
+  --animate-wave-bars:     wave-bars 1s ease-in-out infinite;
+  --animate-shimmer:       shimmer 2s linear infinite;
+  --animate-spinner-fade:  spinner-fade 1s linear forwards;
+}
+
+/* ─── prompt-kit keyframes ─────────────────────────────────────────────────
+   All keyframe animations used by Loader (12 variants) and TextShimmer.
+   Declared outside @theme because @keyframes are not theme tokens — they are
+   global CSS rules. Reference them via the --animate-* tokens above or
+   directly with Tailwind's `animation` arbitrary value syntax.
+   ──────────────────────────────────────────────────────────────────────── */
+
+@keyframes typing {
+  0%, 100% { transform: translateY(0);    opacity: 0.5; }
+  50%       { transform: translateY(-2px); opacity: 1;   }
+}
+
+@keyframes loading-dots {
+  0%, 100% { opacity: 0; }
+  50%       { opacity: 1; }
+}
+
+@keyframes wave {
+  0%, 100% { transform: scaleY(1);   }
+  50%       { transform: scaleY(0.6); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+@keyframes text-blink {
+  0%, 100% { color: var(--color-primary,   var(--color-accent)); }
+  50%       { color: var(--color-muted-foreground, var(--color-fg-muted)); }
+}
+
+@keyframes bounce-dots {
+  0%, 100% { transform: scale(0.8); opacity: 0.5; }
+  50%       { transform: scale(1.2); opacity: 1;   }
+}
+
+@keyframes thin-pulse {
+  0%, 100% { transform: scale(0.95); opacity: 0.8; }
+  50%       { transform: scale(1.05); opacity: 0.4; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1);   opacity: 0.8; }
+  50%       { transform: scale(1.5); opacity: 1;   }
+}
+
+/* text-shimmer: background-position sweep for gradient shimmer effect */
+@keyframes shimmer-text {
+  0%   { background-position:  150% center; }
+  100% { background-position: -150% center; }
+}
+
+@keyframes wave-bars {
+  0%, 100% { transform: scaleY(1);   opacity: 0.5; }
+  50%       { transform: scaleY(0.6); opacity: 1;   }
+}
+
+/* shimmer: used by Loader's text-shimmer variant */
+@keyframes shimmer {
+  0%   { background-position:  200% 50%; }
+  100% { background-position: -200% 50%; }
+}
+
+@keyframes spinner-fade {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
 }
 
 /* Light-mode override — applied only when the user explicitly toggles or

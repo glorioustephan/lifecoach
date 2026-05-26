@@ -460,3 +460,29 @@ Copy this into a GitHub Issue or Linear ticket:
 - [ ] Wrap `Markdown.tsx` import in chat to use prompt-kit version
 - [ ] Migrate `MessageActions` copy button to use `MessageAction` tooltip wrapper
 - [ ] Smoke-test chat UI: send message, verify streaming, tool disclosure, markdown rendering
+
+---
+
+## Foundation notes
+
+These notes are authoritative for any agent or human running `npx shadcn add` or generating UI components in `packages/web`.
+
+### Button casing rule — do NOT overwrite Button.tsx
+
+`packages/web/src/components/ui/Button.tsx` exports BOTH the shadcn-standard `buttonVariants` (CVA) and the lifecoach `Button` (forwardRef, shadcn-compatible). This dual export is load-bearing:
+
+- prompt-kit components import `{ Button, buttonVariants }` from `@/components/ui/Button` (uppercase B, case-insensitive on macOS).
+- Existing lifecoach app code imports `{ Button }` from the same file using our semantic `primary` variant.
+- The file carries a `loading` prop and lifecycle-awareness that the shadcn CLI-generated `button.tsx` does not.
+
+**Rule**: future `npx shadcn add button` runs MUST be run with `--overwrite=false` or the add must be skipped for the button primitive. If shadcn overwrites `Button.tsx` with its default (which removes the lifecoach `primary` variant, `loading` prop, and dual-API comment), all existing app code using `variant="primary"` or `loading` breaks silently. On macOS the case-insensitive filesystem means `button.tsx` and `Button.tsx` are the same file — there is no safe way to have both coexist as separate files.
+
+Action: after any `npx shadcn add` session, verify `Button.tsx` still exports `AppButton`, `buttonVariants`, and has the `loading` prop. If it was overwritten, restore from git with `git checkout HEAD -- packages/web/src/components/ui/Button.tsx`.
+
+### Token bridge location
+
+The shadcn ↔ lifecoach token bridge lives in the `@theme {}` block of `packages/web/src/styles/theme.css`, immediately before the `--animate-*` tokens. It maps `--color-background`, `--color-foreground`, `--color-primary`, `--color-muted`, `--color-muted-foreground`, `--color-card`, `--color-popover`, `--color-secondary`, `--color-destructive`, `--color-input`, `--color-ring`, and `--color-accent-foreground` to lifecoach semantic aliases. Because the bridge points at the semantic aliases (not raw palette values), it automatically tracks both dark (default) and light (`.light` rule) themes with no duplication.
+
+### Accent collision — intentional design decision
+
+`--color-accent` is **not** bridged to a muted surface. It remains the lifecoach brand teal (`--color-accent-500` in dark, `--color-accent-600` in light). This means `hover:bg-accent` in prompt-kit ghost buttons and `PromptSuggestion` chip hovers uses the teal brand color rather than shadcn's intended neutral hover fill. This is acceptable and on-brand. Any component where the teal hover is too saturated must be retoned to `hover:bg-surface-elevated` at adoption time — this is the one sanctioned source edit described in `ui-design-system.md §2.2`.

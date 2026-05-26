@@ -1,14 +1,27 @@
-import ReactMarkdown, { type Components } from "react-markdown";
-import remarkGfm from "remark-gfm";
-
 /**
- * Tailwind-styled markdown renderer for assistant messages.
+ * Chat Markdown renderer.
  *
- * Scoped to chat output — paragraphs, lists, code, tables, links, blockquotes.
- * Intentionally small surface; we don't render h1/h2 in chat (the agent
- * shouldn't be opening level-1 headings inside a conversation bubble).
+ * Adopts prompt-kit's `Markdown` (components/ui/markdown.tsx) as the base,
+ * which gives us: GFM, remark-breaks, shiki-highlighted CodeBlock, and memoised
+ * per-block rendering for streaming performance.
+ *
+ * We pass custom component overrides to apply lifecoach semantic tokens and the
+ * chat-specific prose style (body text scale, constrained headings, table style).
+ * The CodeBlock default is github-dark to match the dark-first theme.
+ *
+ * Per ui-design-system §1.2 — Decision: Adopt (replace).
  */
-const components: Components = {
+import { type Components } from "react-markdown";
+import { Markdown as PromptKitMarkdown } from "~/components/ui/markdown";
+import { CodeBlock, CodeBlockCode } from "~/components/ui/code-block";
+
+function extractLanguage(className?: string): string {
+  if (!className) return "plaintext";
+  return className.match(/language-(\w+)/)?.[1] ?? "plaintext";
+}
+
+/** Custom react-markdown component overrides for chat prose. */
+const chatComponents: Partial<Components> = {
   p: ({ children }) => (
     <p className="mb-3 last:mb-0 text-sm leading-relaxed text-fg">{children}</p>
   ),
@@ -41,31 +54,36 @@ const components: Components = {
       {children}
     </a>
   ),
-  code: ({ className, children }) => {
-    // Inline code (no language class) vs block code (has language class).
-    const isBlock = className?.startsWith("language-");
-    if (isBlock) {
+  /** Inline code vs fenced code block. Fenced → prompt-kit CodeBlock with shiki. */
+  code: function CodeComponent({ className, children, ...props }) {
+    const isInline =
+      !props.node?.position?.start.line ||
+      props.node?.position?.start.line === props.node?.position?.end.line;
+
+    if (isInline) {
       return (
-        <code className={`${className ?? ""} font-mono text-xs`}>{children}</code>
+        <code className="rounded-sm border border-border-subtle bg-surface-elevated px-1 py-0.5 font-mono text-[12px] text-fg">
+          {children}
+        </code>
       );
     }
+
+    const language = extractLanguage(className);
     return (
-      <code className="rounded-sm border border-border-subtle bg-surface-elevated px-1 py-0.5 font-mono text-[12px] text-fg">
-        {children}
-      </code>
+      <CodeBlock className="my-3 last:mb-0">
+        <CodeBlockCode code={children as string} language={language} />
+      </CodeBlock>
     );
   },
-  pre: ({ children }) => (
-    <pre className="mb-3 last:mb-0 overflow-x-auto rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs leading-relaxed text-fg">
-      {children}
-    </pre>
-  ),
+  /** Suppress the wrapping pre — CodeBlock renders its own. */
+  pre: ({ children }) => <>{children}</>,
   blockquote: ({ children }) => (
     <blockquote className="mb-3 last:mb-0 border-l-2 border-border pl-3 italic text-fg-muted">
       {children}
     </blockquote>
   ),
   hr: () => <hr className="my-4 border-border-subtle" />,
+  // In chat, agents shouldn't open h1; downrank headings one level for visual weight.
   h1: ({ children }) => (
     <h2 className="mb-2 mt-4 first:mt-0 text-base font-semibold text-fg">{children}</h2>
   ),
@@ -91,7 +109,5 @@ const components: Components = {
 };
 
 export const Markdown = ({ children }: { children: string }): JSX.Element => (
-  <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-    {children}
-  </ReactMarkdown>
+  <PromptKitMarkdown components={chatComponents}>{children}</PromptKitMarkdown>
 );

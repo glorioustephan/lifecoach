@@ -1,5 +1,7 @@
 @import "./theme.css";
 
+@custom-variant dark (&:is(.dark *));
+
 /* Base resets that aren't quite Tailwind defaults */
 html, body, #root {
   height: 100%;

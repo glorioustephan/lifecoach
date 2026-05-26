@@ -1,5 +1,21 @@
+/**
+ * ToolCallDisclosure — wraps prompt-kit Tool collapsible shell with
+ * lifecoach ToolCallState mapping.
+ *
+ * Per ui-design-system §1.3 — Decision: Wrap.
+ * Uses prompt-kit's Tool (Radix Collapsible + semantic status icons) as the
+ * engine. The existing ToolCallState shape is preserved and mapped to ToolPart
+ * for the shell; the output rendering is lifecoach-specific (SDK returns
+ * string|array, not Record<string,unknown>) so the CollapsibleContent is
+ * rendered directly with our formatInput/formatOutput helpers.
+ *
+ * // TODO(handoff): Once tool output shapes stabilize as Record<string,unknown>,
+ * migrate to the prompt-kit Tool's built-in key-value output renderer and remove
+ * the custom CollapsibleContent block below.
+ */
 import { useState } from "react";
-import { ChevronRight, AlertCircle } from "lucide-react";
+import { AlertCircle, CheckCircle, ChevronDown, Loader2, XCircle } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "~/lib/cn";
 
 export interface ToolCallState {
@@ -55,11 +71,21 @@ const formatOutput = (output: unknown): string => {
 };
 
 export const ToolCallDisclosure = ({ call }: { call: ToolCallState }): JSX.Element => {
-  const [expanded, setExpanded] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const isError = call.status === "error";
   const isRunning = call.status === "running";
   const duration =
     call.finishedAt !== undefined ? formatDuration(call.finishedAt - call.startedAt) : null;
+
+  const getStateIcon = () => {
+    if (isRunning) {
+      return <Loader2 className="size-3.5 animate-spin text-accent" strokeWidth={1.75} />;
+    }
+    if (isError) {
+      return <XCircle className="size-3.5 text-destructive-500" strokeWidth={1.75} />;
+    }
+    return <CheckCircle className="size-3.5 text-success-500" strokeWidth={1.75} />;
+  };
 
   return (
     <div
@@ -68,77 +94,72 @@ export const ToolCallDisclosure = ({ call }: { call: ToolCallState }): JSX.Eleme
         isError ? "border-destructive-500/50" : "border-border",
       )}
     >
-      <button
-        type="button"
-        onClick={() => setExpanded((e) => !e)}
-        aria-expanded={expanded}
-        aria-controls={`tool-${call.toolUseId}`}
-        className={cn(
-          "flex w-full items-center gap-2 px-3 py-2",
-          "text-left text-fg-muted transition-colors hover:bg-surface-elevated",
-        )}
-      >
-        {isRunning ? (
-          <span aria-hidden className="size-2 animate-pulse rounded-full bg-accent" />
-        ) : isError ? (
-          <AlertCircle className="size-3.5 text-destructive-500" strokeWidth={1.75} />
-        ) : (
-          <span aria-hidden className="size-2 rounded-full bg-accent" />
-        )}
-        <span className="font-mono text-fg-faint">{call.name}</span>
-        <span className="truncate text-fg-muted">
-          {isRunning
-            ? "running…"
-            : isError
-              ? (call.error ?? "error").slice(0, 80)
-              : summarizeOutput(call.output)}
-        </span>
-        <span className="ml-auto flex items-center gap-2 text-fg-faint">
-          {duration && <span className="font-mono">{duration}</span>}
-          <ChevronRight
-            className={cn(
-              "size-3.5 transition-transform",
-              expanded && "rotate-90",
-            )}
-            strokeWidth={1.75}
-          />
-        </span>
-      </button>
-      {expanded && (
-        <div
-          id={`tool-${call.toolUseId}`}
-          className="border-t border-border px-3 py-2"
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <CollapsibleTrigger
+          aria-controls={`tool-${call.toolUseId}`}
+          className={cn(
+            "flex w-full items-center gap-2 px-3 py-2",
+            "text-left text-fg-muted transition-colors hover:bg-surface-elevated",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+          )}
         >
-          <div className="mb-2">
-            <div className="mb-1 text-[10px] font-mono uppercase tracking-wide text-fg-faint">
-              in
-            </div>
-            <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-all font-mono text-xs text-fg-muted">
-              {formatInput(call.input)}
-            </pre>
-          </div>
-          {call.output !== undefined && (
-            <div>
+          {getStateIcon()}
+          <span className="font-mono text-fg-faint">{call.name}</span>
+          <span className="truncate text-fg-muted">
+            {isRunning
+              ? "running…"
+              : isError
+                ? (call.error ?? "error").slice(0, 80)
+                : summarizeOutput(call.output)}
+          </span>
+          <span className="ml-auto flex items-center gap-2 text-fg-faint">
+            {duration && <span className="font-mono">{duration}</span>}
+            <ChevronDown
+              className={cn(
+                "size-3.5 transition-transform",
+                isOpen && "rotate-180",
+              )}
+              strokeWidth={1.75}
+            />
+          </span>
+        </CollapsibleTrigger>
+
+        <CollapsibleContent
+          id={`tool-${call.toolUseId}`}
+          className="data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down overflow-hidden"
+        >
+          <div className="border-t border-border px-3 py-2">
+            <div className="mb-2">
               <div className="mb-1 text-[10px] font-mono uppercase tracking-wide text-fg-faint">
-                out
+                in
               </div>
-              <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-all font-mono text-xs text-fg-muted">
-                {formatOutput(call.output)}
+              <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-all font-mono text-xs text-fg-muted">
+                {formatInput(call.input)}
               </pre>
             </div>
-          )}
-          {call.error && (
-            <div>
-              <div className="mb-1 text-[10px] font-mono uppercase tracking-wide text-destructive-300">
-                error
+            {call.output !== undefined && (
+              <div>
+                <div className="mb-1 text-[10px] font-mono uppercase tracking-wide text-fg-faint">
+                  out
+                </div>
+                <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-all font-mono text-xs text-fg-muted">
+                  {formatOutput(call.output)}
+                </pre>
               </div>
-              <pre className="whitespace-pre-wrap font-mono text-xs text-destructive-300">
-                {call.error}
-              </pre>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+            {call.error && (
+              <div>
+                <div className="mb-1 text-[10px] font-mono uppercase tracking-wide text-destructive-300">
+                  error
+                </div>
+                <pre className="whitespace-pre-wrap font-mono text-xs text-destructive-300">
+                  {call.error}
+                </pre>
+              </div>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 };

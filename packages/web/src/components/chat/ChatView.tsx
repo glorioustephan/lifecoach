@@ -7,9 +7,18 @@ import { getGreeting } from "~/lib/greeting";
 import { useSetAgentState } from "./agent-state";
 import { Message } from "./Message";
 import { ToolCallDisclosure, type ToolCallState } from "./ToolCallDisclosure";
+import { ThinkingBar } from "./ThinkingBar";
+import { SystemMessage } from "~/components/ui/system-message";
 import { Composer } from "./Composer";
 import { useChatActions, useChatState, type ChatItem } from "./chat-state";
 import { SessionListSheet } from "./SessionListSheet";
+import {
+  ChatContainerRoot,
+  ChatContainerContent,
+  ChatContainerScrollAnchor,
+} from "~/components/ui/chat-container";
+import { ScrollButton } from "~/components/ui/scroll-button";
+import { PromptSuggestion } from "~/components/ui/prompt-suggestion";
 
 interface Props {
   /** When set, this ChatView is bound to a specific session (the /c/$id route).
@@ -31,9 +40,14 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
   const profileName = useProfileName();
   const { items, streaming, sessionId: ctxSessionId } = useChatState();
   const { reset, append, update, setSessionId, setStreaming } = useChatActions();
-  const scrollerRef = useRef<HTMLDivElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const greeting = useMemo(() => getGreeting(profileName ?? undefined), [profileName]);
+  // AbortController for the active SSE stream. Replaced each submission.
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleStop = useCallback((): void => {
+    abortControllerRef.current?.abort();
+  }, []);
 
   const handleNewConversation = useCallback((): void => {
     reset({ sessionId: undefined, items: [] });
@@ -62,13 +76,6 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
         })),
     });
   }, [sessionId, initialMessages, ctxSessionId, reset]);
-
-  // Scroll to bottom on new content.
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [items, streaming]);
 
   const handleSubmit = useCallback(
     async (text: string) => {
@@ -153,35 +160,56 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
           return;
         }
         if (event.type === "error") {
-          update((prev) =>
-            prev.map((it) =>
+          update((prev) => {
+            // Mark the assistant message as done (stop streaming cursor).
+            const next = prev.map((it) =>
               it.kind === "message" && it.id === assistantId
-                ? {
-                    ...it,
-                    content: it.content + `\n\n[error: ${event.message}]`,
-                    streaming: false,
-                  }
+                ? { ...it, streaming: false }
                 : it,
-            ),
-          );
+            );
+            // Append a SystemMessage error item after the assistant message.
+            return [
+              ...next,
+              { kind: "error" as const, id: `err-${assistantId}`, message: event.message },
+            ];
+          });
         }
       };
+
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
       try {
         await sendChat({
           message: text,
           ...(ctxSessionId ? { sessionId: ctxSessionId } : {}),
+          signal: controller.signal,
           onEvent,
         });
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        update((prev) =>
-          prev.map((it) =>
-            it.kind === "message" && it.id === assistantId
-              ? { ...it, content: it.content + `\n\n[error: ${message}]`, streaming: false }
-              : it,
-          ),
-        );
+        // AbortError is expected when the user clicks Stop — suppress it.
+        if (err instanceof Error && err.name === "AbortError") {
+          update((prev) =>
+            prev.map((it) =>
+              it.kind === "message" && it.id === assistantId
+                ? { ...it, streaming: false }
+                : it,
+            ),
+          );
+        } else {
+          const message = err instanceof Error ? err.message : String(err);
+          update((prev) => {
+            const next = prev.map((it) =>
+              it.kind === "message" && it.id === assistantId
+                ? { ...it, streaming: false }
+                : it,
+            );
+            return [
+              ...next,
+              { kind: "error" as const, id: `err-${assistantId}`, message },
+            ];
+          });
+        }
       } finally {
         setStreaming(false);
         setAgentState("idle");
@@ -221,41 +249,102 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
         {...(ctxSessionId ? { activeSessionId: ctxSessionId } : {})}
       />
 
-      <div
-        ref={scrollerRef}
-        role="log"
-        aria-live="polite"
-        aria-label="Conversation"
-        className="flex-1 overflow-y-auto"
-      >
-        <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pb-6 pt-6 mobile-safe-bottom">
-          {items.length === 0 && (
-            <div className="mt-12 flex flex-col items-center gap-2 text-center">
-              <div className="text-sm text-fg-muted">{greeting}</div>
-              <div className="max-w-sm text-xs text-fg-faint">
-                Type below to start a new conversation, or ask the coach what they
-                noticed.
-              </div>
+      {/*
+       * ChatContainerRoot wraps use-stick-to-bottom's StickToBottom, which provides:
+       *   - Automatic scroll-to-bottom during streaming.
+       *   - User-scroll-pauses-autoscroll (fixes the fight-during-streaming bug).
+       *   - useStickToBottomContext() for ScrollButton visibility.
+       *
+       * ScrollButton lives inside ChatContainerRoot so it can access the context.
+       * It is positioned absolutely over the chat list so it floats at the bottom.
+       *
+       * aria role="log" / aria-live="polite" / aria-label preserved from the
+       * original ChatView scroller for screen reader continuity (§4.4).
+       */}
+      <div className="relative flex-1 min-h-0">
+        <ChatContainerRoot
+          className="relative h-full flex-col"
+          aria-live="polite"
+          aria-label="Conversation"
+        >
+          <ChatContainerContent>
+            <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pb-6 pt-6 mobile-safe-bottom">
+              {items.length === 0 && (
+                <div className="mt-12 flex flex-col items-center gap-4 text-center">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="text-sm text-fg-muted">{greeting}</div>
+                    <div className="max-w-sm text-xs text-fg-faint">
+                      Type below to start a new conversation, or ask the coach what they
+                      noticed.
+                    </div>
+                  </div>
+                  {/* Starter suggestion chips — PromptSuggestion (Tier 3, §1.3).
+                      Calls handleSubmit directly so chips submit immediately. */}
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {[
+                      "What should I focus on today?",
+                      "How am I tracking this week?",
+                      "What patterns have you noticed?",
+                      "Help me plan my next steps.",
+                    ].map((prompt) => (
+                      <PromptSuggestion
+                        key={prompt}
+                        onClick={() => handleSubmit(prompt)}
+                        disabled={streaming}
+                      >
+                        {prompt}
+                      </PromptSuggestion>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {items.map((item) => {
+                if (item.kind === "message") {
+                  return (
+                    <Message
+                      key={item.id}
+                      role={item.role}
+                      content={item.content}
+                      streaming={item.streaming === true}
+                    />
+                  );
+                }
+                if (item.kind === "error") {
+                  return (
+                    <div key={item.id} className="ml-10">
+                      <SystemMessage variant="error">
+                        {item.message}
+                      </SystemMessage>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={item.id} className="ml-10">
+                    <ToolCallDisclosure call={item.state} />
+                  </div>
+                );
+              })}
+              {/* ThinkingBar — visible while agent is not idle. Bound to
+                  agent-state context; stop button triggers SSE abort. */}
+              <ThinkingBar onStop={handleStop} />
             </div>
-          )}
-          {items.map((item) => {
-            if (item.kind === "message") {
-              return (
-                <Message
-                  key={item.id}
-                  role={item.role}
-                  content={item.content}
-                  streaming={item.streaming === true}
-                />
-              );
-            }
-            return (
-              <div key={item.id} className="ml-10">
-                <ToolCallDisclosure call={item.state} />
-              </div>
-            );
-          })}
-        </div>
+            <ChatContainerScrollAnchor />
+          </ChatContainerContent>
+
+          {/* Floating scroll-to-bottom button — MUST be a child of
+              ChatContainerRoot so ScrollButton can read use-stick-to-bottom
+              context (rendering it outside the root crashes the whole view).
+              The root is `relative`, so this floats at the bottom over the list.
+              Retoned to bg-surface-elevated per ui-design-system §2.2 (teal hover too loud). */}
+          <div className="pointer-events-none absolute bottom-4 left-0 right-0 flex justify-center">
+            <div className="pointer-events-auto">
+              <ScrollButton
+                className="bg-surface-elevated text-fg-muted hover:bg-surface hover:text-fg border border-border shadow-sm"
+                aria-label="Scroll to latest message"
+              />
+            </div>
+          </div>
+        </ChatContainerRoot>
       </div>
 
       <div className="border-t border-border-subtle bg-bg pt-2">

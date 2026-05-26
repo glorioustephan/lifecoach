@@ -17,7 +17,8 @@ export type ChatItem =
       content: string;
       streaming?: boolean;
     }
-  | { kind: "tool"; id: string; state: ToolCallState };
+  | { kind: "tool"; id: string; state: ToolCallState }
+  | { kind: "error"; id: string; message: string };
 
 interface ChatState {
   sessionId: string | undefined;
