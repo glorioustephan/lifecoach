@@ -21,6 +21,18 @@ body {
   border-radius: 4px;
 }
 
+/* Tailwind v4 dropped the v3 default pointer cursor on buttons. Restore it for
+   all interactive controls (tabs/buttons/links). Lives in @layer base so
+   explicit cursor utilities — e.g. disabled:cursor-not-allowed — still win. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  [role="tab"]:not([aria-disabled="true"]),
+  a {
+    cursor: pointer;
+  }
+}
+
 /* Scrollbar in dark mode — keep it quiet */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
