@@ -18,9 +18,9 @@ interface SheetProps {
 }
 
 const sidePositionClasses: Record<NonNullable<SheetProps["side"]>, string> = {
-  left: "inset-y-0 left-0 h-full max-w-[85vw] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:slide-in-from-left data-[state=closed]:slide-out-to-left duration-300",
+  left: "inset-y-0 left-0 h-full max-w-full data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:slide-in-from-left data-[state=closed]:slide-out-to-left duration-300",
   right:
-    "inset-y-0 right-0 h-full max-w-[85vw] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:slide-in-from-right data-[state=closed]:slide-out-to-right duration-300",
+    "inset-y-0 right-0 h-full max-w-full data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:slide-in-from-right data-[state=closed]:slide-out-to-right duration-300",
   bottom:
     "inset-x-0 bottom-0 max-h-[85dvh] rounded-t-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom duration-300",
 };
@@ -29,7 +29,7 @@ export const Sheet = ({
   open,
   onOpenChange,
   side = "left",
-  width = "w-[360px]",
+  width = "w-full md:w-[400px]",
   children,
 }: SheetProps): JSX.Element => (
   <Dialog.Root open={open} onOpenChange={onOpenChange}>

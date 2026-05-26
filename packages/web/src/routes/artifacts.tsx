@@ -489,7 +489,7 @@ function EditArtifactSheet({
   });
 
   return (
-    <Sheet open={!!artifact} onOpenChange={(open) => !open && requestClose()} side="right" width="w-[520px]">
+    <Sheet open={!!artifact} onOpenChange={(open) => !open && requestClose()} side="right" width="w-full md:w-[520px]">
       <SheetHeader
         title="Edit artifact"
         onClose={requestClose}

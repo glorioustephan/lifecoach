@@ -54,7 +54,7 @@ export const SessionListSheet = ({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} side="left" width="md:w-[400px] w-[85vw]">
+    <Sheet open={open} onOpenChange={onOpenChange} side="left" width="w-full md:w-[400px]">
       <SheetHeader title="Past conversations" onClose={() => onOpenChange(false)} />
       <SheetBody>
         {onNewConversation && (
