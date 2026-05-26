@@ -174,10 +174,6 @@ function SourceRow({ source }: { source: Source }): JSX.Element {
         const { result } = await api.syncTodoist();
         return `${result.upserted} upserted · ${result.newlyCompleted} completed · ${result.embedded} embedded`;
       }
-      if (source.id === "capacities") {
-        const { result } = await api.syncCapacities();
-        return `${result.spacesScanned} spaces · ${result.objectsDiscovered} objects · ${result.upserted} upserted · ${result.factsRouted}+${result.projectsRouted} type-routed`;
-      }
       throw new Error(`No sync for source ${source.id}`);
     },
     onSuccess: (msg) => {
@@ -190,14 +186,12 @@ function SourceRow({ source }: { source: Source }): JSX.Element {
     },
   });
 
-  const canSync =
-    source.connected && (source.id === "todoist" || source.id === "capacities");
+  // Capacities is no longer mirrored (the API only exposes titles), so it's
+  // status-only like Google Calendar/Gmail — only Todoist still syncs here.
+  const canSync = source.connected && source.id === "todoist";
   const counts: string[] = [];
   if (typeof source.tasks === "number") counts.push(`${source.tasks} tasks`);
   if (typeof source.ingestedFiles === "number") counts.push(`${source.ingestedFiles} files`);
-  if (typeof source.mirroredObjects === "number") {
-    counts.push(`${source.mirroredObjects} mirrored`);
-  }
 
   return (
     <div className="px-4 py-3">

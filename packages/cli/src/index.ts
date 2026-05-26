@@ -18,6 +18,7 @@ import { registerReflect } from "./commands/reflect.js";
 import { registerInsights } from "./commands/insights.js";
 import { registerArtifacts } from "./commands/artifacts.js";
 import { registerExport, registerImport } from "./commands/snapshot.js";
+import { registerReset } from "./commands/reset.js";
 
 const program = new Command();
 
@@ -39,6 +40,7 @@ registerInsights(program);
 registerArtifacts(program);
 registerExport(program);
 registerImport(program);
+registerReset(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : err);
