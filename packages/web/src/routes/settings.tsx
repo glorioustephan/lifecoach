@@ -97,16 +97,19 @@ function SettingsRoute(): JSX.Element {
           )}
 
           {tab === "sources" && (
-            <section className="rounded-md border border-border bg-surface">
-              <header className="border-b border-border-subtle px-4 py-3">
-                <h2 className="text-sm font-medium text-fg">Sources</h2>
-              </header>
-              <div className="divide-y divide-border-subtle">
-                {(sources?.sources ?? []).map((s) => (
-                  <SourceRow key={s.id} source={s} />
-                ))}
-              </div>
-            </section>
+            <>
+              <section className="rounded-md border border-border bg-surface">
+                <header className="border-b border-border-subtle px-4 py-3">
+                  <h2 className="text-sm font-medium text-fg">Sources</h2>
+                </header>
+                <div className="divide-y divide-border-subtle">
+                  {(sources?.sources ?? []).map((s) => (
+                    <SourceRow key={s.id} source={s} />
+                  ))}
+                </div>
+              </section>
+              <ImportExportSection />
+            </>
           )}
 
           {tab === "system" && (
@@ -163,6 +166,76 @@ function SettingsRoute(): JSX.Element {
 }
 
 type Source = NonNullable<Awaited<ReturnType<typeof api.sources>>["sources"]>[number];
+
+function ImportExportSection(): JSX.Element {
+  const qc = useQueryClient();
+  const [result, setResult] = useState<string | null>(null);
+
+  const importMut = useMutation({
+    mutationFn: (files: File[]) => api.importMarkdown(files),
+    onSuccess: (r) => {
+      const parts = [`imported ${r.imported}`, `skipped ${r.skipped} (dupes)`];
+      if (r.failed > 0) parts.push(`failed ${r.failed}`);
+      setResult(parts.join(" · ") + (r.errors.length > 0 ? ` — ${r.errors[0]}` : ""));
+      void qc.invalidateQueries({ queryKey: ["sources"] });
+      void qc.invalidateQueries({ queryKey: ["status"] });
+    },
+    onError: (err: unknown) =>
+      setResult(err instanceof Error ? `error: ${err.message}` : "import failed"),
+  });
+
+  const onPick = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = ""; // allow re-selecting the same files
+    if (files.length > 0) importMut.mutate(files);
+  };
+
+  const btn =
+    "cursor-pointer rounded-md border border-border-subtle px-2.5 py-1 text-xs text-fg-muted transition-colors hover:border-accent/40 hover:text-fg";
+
+  return (
+    <section className="rounded-md border border-border bg-surface">
+      <header className="border-b border-border-subtle px-4 py-3">
+        <h2 className="text-sm font-medium text-fg">Import / Export</h2>
+        <p className="mt-0.5 text-xs text-fg-faint">
+          Import a .zip of markdown (e.g. a Capacities export) or a folder of files — each is
+          ingested and deduped. Export dumps your documents, conversations, and reflections to a
+          markdown zip for backup.
+        </p>
+      </header>
+      <div className="space-y-2 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className={cn(btn, importMut.isPending && "pointer-events-none opacity-50")}>
+            {importMut.isPending ? "importing…" : "Import .zip / files"}
+            <input
+              type="file"
+              accept=".zip,.md,.markdown"
+              multiple
+              className="hidden"
+              onChange={onPick}
+              disabled={importMut.isPending}
+            />
+          </label>
+          <label className={cn(btn, importMut.isPending && "pointer-events-none opacity-50")}>
+            Import folder
+            <input
+              type="file"
+              multiple
+              className="hidden"
+              onChange={onPick}
+              disabled={importMut.isPending}
+              {...({ webkitdirectory: "" } as Record<string, string>)}
+            />
+          </label>
+          <a href={api.exportUrl} download className={btn}>
+            Export (.zip)
+          </a>
+        </div>
+        {result && <p className="font-mono text-[11px] text-fg-faint">{result}</p>}
+      </div>
+    </section>
+  );
+}
 
 function SourceRow({ source }: { source: Source }): JSX.Element {
   const qc = useQueryClient();

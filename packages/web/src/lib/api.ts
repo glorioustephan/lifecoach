@@ -317,6 +317,30 @@ export const api = {
       };
     }>("/api/sources/todoist/sync", {}),
 
+  // ─── Import / Export ──────────────────────────────────────────────────────
+  /** Upload markdown files and/or .zip archives of markdown to ingest. */
+  importMarkdown: async (
+    files: File[],
+    extract = false,
+  ): Promise<{ imported: number; skipped: number; failed: number; errors: string[] }> => {
+    const form = new FormData();
+    for (const f of files) form.append("files", f);
+    form.append("extract", String(extract));
+    const resp = await fetch("/api/ingest/import", { method: "POST", body: form });
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "");
+      throw new Error(`Import failed: ${resp.status} ${text}`.trim());
+    }
+    return resp.json() as Promise<{
+      imported: number;
+      skipped: number;
+      failed: number;
+      errors: string[];
+    }>;
+  },
+  /** URL for the markdown backup download (let the browser handle it via <a download>). */
+  exportUrl: "/api/export",
+
   // ─── Artifacts ──────────────────────────────────────────────────────────
   artifacts: (params: { type?: string; q?: string; limit?: number; offset?: number } = {}) => {
     const qs = new URLSearchParams();

@@ -84,6 +84,18 @@ export class ReflectionRepository {
     return row ? rowToReflection(row) : undefined;
   }
 
+  /** All reflections, newest first. Used by the markdown export. */
+  all(): Reflection[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, period_start, period_end, kind, title, themes, wins,
+                concerns, open_threads, body, created_at
+         FROM reflections ORDER BY period_end DESC`,
+      )
+      .all() as ReflectionRow[];
+    return rows.map(rowToReflection);
+  }
+
   /**
    * Find a reflection already generated for the exact (kind, period) window.
    * Used to dedup re-runs — a repeated cron fire over the same window should
