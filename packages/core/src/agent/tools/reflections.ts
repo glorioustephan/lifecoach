@@ -57,6 +57,16 @@ export const buildReflectionTools = (deps: ReflectionToolDeps) => [
         fromTs,
         toTs,
       );
+      if (!reflection) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `No activity in that ${kind} window (${new Date(fromTs).toISOString().slice(0, 10)} → ${new Date(toTs).toISOString().slice(0, 10)}) — nothing to reflect on, so I didn't create one.`,
+            },
+          ],
+        };
+      }
       await deps.memory.semantic.indexReflection(reflection);
       return {
         content: [

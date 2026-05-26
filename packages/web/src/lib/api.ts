@@ -175,7 +175,7 @@ export const api = {
     del<{ result: ForgetDocumentResult }>(`/api/memory/documents/${encodeURIComponent(id)}`),
   reflections: () => get<{ reflections: ReflectionRow[] }>("/api/memory/reflections"),
   generateReflection: (kind: "daily" | "weekly" | "monthly") =>
-    postJson<{ reflection: ReflectionRow }>("/api/memory/reflections/generate", { kind }),
+    postJson<{ reflection: ReflectionRow | null }>("/api/memory/reflections/generate", { kind }),
   inbox: (state: InsightState = "active") =>
     get<{ insights: InsightRow[] }>(`/api/inbox?state=${encodeURIComponent(state)}&limit=50`),
   generateInsights: () => postJson<{ insights: InsightRow[] }>("/api/inbox/generate", {}),

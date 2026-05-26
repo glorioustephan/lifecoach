@@ -66,6 +66,10 @@ export const registerReflect = (program: Command): void => {
                   from,
                   to,
                 ));
+              // Empty period — the reflector returns null; nothing to persist or push.
+              if (!reflection) {
+                return { reflection: null, writeback: null, reused: false };
+              }
               if (!existing) {
                 await lc.memory.semantic.indexReflection(reflection);
               }
@@ -86,9 +90,8 @@ export const registerReflect = (program: Command): void => {
               return { reflection, writeback, reused: !!existing };
             },
             {
-              generatedRefs: ({ reflection }) => [
-                { refType: "reflection", refId: reflection.id },
-              ],
+              generatedRefs: ({ reflection }) =>
+                reflection ? [{ refType: "reflection", refId: reflection.id }] : [],
             },
           );
           if (run.status === "skipped") {
@@ -96,6 +99,10 @@ export const registerReflect = (program: Command): void => {
             return;
           }
           const { reflection, writeback, reused } = run.result;
+          if (!reflection) {
+            spinner.succeed(`Nothing to reflect on for this ${kind} — no activity in the window, skipped.`);
+            return;
+          }
           spinner.succeed(
             reused
               ? `Reused existing ${kind} reflection ${reflection.id} (already generated for this window)`

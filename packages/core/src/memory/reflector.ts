@@ -314,7 +314,10 @@ export class Reflector {
 
   /**
    * Generate a structured reflection over [from, to). Persists to the
-   * reflections table and returns the resulting Reflection row.
+   * reflections table and returns the resulting Reflection row — or returns
+   * `null` when the period had no activity, so we never fabricate (or spend a
+   * model call on) an empty reflection. "Activity" = conversations, new facts,
+   * completed tasks, measurements, prior reflections to build on, or spending.
    */
   async generate(
     storage: Storage,
@@ -322,7 +325,7 @@ export class Reflector {
     kind: ReflectionKind,
     from: number,
     to: number,
-  ): Promise<Reflection> {
+  ): Promise<Reflection | null> {
     if (to <= from) {
       throw new LifecoachError(
         `Reflection period 'to' (${to}) must be after 'from' (${from})`,
@@ -332,6 +335,16 @@ export class Reflector {
 
     const includeFinancial = kind === "weekly" || kind === "monthly";
     const data = gatherPeriodData(storage, from, to, includeFinancial);
+
+    const hasActivity =
+      data.messages.length > 0 ||
+      data.facts.length > 0 ||
+      data.completedTasks.length > 0 ||
+      data.measurements.length > 0 ||
+      data.priorReflections.length > 0 ||
+      (data.financialTransactionSummary?.totalSpent ?? 0) > 0;
+    if (!hasActivity) return null;
+
     const rendered = renderData(data);
     const prompt = buildPrompt(kind, from, to, identity.render(), rendered);
 
