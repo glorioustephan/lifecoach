@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import JSZip from "jszip";
 import { Hono } from "hono";
+import { stream } from "hono/streaming";
 import type { Lifecoach } from "@lifecoach/core";
 import { IngestPipeline } from "@lifecoach/core";
 
@@ -62,11 +63,37 @@ export const ingestRoutes = (lc: Lifecoach) => {
   // keep a big import cheap and fast; embeddings still happen.
   app.post("/import", async (c) => {
     const form = await c.req.formData();
-    const files = form.getAll("files").filter((f) => typeof f !== "string");
-    if (files.length === 0) return c.json({ error: "no_files" }, 400);
+    const fileEntries = form.getAll("files").filter((f) => typeof f !== "string");
+    if (fileEntries.length === 0) return c.json({ error: "no_files" }, 400);
     const extract = form.get("extract") === "true";
 
     await fs.mkdir(lc.config.rawDir, { recursive: true });
+
+    // Expand uploads (direct .md files + entries inside .zip archives) into a
+    // flat list of markdown items so we know the total up front and can stream
+    // per-item progress.
+    const items: Array<{ name: string; buffer: Buffer }> = [];
+    const preErrors: string[] = [];
+    for (const file of fileEntries) {
+      if (typeof file === "string") continue; // narrow FormDataEntryValue -> File
+      const buf = Buffer.from(await file.arrayBuffer());
+      if (/\.zip$/i.test(file.name)) {
+        try {
+          const zip = await JSZip.loadAsync(buf);
+          for (const entry of Object.values(zip.files)) {
+            if (entry.dir) continue;
+            if (entry.name.includes("__MACOSX") || path.basename(entry.name).startsWith(".")) continue;
+            if (!isMarkdown(entry.name)) continue;
+            items.push({ name: path.basename(entry.name), buffer: await entry.async("nodebuffer") });
+          }
+        } catch {
+          preErrors.push(`${file.name}: not a valid zip`);
+        }
+      } else if (isMarkdown(file.name)) {
+        items.push({ name: file.name, buffer: buf });
+      }
+    }
+
     const pipeline = new IngestPipeline({
       storage: lc.storage,
       embedder: lc.embedder,
@@ -74,52 +101,44 @@ export const ingestRoutes = (lc: Lifecoach) => {
       ...(lc.extractor ? { extractor: lc.extractor } : {}),
     });
 
-    let imported = 0;
-    let skipped = 0;
-    let failed = 0;
-    const errors: string[] = [];
+    // Stream newline-delimited JSON progress: the client gets live "done/total"
+    // feedback, and the steady output keeps the connection alive through a long
+    // import (avoids request timeouts on big exports).
+    return stream(c, async (s) => {
+      let imported = 0;
+      let skipped = 0;
+      let failed = 0;
+      const errors: string[] = [...preErrors];
+      const send = async (obj: unknown): Promise<void> => {
+        await s.write(JSON.stringify(obj) + "\n");
+      };
 
-    const ingestBuffer = async (name: string, buffer: Buffer): Promise<void> => {
-      if (!isMarkdown(name)) return; // markdown only
-      const target = path.join(lc.config.rawDir, safeName(name));
-      try {
-        await fs.writeFile(target, buffer);
-        const result = await pipeline.ingest(target, { extract });
-        if (result.skipped) skipped += 1;
-        else imported += 1;
-      } catch (err) {
-        failed += 1;
-        if (errors.length < 25) {
-          errors.push(`${safeName(name)}: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
-    };
-
-    for (const file of files) {
-      if (typeof file === "string") continue; // narrow FormDataEntryValue -> File
-      const buf = Buffer.from(await file.arrayBuffer());
-      if (/\.zip$/i.test(file.name)) {
-        let zip: JSZip;
+      await send({ type: "start", total: items.length });
+      for (let i = 0; i < items.length; i += 1) {
+        const { name, buffer } = items[i]!;
+        const fileName = safeName(name);
+        let status: "imported" | "skipped" | "failed" = "imported";
         try {
-          zip = await JSZip.loadAsync(buf);
+          const target = path.join(lc.config.rawDir, fileName);
+          await fs.writeFile(target, buffer);
+          const result = await pipeline.ingest(target, { extract });
+          if (result.skipped) {
+            skipped += 1;
+            status = "skipped";
+          } else {
+            imported += 1;
+          }
         } catch (err) {
           failed += 1;
-          errors.push(`${file.name}: not a valid zip`);
-          continue;
+          status = "failed";
+          if (errors.length < 25) {
+            errors.push(`${fileName}: ${err instanceof Error ? err.message : String(err)}`);
+          }
         }
-        for (const entry of Object.values(zip.files)) {
-          if (entry.dir) continue;
-          if (entry.name.includes("__MACOSX") || path.basename(entry.name).startsWith(".")) continue;
-          if (!isMarkdown(entry.name)) continue;
-          const content = await entry.async("nodebuffer");
-          await ingestBuffer(entry.name, content);
-        }
-      } else {
-        await ingestBuffer(file.name, buf);
+        await send({ type: "progress", done: i + 1, total: items.length, name: fileName, status });
       }
-    }
-
-    return c.json({ imported, skipped, failed, errors });
+      await send({ type: "done", imported, skipped, failed, errors });
+    });
   });
 
   return app;

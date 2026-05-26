@@ -318,25 +318,63 @@ export const api = {
     }>("/api/sources/todoist/sync", {}),
 
   // ─── Import / Export ──────────────────────────────────────────────────────
-  /** Upload markdown files and/or .zip archives of markdown to ingest. */
+  /**
+   * Upload markdown files and/or .zip archives of markdown to ingest. The server
+   * streams newline-delimited JSON progress; `onProgress` fires per file with
+   * {done,total}. Resolves with the final totals.
+   */
   importMarkdown: async (
     files: File[],
+    onProgress?: (p: { done: number; total: number }) => void,
     extract = false,
   ): Promise<{ imported: number; skipped: number; failed: number; errors: string[] }> => {
     const form = new FormData();
     for (const f of files) form.append("files", f);
     form.append("extract", String(extract));
     const resp = await fetch("/api/ingest/import", { method: "POST", body: form });
-    if (!resp.ok) {
+    if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => "");
       throw new Error(`Import failed: ${resp.status} ${text}`.trim());
     }
-    return resp.json() as Promise<{
-      imported: number;
-      skipped: number;
-      failed: number;
-      errors: string[];
-    }>;
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let final = { imported: 0, skipped: 0, failed: 0, errors: [] as string[] };
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let evt: {
+          type?: string;
+          done?: number;
+          total?: number;
+          imported?: number;
+          skipped?: number;
+          failed?: number;
+          errors?: string[];
+        };
+        try {
+          evt = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (evt.type === "start") onProgress?.({ done: 0, total: evt.total ?? 0 });
+        else if (evt.type === "progress") onProgress?.({ done: evt.done ?? 0, total: evt.total ?? 0 });
+        else if (evt.type === "done") {
+          final = {
+            imported: evt.imported ?? 0,
+            skipped: evt.skipped ?? 0,
+            failed: evt.failed ?? 0,
+            errors: evt.errors ?? [],
+          };
+        }
+      }
+    }
+    return final;
   },
   /** URL for the markdown backup download (let the browser handle it via <a download>). */
   exportUrl: "/api/export",

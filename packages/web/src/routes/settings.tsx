@@ -170,18 +170,26 @@ type Source = NonNullable<Awaited<ReturnType<typeof api.sources>>["sources"]>[nu
 function ImportExportSection(): JSX.Element {
   const qc = useQueryClient();
   const [result, setResult] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   const importMut = useMutation({
-    mutationFn: (files: File[]) => api.importMarkdown(files),
+    mutationFn: (files: File[]) => api.importMarkdown(files, (p) => setProgress(p)),
+    onMutate: () => {
+      setResult(null);
+      setProgress({ done: 0, total: 0 });
+    },
     onSuccess: (r) => {
-      const parts = [`imported ${r.imported}`, `skipped ${r.skipped} (dupes)`];
+      setProgress(null);
+      const parts = [`Imported ${r.imported}`, `skipped ${r.skipped} (dupes)`];
       if (r.failed > 0) parts.push(`failed ${r.failed}`);
       setResult(parts.join(" · ") + (r.errors.length > 0 ? ` — ${r.errors[0]}` : ""));
       void qc.invalidateQueries({ queryKey: ["sources"] });
       void qc.invalidateQueries({ queryKey: ["status"] });
     },
-    onError: (err: unknown) =>
-      setResult(err instanceof Error ? `error: ${err.message}` : "import failed"),
+    onError: (err: unknown) => {
+      setProgress(null);
+      setResult(err instanceof Error ? `error: ${err.message}` : "import failed");
+    },
   });
 
   const onPick = (e: React.ChangeEvent<HTMLInputElement>): void => {
@@ -206,7 +214,11 @@ function ImportExportSection(): JSX.Element {
       <div className="space-y-2 px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <label className={cn(btn, importMut.isPending && "pointer-events-none opacity-50")}>
-            {importMut.isPending ? "importing…" : "Import .zip / files"}
+            {importMut.isPending
+              ? progress && progress.total > 0
+                ? `importing ${progress.done}/${progress.total}…`
+                : "importing…"
+              : "Import .zip / files"}
             <input
               type="file"
               accept=".zip,.md,.markdown"
@@ -231,6 +243,13 @@ function ImportExportSection(): JSX.Element {
             Export (.zip)
           </a>
         </div>
+        {importMut.isPending && (
+          <p className="text-[11px] text-fg-muted">
+            {progress && progress.total > 0
+              ? `Importing ${progress.done} of ${progress.total} files… keep this tab open.`
+              : "Reading upload…"}
+          </p>
+        )}
         {result && <p className="font-mono text-[11px] text-fg-faint">{result}</p>}
       </div>
     </section>
