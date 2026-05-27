@@ -2,12 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   EmailPasswordAuthProvider,
+  FixedTokenAuthProvider,
   MonarchGraphQLClient,
   getAccounts,
   getTransactions,
   getPortfolio,
 } from "monarch-money-ts";
-import type { GetTransactionsOptions } from "monarch-money-ts";
+import type { AuthProvider, GetTransactionsOptions } from "monarch-money-ts";
 import { LifecoachError } from "../../util/errors.js";
 
 // ─── Public interfaces ───────────────────────────────────────────────────────
@@ -55,7 +56,7 @@ interface PersistedSession {
 // ─── Client ──────────────────────────────────────────────────────────────────
 
 export class MonarchClient {
-  private auth: EmailPasswordAuthProvider | null = null;
+  private auth: AuthProvider | null = null;
   private graphql: MonarchGraphQLClient | null = null;
   private readonly sessionFile: string;
 
@@ -121,25 +122,14 @@ export class MonarchClient {
       // Treat as expired if it expires within the next 5 minutes
       if (Date.now() >= session.expiresAtMs - 5 * 60 * 1000) return false;
 
-      const onTokenUpdate = (token: string, expiresAtMs: number | undefined) => {
-        try {
-          fs.writeFileSync(
-            this.sessionFile,
-            JSON.stringify({ token, expiresAtMs: expiresAtMs ?? (Date.now() + 24 * 60 * 60 * 1000) } satisfies PersistedSession, null, 2),
-            "utf8",
-          );
-        } catch {
-          // Non-fatal
-        }
-      };
-
-      this.auth = new EmailPasswordAuthProvider({
-        email: "",
-        password: "",
-        token: session.token,
-        tokenExpiresAtMs: session.expiresAtMs,
-        onTokenUpdate,
-      });
+      // Restore with a token-only provider. EmailPasswordAuthProvider throws on
+      // empty email/password (even when a token is supplied), which would make
+      // loadSession always fail and force a fresh login on every sync — and a
+      // second login within the same 30s TOTP window gets rejected by Monarch.
+      // FixedTokenAuthProvider reuses the persisted token directly; when it
+      // eventually expires, the expiry check above returns false and the caller
+      // re-authenticates once.
+      this.auth = new FixedTokenAuthProvider(session.token);
       this.graphql = new MonarchGraphQLClient();
       return true;
     } catch {
@@ -151,7 +141,7 @@ export class MonarchClient {
     return this.auth !== null && this.graphql !== null;
   }
 
-  private ensureAuth(): { auth: EmailPasswordAuthProvider; graphql: MonarchGraphQLClient } {
+  private ensureAuth(): { auth: AuthProvider; graphql: MonarchGraphQLClient } {
     if (!this.auth || !this.graphql) {
       throw new LifecoachError("Monarch client not authenticated", "MONARCH_NOT_AUTHENTICATED");
     }
