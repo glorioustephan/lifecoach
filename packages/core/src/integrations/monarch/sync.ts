@@ -38,13 +38,26 @@ export async function syncMonarch(client: MonarchClient, storage: Storage): Prom
 
     const syncTs = now();
     for (const monarchAcc of monarchAccounts) {
-      const accountType = monarchAcc.isAsset
-        ? monarchAcc.type.name === "CREDIT" || monarchAcc.subtype.name === "CREDIT"
-          ? "credit_card"
-          : monarchAcc.type.name === "INVESTMENT"
-            ? "investment"
-            : "asset"
-        : "debt";
+      // Map Monarch's account type to one of the local CHECK-constrained values:
+      // checking | savings | credit_card | investment | debt | other.
+      // Monarch returns lowercase type/subtype names, so compare case-insensitively
+      // and always fall back to an allowed value (never the invalid "asset").
+      const t = (monarchAcc.type?.name ?? "").toLowerCase();
+      const st = (monarchAcc.subtype?.name ?? "").toLowerCase();
+      let accountType: "checking" | "savings" | "credit_card" | "investment" | "debt" | "other";
+      if (!monarchAcc.isAsset) {
+        accountType = t.includes("credit") || st.includes("credit") ? "credit_card" : "debt";
+      } else if (t.includes("credit") || st.includes("credit")) {
+        accountType = "credit_card";
+      } else if (t.includes("invest") || t.includes("brokerage")) {
+        accountType = "investment";
+      } else if (st.includes("savings")) {
+        accountType = "savings";
+      } else if (st.includes("checking")) {
+        accountType = "checking";
+      } else {
+        accountType = "other";
+      }
 
       const existing = storage.financial.getAccountByExternalId(monarchAcc.id);
 
