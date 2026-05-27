@@ -7,6 +7,7 @@ import { AnthropicExtractor, type Extractor } from "./ingest/index.js";
 import { TodoistClient, CapacitiesClient } from "./integrations/index.js";
 import { Reflector } from "./memory/reflector.js";
 import { Insighter } from "./memory/insighter.js";
+import { FinancialAnalyzer } from "./memory/financial-analyzer.js";
 import { ArtifactExtractor } from "./artifacts/index.js";
 import { AlpacaClient, InvestmentRecommender } from "./integrations/alpaca/index.js";
 
@@ -22,6 +23,8 @@ export interface Lifecoach {
   reflector: Reflector | null;
   /** Available when ANTHROPIC_API_KEY is set. Generates ranked insights from the user's data. */
   insighter: Insighter | null;
+  /** Available when ANTHROPIC_API_KEY is set. Generates financial insights from synced Monarch data. */
+  financialAnalyzer: FinancialAnalyzer | null;
   /** Available when ANTHROPIC_API_KEY is set. Extracts + formats artifacts (recipes, …). */
   artifactExtractor: ArtifactExtractor | null;
   /** Available when TODOIST_API_TOKEN is set. */
@@ -56,6 +59,9 @@ export const createLifecoach = (overrides?: Partial<LifecoachConfig>): Lifecoach
   const insighter = config.anthropicApiKey
     ? new Insighter({ apiKey: config.anthropicApiKey, model: config.extractionModel })
     : null;
+  const financialAnalyzer = config.anthropicApiKey
+    ? new FinancialAnalyzer({ apiKey: config.anthropicApiKey, model: config.extractionModel })
+    : null;
   const artifactExtractor = config.anthropicApiKey
     ? new ArtifactExtractor({ apiKey: config.anthropicApiKey, model: config.extractionModel })
     : null;
@@ -80,6 +86,7 @@ export const createLifecoach = (overrides?: Partial<LifecoachConfig>): Lifecoach
     extractor,
     reflector,
     insighter,
+    financialAnalyzer,
     artifactExtractor,
     todoist,
     capacities,
@@ -114,11 +121,23 @@ export {
   MonarchClient,
   syncMonarch,
   type MonarchSyncResult,
+  buildMonarchClientFromProfile,
+  setMonarchCredentials,
+  getMonarchCredentials,
+  hasMonarchCredentials,
+  getMonarchSettings,
+  recordMonarchSync,
+  recordMonarchConnected,
+  recordMonarchError,
+  MONARCH_PROFILE_KEYS,
+  type MonarchCredentials,
+  type MonarchSettings,
 } from "./integrations/index.js";
 export { forgetDocument, type ForgetDocumentResult } from "./memory/forget.js";
 export { refreshAttentionSignals } from "./memory/attention.js";
 export { Reflector, kindWindow, type ReflectionPayload } from "./memory/reflector.js";
 export { Insighter } from "./memory/insighter.js";
+export { FinancialAnalyzer } from "./memory/financial-analyzer.js";
 export {
   AlpacaClient,
   AlpacaApiError,

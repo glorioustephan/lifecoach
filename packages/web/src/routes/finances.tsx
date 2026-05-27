@@ -1,6 +1,5 @@
-import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DollarSign, TrendingUp, AlertCircle, RefreshCw } from "lucide-react";
 import { ViewHeader } from "~/components/ui/ViewHeader";
 import { Button } from "~/components/ui/Button";
@@ -13,116 +12,56 @@ export const Route = createFileRoute("/finances")({
   component: FinancesRoute,
 });
 
-interface Account {
-  id: string;
-  displayName: string;
-  type: string;
-  balance: number;
-  status: string;
-  institution?: string;
-  syncedAt: number;
-}
-
-interface Budget {
-  id: string;
-  category: string;
-  month: string;
-  limit: number;
-  spent: number;
-}
-
-interface Transaction {
-  id: string;
-  date: number;
-  merchant: string;
-  amount: number;
-  category?: string;
-  isPending: boolean;
-}
-
-interface Holding {
-  id: string;
-  symbol: string;
-  quantity: number;
-  currentPrice: number;
-  marketValue: number;
-  costBasis?: number;
-}
-
-interface FinancialInsight {
-  id: string;
-  topic: string;
-  body: string;
-  category: string;
-  priority: number;
-  recommendation?: string;
-  createdAt: number;
-}
-
 function FinancesRoute(): JSX.Element {
-  const [syncLoading, setSyncLoading] = useState(false);
+  const queryClient = useQueryClient();
 
-  // Mock data queries - in real app these would be actual API calls
-  const { data: accountsData, refetch: refetchAccounts } = useQuery({
+  const { data: accountsData } = useQuery({
     queryKey: ["finances", "accounts"],
-    queryFn: async () => ({
-      accounts: [] as Account[],
-      totalAssets: 0,
-      totalLiabilities: 0,
-      netWorth: 0,
-    }),
+    queryFn: api.financialAccounts,
   });
 
   const { data: budgetsData } = useQuery({
     queryKey: ["finances", "budgets"],
-    queryFn: async () => ({
-      budgets: [] as Budget[],
-      totalBudget: 0,
-      totalSpent: 0,
-    }),
+    queryFn: () => api.financialBudgets(),
   });
 
   const { data: transactionsData } = useQuery({
     queryKey: ["finances", "transactions"],
-    queryFn: async () => ({
-      transactions: [] as Transaction[],
-    }),
+    queryFn: () => api.financialTransactions(),
   });
 
   const { data: holdingsData } = useQuery({
     queryKey: ["finances", "holdings"],
-    queryFn: async () => ({
-      holdings: [] as Holding[],
-      totalValue: 0,
-    }),
+    queryFn: api.financialHoldings,
   });
 
   const { data: insightsData } = useQuery({
     queryKey: ["finances", "insights"],
-    queryFn: async () => ({
-      insights: [] as FinancialInsight[],
-    }),
+    queryFn: api.financialInsights,
   });
 
-  const handleSync = async () => {
-    setSyncLoading(true);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      await refetchAccounts();
-    } finally {
-      setSyncLoading(false);
-    }
-  };
+  const syncMutation = useMutation({
+    mutationFn: api.syncMonarch,
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["finances"] });
+      void queryClient.invalidateQueries({ queryKey: ["status"] });
+      void queryClient.invalidateQueries({ queryKey: ["sources"] });
+    },
+  });
+  const syncLoading = syncMutation.isPending;
+  const handleSync = () => syncMutation.mutate();
 
   const accounts = accountsData?.accounts ?? [];
   const budgets = budgetsData?.budgets ?? [];
   const transactions = transactionsData?.transactions ?? [];
   const holdings = holdingsData?.holdings ?? [];
   const insights = insightsData?.insights ?? [];
+  const totalAssets = accountsData?.totalAssets ?? 0;
+  const totalLiabilities = accountsData?.totalLiabilities ?? 0;
   const netWorth = accountsData?.netWorth ?? 0;
   const savingsRate =
-    accountsData && accountsData.totalAssets > 0
-      ? ((accountsData.totalAssets / (accountsData.totalAssets + accountsData.totalLiabilities)) * 100).toFixed(1)
+    totalAssets > 0
+      ? ((totalAssets / (totalAssets + totalLiabilities)) * 100).toFixed(1)
       : "0";
 
   return (
@@ -148,37 +87,32 @@ function FinancesRoute(): JSX.Element {
         <div className="mx-auto max-w-2xl space-y-6 px-4 pb-6 pt-8 md:px-6">
 
           {/* Account Overview Cards */}
+          {accounts.length > 0 && (
           <section>
             <h2 className="mb-3 text-xs uppercase tracking-wide text-fg-faint">
               Account Overview
             </h2>
             <div className="grid gap-3 sm:grid-cols-2">
-              {/* Checking */}
+              {/* Assets */}
               <Card>
                 <CardHeader className="pb-1">
-                  <CardTitle className="text-xs font-medium text-fg-muted">Checking</CardTitle>
+                  <CardTitle className="text-xs font-medium text-fg-muted">Assets</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-xl font-semibold text-fg">
-                    ${accounts
-                      .filter((a) => a.type === "checking")
-                      .reduce((sum, a) => sum + a.balance, 0)
-                      .toFixed(2)}
+                    ${totalAssets.toFixed(2)}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Savings */}
+              {/* Debts */}
               <Card>
                 <CardHeader className="pb-1">
-                  <CardTitle className="text-xs font-medium text-fg-muted">Savings</CardTitle>
+                  <CardTitle className="text-xs font-medium text-fg-muted">Debts</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-xl font-semibold text-fg">
-                    ${accounts
-                      .filter((a) => a.type === "savings")
-                      .reduce((sum, a) => sum + a.balance, 0)
-                      .toFixed(2)}
+                    ${totalLiabilities.toFixed(2)}
                   </div>
                 </CardContent>
               </Card>
@@ -212,6 +146,7 @@ function FinancesRoute(): JSX.Element {
               </Card>
             </div>
           </section>
+          )}
 
           {/* Budget Status */}
           {budgets.length > 0 && (

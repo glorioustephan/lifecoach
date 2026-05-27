@@ -53,6 +53,72 @@ export interface ArtifactSettingsRow {
   lastScanAt: number | null;
 }
 
+// ─── Financial (Monarch Money) ───────────────────────────────────────────────
+
+export interface FinancialAccount {
+  id: string;
+  displayName: string;
+  type: string;
+  balance: number;
+  status: string;
+  institution?: string;
+  syncedAt: number;
+}
+
+export interface FinancialTransaction {
+  id: string;
+  date: number;
+  merchant: string;
+  amount: number;
+  category?: string;
+  isPending: boolean;
+}
+
+export interface FinancialHolding {
+  id: string;
+  symbol: string;
+  quantity: number;
+  currentPrice: number;
+  marketValue: number;
+  costBasis?: number;
+}
+
+export interface FinancialBudget {
+  id: string;
+  category: string;
+  month: string;
+  limit: number;
+  spent: number;
+}
+
+export interface FinancialInsightRow {
+  id: string;
+  topic: string;
+  body: string;
+  category: string;
+  priority: number;
+  recommendation?: string;
+  createdAt: number;
+}
+
+export interface MonarchSettings {
+  hasCredentials: boolean;
+  connected: boolean;
+  lastSyncAt: number | null;
+  lastError: string | null;
+}
+
+export interface MonarchSyncResult {
+  accountsFetched: number;
+  accountsUpserted: number;
+  transactionsFetched: number;
+  transactionsUpserted: number;
+  holdingsSnapshotted: number;
+  startedAt: number;
+  completedAt: number;
+  success: boolean;
+}
+
 const get = async <T>(path: string): Promise<T> => {
   const resp = await fetch(path);
   if (!resp.ok) throw new Error(`${path}: ${resp.status} ${resp.statusText}`);
@@ -287,6 +353,7 @@ export const api = {
         watchedPath?: string;
         defaultSpaceId?: string | null;
         mirroredObjects?: number;
+        accounts?: number;
       }>;
     }>("/api/sources"),
   syncCapacities: (opts?: { pruneMissing?: boolean; searchTerms?: string[] }) =>
@@ -411,4 +478,37 @@ export const api = {
     patchJson<{ settings: ArtifactSettingsRow }>("/api/artifacts/settings", {
       autoExtractEnabled,
     }),
+
+  // ─── Financial (Monarch Money) ────────────────────────────────────────────
+  monarchSettings: () => get<MonarchSettings>("/api/sources/monarch/settings"),
+  saveMonarchCredentials: (body: { email: string; password: string; mfaSecret?: string }) =>
+    postJson<{ ok: true; settings: MonarchSettings }>("/api/sources/monarch/credentials", body),
+  syncMonarch: () =>
+    postJson<{ result?: MonarchSyncResult; skipped?: boolean }>("/api/sources/monarch/sync", {}),
+  financialAccounts: () =>
+    get<{
+      accounts: FinancialAccount[];
+      totalAssets: number;
+      totalLiabilities: number;
+      netWorth: number;
+    }>("/api/financial/accounts"),
+  financialNetWorth: () =>
+    get<{ totalAssets: number; totalLiabilities: number; netWorth: number }>(
+      "/api/financial/net-worth",
+    ),
+  financialTransactions: (limit = 50) =>
+    get<{ transactions: FinancialTransaction[] }>(`/api/financial/transactions?limit=${limit}`),
+  financialBudgets: (month?: string) =>
+    get<{ budgets: FinancialBudget[] }>(
+      `/api/financial/budgets${month ? `?month=${encodeURIComponent(month)}` : ""}`,
+    ),
+  financialHoldings: () =>
+    get<{
+      holdings: FinancialHolding[];
+      marketValue: number;
+      costBasis: number;
+      gain: number;
+    }>("/api/financial/holdings"),
+  financialInsights: () =>
+    get<{ insights: FinancialInsightRow[] }>("/api/financial/insights"),
 };

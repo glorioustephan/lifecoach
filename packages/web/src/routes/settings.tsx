@@ -108,6 +108,7 @@ function SettingsRoute(): JSX.Element {
                   ))}
                 </div>
               </section>
+              <MonarchConnectionSection />
               <ImportExportSection />
             </>
           )}
@@ -251,6 +252,141 @@ function ImportExportSection(): JSX.Element {
           </p>
         )}
         {result && <p className="font-mono text-[11px] text-fg-faint">{result}</p>}
+      </div>
+    </section>
+  );
+}
+
+// ─── Monarch Money Connection ────────────────────────────────────────────────
+
+function MonarchConnectionSection(): JSX.Element {
+  const qc = useQueryClient();
+  const { data: settings } = useQuery({
+    queryKey: ["monarch-settings"],
+    queryFn: api.monarchSettings,
+  });
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mfaSecret, setMfaSecret] = useState("");
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.saveMonarchCredentials({
+        email: email.trim(),
+        password,
+        ...(mfaSecret.trim() ? { mfaSecret: mfaSecret.trim() } : {}),
+      }),
+    onSuccess: () => {
+      setFeedback("Connected — credentials verified and stored.");
+      setPassword("");
+      setMfaSecret("");
+      void qc.invalidateQueries({ queryKey: ["monarch-settings"] });
+      void qc.invalidateQueries({ queryKey: ["sources"] });
+    },
+    onError: (err: unknown) => {
+      setFeedback(err instanceof Error ? `Error: ${err.message}` : "Failed to connect.");
+    },
+  });
+
+  const sync = useMutation({
+    mutationFn: api.syncMonarch,
+    onSuccess: (r) => {
+      setFeedback(
+        r.skipped
+          ? "A sync is already running."
+          : r.result
+            ? `Synced — ${r.result.accountsUpserted} accounts · ${r.result.transactionsUpserted} transactions · ${r.result.holdingsSnapshotted} holdings.`
+            : "Sync complete.",
+      );
+      void qc.invalidateQueries({ queryKey: ["monarch-settings"] });
+      void qc.invalidateQueries({ queryKey: ["finances"] });
+      void qc.invalidateQueries({ queryKey: ["sources"] });
+      void qc.invalidateQueries({ queryKey: ["status"] });
+    },
+    onError: (err: unknown) => {
+      setFeedback(err instanceof Error ? `Sync failed: ${err.message}` : "Sync failed.");
+    },
+  });
+
+  const hasCreds = settings?.hasCredentials ?? false;
+  const canSave = email.trim().length > 0 && password.length > 0 && !save.isPending;
+  const input =
+    "w-full rounded-md border border-border-subtle bg-bg px-2.5 py-1.5 text-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  const btn =
+    "cursor-pointer rounded-md border border-border-subtle px-2.5 py-1 text-xs text-fg-muted transition-colors hover:border-accent/40 hover:text-fg disabled:cursor-not-allowed disabled:opacity-50";
+
+  return (
+    <section className="rounded-md border border-border bg-surface">
+      <header className="border-b border-border-subtle px-4 py-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-sm font-medium text-fg">Monarch Money</h2>
+          <span
+            className={cn(
+              "text-[11px] uppercase tracking-wide",
+              settings?.connected ? "text-success-500" : "text-fg-faint",
+            )}
+          >
+            {settings?.connected ? "connected" : hasCreds ? "needs attention" : "not configured"}
+          </span>
+        </div>
+        <p className="mt-0.5 text-xs text-fg-faint">
+          Connect your Monarch Money account to sync accounts, transactions, budgets, and holdings.
+          Credentials are encrypted at rest (requires <code>LIFECOACH_SECRET_KEY</code>).
+        </p>
+        {settings?.lastSyncAt && (
+          <p className="mt-1 font-mono text-[10px] text-fg-faint">
+            Last sync: {formatRelative(settings.lastSyncAt)}
+          </p>
+        )}
+        {settings?.lastError && !settings.connected && (
+          <p className="mt-1 text-[11px] text-warning-200">{settings.lastError}</p>
+        )}
+      </header>
+      <div className="space-y-2.5 px-4 py-3">
+        <div className="space-y-2">
+          <input
+            type="email"
+            autoComplete="off"
+            placeholder="Monarch email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={input}
+          />
+          <input
+            type="password"
+            autoComplete="new-password"
+            placeholder={hasCreds ? "Password (••••••, enter to replace)" : "Password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={input}
+          />
+          <input
+            type="password"
+            autoComplete="off"
+            placeholder="MFA secret (optional, TOTP key)"
+            value={mfaSecret}
+            onChange={(e) => setMfaSecret(e.target.value)}
+            className={input}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => save.mutate()} disabled={!canSave} className={btn}>
+            {save.isPending ? "Connecting…" : "Save & Connect"}
+          </button>
+          {hasCreds && (
+            <button
+              type="button"
+              onClick={() => sync.mutate()}
+              disabled={sync.isPending}
+              className={btn}
+            >
+              {sync.isPending ? "Syncing…" : "Sync now"}
+            </button>
+          )}
+        </div>
+        {feedback && <p className="font-mono text-[11px] text-fg-faint">{feedback}</p>}
       </div>
     </section>
   );

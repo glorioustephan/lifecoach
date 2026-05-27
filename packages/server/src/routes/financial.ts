@@ -1,0 +1,70 @@
+import { Hono } from "hono";
+import type { Lifecoach } from "@lifecoach/core";
+
+// Credit cards and debt accounts are liabilities; everything else is an asset.
+const LIABILITY_TYPES = new Set(["debt", "credit_card"]);
+
+const computeNetWorth = (lc: Lifecoach) => {
+  const accounts = lc.storage.financial.listAccounts({ status: "active" });
+  let totalAssets = 0;
+  let totalLiabilities = 0;
+  for (const a of accounts) {
+    if (LIABILITY_TYPES.has(a.type)) totalLiabilities += Math.abs(a.balance);
+    else totalAssets += a.balance;
+  }
+  return { accounts, totalAssets, totalLiabilities, netWorth: totalAssets - totalLiabilities };
+};
+
+/** Read-only views over synced Monarch data, backing the Finances page. */
+export const financialRoutes = (lc: Lifecoach) => {
+  const app = new Hono();
+
+  app.get("/accounts", (c) => c.json(computeNetWorth(lc)));
+
+  app.get("/net-worth", (c) => {
+    const { totalAssets, totalLiabilities, netWorth } = computeNetWorth(lc);
+    return c.json({ totalAssets, totalLiabilities, netWorth });
+  });
+
+  app.get("/transactions", (c) => {
+    const q = (k: string) => c.req.query(k);
+    const limit = Math.min(Number(q("limit") ?? "50") || 50, 500);
+    const transactions = lc.storage.financial
+      .queryTransactions({
+        ...(q("from") ? { from: Number(q("from")) } : {}),
+        ...(q("to") ? { to: Number(q("to")) } : {}),
+        ...(q("category") ? { category: q("category") as string } : {}),
+        ...(q("accountId") ? { accountId: q("accountId") as string } : {}),
+      })
+      .slice(0, limit);
+    return c.json({ transactions });
+  });
+
+  app.get("/budgets", (c) => {
+    const month = c.req.query("month") || undefined;
+    return c.json({ budgets: lc.storage.financial.listBudgets(month) });
+  });
+
+  app.get("/holdings", (c) => {
+    const all = lc.storage.financial.queryHoldings();
+    // Latest snapshot only (sync appends a new dated snapshot each run).
+    const latest = all.reduce((m, h) => Math.max(m, h.snapshotDate), 0);
+    const holdings = all.filter((h) => h.snapshotDate === latest);
+    const marketValue = holdings.reduce((s, h) => s + (h.marketValue ?? 0), 0);
+    const costBasis = holdings.reduce((s, h) => s + (h.costBasis ?? 0), 0);
+    return c.json({ holdings, marketValue, costBasis, gain: marketValue - costBasis });
+  });
+
+  app.get("/insights", (c) => {
+    const category = c.req.query("category") || undefined;
+    const priorityRaw = c.req.query("priority");
+    return c.json({
+      insights: lc.storage.financial.listInsights({
+        ...(category ? { category } : {}),
+        ...(priorityRaw ? { priority: Number(priorityRaw) } : {}),
+      }),
+    });
+  });
+
+  return app;
+};

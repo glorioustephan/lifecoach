@@ -1,7 +1,16 @@
 import chalk from "chalk";
 import ora from "ora";
 import { Command } from "commander";
-import { createLifecoach, syncTodoist, syncCapacities, MonarchClient, syncMonarch } from "@lifecoach/core";
+import {
+  createLifecoach,
+  syncTodoist,
+  syncCapacities,
+  MonarchClient,
+  syncMonarch,
+  buildMonarchClientFromProfile,
+  recordMonarchSync,
+  recordMonarchError,
+} from "@lifecoach/core";
 
 export const registerSync = (program: Command): void => {
   const sync = program
@@ -132,31 +141,59 @@ export const registerSync = (program: Command): void => {
       const lc = createLifecoach();
       const spinner = ora({ text: "syncing Monarch financial data…", color: "cyan" }).start();
       try {
-        const monarchSessionFile = lc.config.monarchSessionFile || ".mm/mm_session.json";
-        const client = new MonarchClient(monarchSessionFile);
-
-        // Try to load existing session first; fall back to email/password from env
-        const sessionLoaded = await client.loadSession();
-        if (!sessionLoaded) {
-          const { monarchEmail, monarchPassword, monarchMfaSecret } = lc.config;
-          if (!monarchEmail || !monarchPassword) {
-            spinner.fail("Monarch: no active session and no credentials configured.");
-            console.error(
-              chalk.dim("  Add MONARCH_EMAIL and MONARCH_PASSWORD to your .env file."),
-            );
-            lc.close();
-            process.exitCode = 1;
-            return;
+        // Prefer credentials saved via Settings (encrypted at rest); fall back to
+        // a persisted session or MONARCH_* env vars for headless/legacy setups.
+        let client = await buildMonarchClientFromProfile({
+          storage: lc.storage,
+          config: lc.config,
+        });
+        if (!client) {
+          const monarchSessionFile = lc.config.monarchSessionFile || ".mm/mm_session.json";
+          const envClient = new MonarchClient(monarchSessionFile);
+          const sessionLoaded = await envClient.loadSession();
+          if (!sessionLoaded) {
+            const { monarchEmail, monarchPassword, monarchMfaSecret } = lc.config;
+            if (!monarchEmail || !monarchPassword) {
+              spinner.fail("Monarch: no saved credentials, no active session, no env credentials.");
+              console.error(
+                chalk.dim(
+                  "  Connect in Settings → Sources, or add MONARCH_EMAIL and MONARCH_PASSWORD to your .env file.",
+                ),
+              );
+              lc.close();
+              process.exitCode = 1;
+              return;
+            }
+            spinner.text = "Authenticating with Monarch Money…";
+            await envClient.authenticate(monarchEmail, monarchPassword, monarchMfaSecret);
           }
-          spinner.text = "Authenticating with Monarch Money…";
-          await client.authenticate(monarchEmail, monarchPassword, monarchMfaSecret);
+          client = envClient;
         }
 
-        const result = await syncMonarch(client, lc.storage);
+        const activeClient = client;
+        const run = await lc.storage.jobs.run("sync.monarch", async () => {
+          const result = await syncMonarch(activeClient, lc.storage);
+          recordMonarchSync(lc.storage);
+          // Best-effort: regenerate insights from the freshly synced data.
+          if (lc.financialAnalyzer) {
+            try {
+              await lc.financialAnalyzer.generate(lc.storage);
+            } catch {
+              /* insights are non-critical; sync already succeeded */
+            }
+          }
+          return result;
+        });
+        if (run.status === "skipped") {
+          spinner.succeed(`Monarch sync already running (${run.activeRunId}).`);
+          return;
+        }
+        const result = run.result;
         spinner.succeed(
           `Monarch sync — ${result.accountsUpserted} accounts, ${result.transactionsUpserted} transactions, ${result.holdingsSnapshotted} holdings`,
         );
       } catch (err) {
+        recordMonarchError(lc.storage, err instanceof Error ? err.message : String(err));
         spinner.fail("sync failed");
         console.error(chalk.red(err instanceof Error ? err.message : String(err)));
         process.exitCode = 1;
