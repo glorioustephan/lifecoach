@@ -1,0 +1,31 @@
+diff --git a/dist/accounts.types.js b/dist/accounts.types.js
+index 361d05fed48657e688184fc6dfa87e651dc06a98..0847df691737152ed9e9d475dd7f6dfa40ea6fff 100644
+--- a/dist/accounts.types.js
++++ b/dist/accounts.types.js
+@@ -53,7 +53,7 @@ export const AccountSchema = z
+     signedBalance: z.number(),
+     updatedAt: z.string(),
+     icon: z.string(),
+-    logoUrl: z.string(),
++    logoUrl: z.string().nullable(),
+     displayLastUpdatedAt: z.string(),
+     limit: z.number().nullable(),
+     mask: z.string().nullable(),
+@@ -64,7 +64,7 @@ export const AccountSchema = z
+     })
+         .strict(),
+     credential: AccountCredentialSchema.nullable(),
+-    institution: InstitutionSchema,
++    institution: InstitutionSchema.nullable(),
+     ownedByUser: UserSummarySchema.nullable(),
+     __typename: z.string().optional(),
+ })
+@@ -78,7 +78,7 @@ export const AccountSummarySchema = z
+     id: z.string(),
+     displayName: z.string(),
+     icon: z.string(),
+-    logoUrl: z.string(),
++    logoUrl: z.string().nullable(),
+     __typename: z.string().optional(),
+ })
+     .strict();

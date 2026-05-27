@@ -68,6 +68,11 @@ export class MonarchClient {
    * subsequent calls can skip the login round-trip.
    */
   async authenticate(email: string, password: string, totpKey?: string): Promise<void> {
+    // Monarch shows the authenticator setup key with spaces and in lower/mixed
+    // case (e.g. "abcd efgh ijkl mnop"); the TOTP generator needs the bare
+    // uppercase base32 seed, so normalize before use.
+    const normalizedTotpKey = totpKey ? totpKey.replace(/\s+/g, "").toUpperCase() : undefined;
+
     const onTokenUpdate = (token: string, expiresAtMs: number | undefined) => {
       try {
         const dir = path.dirname(this.sessionFile);
@@ -85,7 +90,7 @@ export class MonarchClient {
     this.auth = new EmailPasswordAuthProvider({
       email,
       password,
-      ...(totpKey ? { totpKey } : {}),
+      ...(normalizedTotpKey ? { totpKey: normalizedTotpKey } : {}),
       onTokenUpdate,
     });
     this.graphql = new MonarchGraphQLClient();

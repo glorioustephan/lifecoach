@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  monarch-money-ts@0.2.0: bdda5b1d7bf21a108a1a8b0be375cef993edbcbb2e37a948f17035a2842969c0
+
 importers:
 
   .:
@@ -93,7 +96,7 @@ importers:
         version: 4.0.3
       monarch-money-ts:
         specifier: ^0.2.0
-        version: 0.2.0(graphql@16.14.0)
+        version: 0.2.0(patch_hash=bdda5b1d7bf21a108a1a8b0be375cef993edbcbb2e37a948f17035a2842969c0)(graphql@16.14.0)
       papaparse:
         specifier: ^5.5.3
         version: 5.5.3
@@ -6307,7 +6310,7 @@ snapshots:
 
   mkdirp-classic@0.5.3: {}
 
-  monarch-money-ts@0.2.0(graphql@16.14.0):
+  monarch-money-ts@0.2.0(patch_hash=bdda5b1d7bf21a108a1a8b0be375cef993edbcbb2e37a948f17035a2842969c0)(graphql@16.14.0):
     dependencies:
       commander: 12.1.0
       graphql-request: 7.4.0(graphql@16.14.0)
