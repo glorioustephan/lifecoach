@@ -137,7 +137,14 @@ export const loadConfig = (overrides: Partial<LifecoachConfig> = {}): LifecoachC
       ?? process.env.CAPACITIES_MCP_URL
       ?? "https://api.capacities.io/mcp",
     capacitiesMcpToken: overrides.capacitiesMcpToken ?? process.env.CAPACITIES_MCP_TOKEN,
-    monarchSessionFile: overrides.monarchSessionFile ?? process.env.MONARCH_SESSION_FILE,
+    // Anchor the Monarch session token to an absolute path in the data dir so
+    // the web server and the cron sync job (which run from different cwds) share
+    // one persisted token and reuse it instead of re-logging-in (which trips
+    // Monarch's login rate limiter). Honour an explicit override/env first.
+    monarchSessionFile:
+      overrides.monarchSessionFile
+      ?? process.env.MONARCH_SESSION_FILE
+      ?? path.join(dataDir, "monarch-session.json"),
     monarchEmail: overrides.monarchEmail ?? process.env.MONARCH_EMAIL,
     monarchPassword: overrides.monarchPassword ?? process.env.MONARCH_PASSWORD,
     monarchMfaSecret: overrides.monarchMfaSecret ?? process.env.MONARCH_MFA_SECRET,

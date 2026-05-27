@@ -386,6 +386,12 @@ function MonarchConnectionSection(): JSX.Element {
             </button>
           )}
         </div>
+        {hasCreds && (
+          <p className="text-[11px] text-fg-faint">
+            Credentials are saved (encrypted). “Sync now” uses the stored login — you don’t need to
+            re-enter anything. The fields above are only for updating them.
+          </p>
+        )}
         {feedback && <p className="font-mono text-[11px] text-fg-faint">{feedback}</p>}
       </div>
     </section>
