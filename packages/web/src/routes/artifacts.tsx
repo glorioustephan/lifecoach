@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Cloud,
   Copy,
+  Eye,
   Pencil,
   SlidersHorizontal,
   Sparkles,
@@ -136,6 +137,7 @@ function ArtifactsRoute(): JSX.Element {
       }),
   });
 
+  const [viewingArtifact, setViewingArtifact] = useState<ArtifactRow | null>(null);
   const [editingArtifact, setEditingArtifact] = useState<ArtifactRow | null>(null);
   const [deletingArtifact, setDeletingArtifact] = useState<ArtifactRow | null>(null);
 
@@ -230,6 +232,7 @@ function ArtifactsRoute(): JSX.Element {
                 <ArtifactCard
                   key={a.id}
                   artifact={a}
+                  onView={() => setViewingArtifact(a)}
                   onEdit={() => setEditingArtifact(a)}
                   onDelete={() => setDeletingArtifact(a)}
                 />
@@ -237,32 +240,42 @@ function ArtifactsRoute(): JSX.Element {
             </ul>
           )}
 
-          {/* Pagination */}
-          {total > LIMIT && (
+          {/* Pagination — always show a count; show Prev/Next only across pages */}
+          {!isLoading && items.length > 0 && (
             <div className="mt-4 flex items-center justify-center gap-3">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={page === 0}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Prev
-              </Button>
+              {total > LIMIT && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={page === 0}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Prev
+                </Button>
+              )}
               <span className="text-xs text-fg-faint">
-                {page * LIMIT + 1}–{Math.min((page + 1) * LIMIT, total)} of {total}
+                Showing {page * LIMIT + 1}–{Math.min((page + 1) * LIMIT, total)} of {total}
               </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={(page + 1) * LIMIT >= total}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
+              {total > LIMIT && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={(page + 1) * LIMIT >= total}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              )}
             </div>
           )}
         </div>
       </div>
+
+      {/* View sheet (read-only) */}
+      <ViewArtifactSheet
+        artifact={viewingArtifact}
+        onClose={() => setViewingArtifact(null)}
+      />
 
       {/* Edit sheet */}
       <EditArtifactSheet
@@ -283,10 +296,12 @@ function ArtifactsRoute(): JSX.Element {
 
 function ArtifactCard({
   artifact: a,
+  onView,
   onEdit,
   onDelete,
 }: {
   artifact: ArtifactRow;
+  onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }): JSX.Element {
@@ -358,6 +373,17 @@ function ArtifactCard({
 
       {/* Action row — always visible on touch, hover-reveal on desktop */}
       <div className="mt-3 flex items-center gap-1 md:opacity-0 md:group-hover/card:opacity-100 md:focus-within:opacity-100 transition-opacity duration-150">
+        {/* View */}
+        <IconButton
+          variant="default"
+          size="sm"
+          aria-label="View"
+          title="View"
+          onClick={onView}
+        >
+          <Eye className="size-3.5" strokeWidth={1.75} />
+        </IconButton>
+
         {/* Copy */}
         <IconButton
           variant="default"
@@ -574,6 +600,153 @@ function EditArtifactSheet({
             )}
           </div>
         </div>
+      </SheetBody>
+    </Sheet>
+  );
+}
+
+// ─── View sheet (read-only) ────────────────────────────────────────────────────
+
+function ViewArtifactSheet({
+  artifact,
+  onClose,
+}: {
+  artifact: ArtifactRow | null;
+  onClose: () => void;
+}): JSX.Element {
+  const [copied, setCopied] = useState(false);
+  const [capacitiesState, setCapacitiesState] = useState<"idle" | "ok" | "error">("idle");
+  const capacitiesMsg = useRef("");
+
+  useEffect(() => {
+    if (copied) {
+      const t = setTimeout(() => setCopied(false), 1400);
+      return () => clearTimeout(t);
+    }
+  }, [copied]);
+
+  useEffect(() => {
+    if (capacitiesState !== "idle") {
+      const t = setTimeout(() => setCapacitiesState("idle"), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [capacitiesState]);
+
+  const handleCopy = async (): Promise<void> => {
+    if (!artifact) return;
+    await writeToClipboard(artifact.body);
+    setCopied(true);
+  };
+
+  const handleCapacities = async (): Promise<void> => {
+    if (!artifact) return;
+    try {
+      await api.artifactToCapacities(artifact.id);
+      setCapacitiesState("ok");
+    } catch (err) {
+      capacitiesMsg.current =
+        err instanceof Error ? err.message : "Failed to save to Capacities";
+      setCapacitiesState("error");
+    }
+  };
+
+  return (
+    <Sheet
+      open={!!artifact}
+      onOpenChange={(open) => !open && onClose()}
+      side="right"
+      width="w-full md:w-[560px]"
+    >
+      <SheetHeader
+        title={artifact?.title ?? ""}
+        onClose={onClose}
+        action={
+          <div className="flex items-center gap-1">
+            {/* Copy */}
+            <IconButton
+              variant="default"
+              size="sm"
+              aria-label={copied ? "Copied" : "Copy"}
+              title={copied ? "Copied" : "Copy"}
+              onClick={handleCopy}
+            >
+              {copied ? (
+                <Check className="size-3.5 text-success-500" strokeWidth={1.75} />
+              ) : (
+                <Copy className="size-3.5" strokeWidth={1.75} />
+              )}
+            </IconButton>
+
+            {/* Save to Capacities */}
+            <IconButton
+              variant="default"
+              size="sm"
+              aria-label={
+                capacitiesState === "ok"
+                  ? "Saved"
+                  : capacitiesState === "error"
+                    ? "Error"
+                    : "Save to Capacities"
+              }
+              title={
+                capacitiesState === "ok"
+                  ? "Saved"
+                  : capacitiesState === "error"
+                    ? "Error"
+                    : "Save to Capacities"
+              }
+              onClick={handleCapacities}
+            >
+              {capacitiesState === "ok" ? (
+                <Check className="size-3.5 text-success-500" strokeWidth={1.75} />
+              ) : (
+                <Cloud
+                  className={cn(
+                    "size-3.5",
+                    capacitiesState === "error" ? "text-destructive-300" : "",
+                  )}
+                  strokeWidth={1.75}
+                />
+              )}
+            </IconButton>
+          </div>
+        }
+      />
+      <SheetBody>
+        {artifact && (
+          <div className="px-4 py-4">
+            {/* Meta row */}
+            <div className="flex items-center gap-2">
+              <TypeBadge type={artifact.type} />
+              <span className="text-xs text-fg-faint">
+                {formatRelative(artifact.createdAt)}
+              </span>
+            </div>
+
+            {/* Tags */}
+            {artifact.tags.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {artifact.tags.map((tag) => (
+                  <TagBadge key={tag} tag={tag} />
+                ))}
+              </div>
+            )}
+
+            {capacitiesState === "error" && (
+              <p className="mt-2 text-[11px] text-destructive-300">{capacitiesMsg.current}</p>
+            )}
+
+            {/* Full body */}
+            <div className="mt-4 text-sm text-fg">
+              <Markdown>{artifact.body}</Markdown>
+            </div>
+
+            {/* Metadata footer */}
+            <p className="mt-6 text-[11px] text-fg-faint">
+              {artifact.origin} · updated {formatRelative(artifact.updatedAt)}
+            </p>
+          </div>
+        )}
       </SheetBody>
     </Sheet>
   );
