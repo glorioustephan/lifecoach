@@ -76,12 +76,35 @@ export interface ArtifactTypeDescriptor {
 
 const recipeDetect = (text: string): boolean => {
   const lower = text.toLowerCase();
-  const hasIngredients =
-    /(^|\n)\s*#{0,6}\s*ingredients\b/.test(lower) || /\bingredients?\s*:/.test(lower);
-  const hasMethod =
+  // Ingredient signal: an explicit heading/label, OR several quantity+unit lines
+  // (covers recipes that just list "2 cups flour" without an "Ingredients" header).
+  const hasIngredientHeading =
+    /(^|\n)\s*#{0,6}\s*ingredients\b/.test(lower) ||
+    /\bingredients?\s*:/.test(lower) ||
+    /(^|\n)\s*#{0,6}\s*(you(?:'|’)?ll need|what you(?:'|’)?ll need|shopping list)\b/.test(lower);
+  const unitMatches = (
+    lower.match(
+      /\b\d+(?:[.,/]\d+)?\s*(?:cups?|tbsps?|tablespoons?|tsps?|teaspoons?|g|grams?|kg|oz|ounces?|lbs?|pounds?|ml|millilitres?|milliliters?|l|litres?|liters?|cloves?|pinch(?:es)?|cans?|sticks?|slices?)\b/gi,
+    ) || []
+  ).length;
+  const hasIngredients = hasIngredientHeading || unitMatches >= 3;
+  // Method signal: a heading, a numbered list, OR a cluster of cooking verbs.
+  const hasMethodHeading =
     /(^|\n)\s*#{0,6}\s*(instructions|steps|directions|method|preparation)\b/.test(lower) ||
     /(^|\n)\s*\d+[.)]\s+\S/.test(text); // a numbered list
-  return hasIngredients && hasMethod;
+  const hasCookingVerbs =
+    /\b(preheat|bake|roast|simmer|saut[ée]|whisk|stir|knead|marinate|boil|fry|grill|season|combine|fold\s+in|drain|garnish|chop|dice|mince|blend|broil|steam)\b/.test(
+      lower,
+    );
+  const hasMethod = hasMethodHeading || hasCookingVerbs;
+  // Recipe metadata (prep/cook time, servings, yield) is a strong corroborator.
+  const hasMeta =
+    /\b(prep\s*time|cook(?:ing)?\s*time|total\s*time|servings?|serves\s+\d|yields?\b|makes\s+\d)\b/.test(
+      lower,
+    );
+  // Require an ingredient signal plus a method/meta signal, OR both explicit
+  // headings (the original strict path) so well-structured recipes always match.
+  return (hasIngredients && (hasMethod || hasMeta)) || (hasIngredientHeading && hasMethodHeading);
 };
 
 const spendingAlertDetect = (text: string): boolean => {

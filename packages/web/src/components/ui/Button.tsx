@@ -13,6 +13,7 @@
  */
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "~/lib/cn";
+import { CircularLoader } from "./loader";
 
 /* ── shadcn-compatible buttonVariants (used by prompt-kit for TS types) ── */
 export const buttonVariants = cva(
@@ -79,17 +80,7 @@ export const Button = ({
     )}
     {...props}
   >
-    {loading ? (
-      <>
-        <svg className="size-4 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
-          <path
-            fill="currentColor"
-            d="M4 12a8 8 0 0 1 15.464-3.536l-2.828 2.828A6 6 0 1 0 12 4v8z"
-          />
-        </svg>
-      </>
-    ) : null}
+    {loading ? <CircularLoader size="sm" className="border-current border-t-transparent" /> : null}
     {children}
   </button>
 );

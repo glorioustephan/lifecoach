@@ -43,21 +43,31 @@ function SettingsRoute(): JSX.Element {
   ];
 
   const formatValue = (v: unknown): string => {
+    // Never surface stored secrets — encrypted-at-rest values (Monarch
+    // email/password/MFA) are written as `enc:v1:…`. Show a status instead.
+    if (typeof v === "string" && v.startsWith("enc:v1:")) return "Stored";
     if (Array.isArray(v)) return v.join(", ");
     if (typeof v === "string") return v;
     return JSON.stringify(v);
   };
 
-  /** Convert camelCase or ALLCAPS keys to "Title case" human labels. */
+  /**
+   * Turn a storage key into a human label: dotted namespaces become " - "
+   * separated segments, snake/kebab and camelCase become spaced words.
+   * e.g. "artifacts.auto_extract_enabled" → "Artifacts - Auto extract enabled".
+   */
   const humanizeKey = (key: string): string =>
     key
-      // insert space before uppercase runs following a lowercase letter
-      .replace(/([a-z])([A-Z])/g, "$1 $2")
-      // insert space between adjacent uppercase letters and trailing lowercase (e.g. URLPath → URL Path)
-      .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
-      // lowercase everything, then capitalize first letter
-      .toLowerCase()
-      .replace(/^\w/, (c) => c.toUpperCase());
+      .split(".")
+      .map((segment) =>
+        segment
+          .replace(/([a-z0-9])([A-Z])/g, "$1 $2") // camelCase → spaced
+          .replace(/[_-]+/g, " ") // snake_case / kebab-case → spaces
+          .trim()
+          .toLowerCase()
+          .replace(/^\w/, (c) => c.toUpperCase()),
+      )
+      .join(" - ");
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -81,10 +91,10 @@ function SettingsRoute(): JSX.Element {
                     key={entry.key}
                     className="flex flex-col gap-0.5 px-4 py-3 md:grid md:grid-cols-[140px_1fr] md:items-start md:gap-4"
                   >
-                    <span className="text-xs text-fg-faint">
+                    <span className="min-w-0 break-words text-xs text-fg-faint">
                       {humanizeKey(entry.key)}
                     </span>
-                    <span className="break-words text-sm text-fg">
+                    <span className="min-w-0 break-words text-sm text-fg">
                       {formatValue(entry.value)}
                     </span>
                   </div>
