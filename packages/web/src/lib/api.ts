@@ -249,7 +249,7 @@ export const api = {
     postJson<{ ok: true }>(`/api/inbox/${encodeURIComponent(id)}/act`, {}),
   dismissInsight: (id: string) =>
     postJson<{ ok: true }>(`/api/inbox/${encodeURIComponent(id)}/dismiss`, {}),
-  snoozeInsight: (id: string, until: string) =>
+  snoozeInsight: (id: string, until: string | number) =>
     postJson<{ ok: true; until: number }>(`/api/inbox/${encodeURIComponent(id)}/snooze`, { until }),
   reactivateInsight: (id: string) =>
     postJson<{ ok: true }>(`/api/inbox/${encodeURIComponent(id)}/reactivate`, {}),
@@ -460,10 +460,12 @@ export const api = {
   saveArtifactFromMessage: (body: { content: string; sessionId?: string; type?: string }) =>
     postJson<{ artifact: ArtifactRow }>("/api/artifacts/extract", body),
   generateArtifacts: () =>
-    postJson<{ created: ArtifactRow[]; candidateSessions: number }>(
-      "/api/artifacts/generate",
-      {},
-    ),
+    postJson<{
+      created: ArtifactRow[];
+      candidateSessions: number;
+      candidateDocuments: number;
+      documentsScanned: number;
+    }>("/api/artifacts/generate", {}),
   updateArtifact: (
     id: string,
     patch: Partial<{ title: string; body: string; tags: string[]; category: string | null }>,

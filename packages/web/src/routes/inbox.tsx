@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Sparkles,
   CheckCircle2,
@@ -45,17 +45,27 @@ const PRIORITY_BADGE: Record<number, string> = {
 
 function InboxRoute(): JSX.Element {
   const [filter, setFilter] = useState<InsightState>("active");
-  const [page, setPage] = useState(1);
   const qc = useQueryClient();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["inbox", filter, page],
-    queryFn: async () => {
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    fetchNextPage,
+    hasNextPage,
+  } = useInfiniteQuery({
+    queryKey: ["inbox", filter],
+    queryFn: async ({ pageParam }: { pageParam: number }) => {
       const resp = await fetch(
-        `/api/inbox?state=${filter}&page=${page}&limit=${PAGE_SIZE}`
+        `/api/inbox?state=${filter}&page=${pageParam}&limit=${PAGE_SIZE}`
       );
       if (!resp.ok) throw new Error(resp.statusText);
       return resp.json() as Promise<{ insights: InsightRow[]; total: number }>;
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((n, p) => n + p.insights.length, 0);
+      return loaded < lastPage.total ? allPages.length + 1 : undefined;
     },
     refetchInterval: filter === "active" ? 60_000 : false,
   });
@@ -70,12 +80,13 @@ function InboxRoute(): JSX.Element {
 
   const handleFilterChange = (newFilter: InsightState): void => {
     setFilter(newFilter);
-    setPage(1);
   };
 
-  const totalPages = Math.ceil((data?.total ?? 0) / PAGE_SIZE);
-  const itemsShown = data?.insights.length ?? 0;
-  const totalItems = data?.total ?? 0;
+  const allInsights = data?.pages.flatMap((p) => p.insights) ?? [];
+  const totalItems = data?.pages[0]?.total ?? 0;
+  const currentPage = data?.pages.length ?? 1;
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+  const itemsShown = allInsights.length;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -145,18 +156,18 @@ function InboxRoute(): JSX.Element {
           {!isLoading && totalItems > 0 && (
             <>
               <ul className="space-y-3">
-                {data!.insights.map((insight) => (
+                {allInsights.map((insight) => (
                   <InsightCard key={insight.id} insight={insight} />
                 ))}
               </ul>
               <div className="mt-6">
                 <PaginationNav
-                  currentPage={page}
+                  currentPage={currentPage}
                   totalPages={totalPages}
                   itemsShown={itemsShown}
                   totalItems={totalItems}
-                  onLoadMore={() => setPage(page + 1)}
-                  isLoading={isLoading}
+                  onLoadMore={() => void fetchNextPage()}
+                  isLoading={isFetchingNextPage}
                 />
               </div>
             </>
@@ -214,7 +225,7 @@ function InsightCard({ insight }: { insight: InsightRow }): JSX.Element {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["inbox"] }),
   });
   const snooze = useMutation({
-    mutationFn: (until: string) => api.snoozeInsight(insight.id, until),
+    mutationFn: (until: number) => api.snoozeInsight(insight.id, until),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["inbox"] }),
   });
   const reactivate = useMutation({
@@ -282,6 +293,15 @@ function InsightCard({ insight }: { insight: InsightRow }): JSX.Element {
       {isSnoozed && (
         <p className="mt-3 text-xs text-fg-faint">
           snoozed until {new Date(insight.snoozedUntil!).toLocaleString()}
+        </p>
+      )}
+
+      {(act.isError || dismiss.isError || snooze.isError || reactivate.isError) && (
+        <p className="mt-2 text-xs text-destructive-300">
+          {act.isError && (act.error instanceof Error ? act.error.message : "Failed to mark acted")}
+          {dismiss.isError && (dismiss.error instanceof Error ? dismiss.error.message : "Failed to dismiss")}
+          {snooze.isError && (snooze.error instanceof Error ? snooze.error.message : "Failed to snooze")}
+          {reactivate.isError && (reactivate.error instanceof Error ? reactivate.error.message : "Failed to reactivate")}
         </p>
       )}
 
@@ -355,14 +375,14 @@ function SnoozeMenu({
   onSnooze,
   pending,
 }: {
-  onSnooze: (until: string) => void;
+  onSnooze: (until: number) => void;
   pending: boolean;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
-  const options: Array<{ label: string; value: string }> = [
-    { label: "Tomorrow", value: "tomorrow" },
-    { label: "In 3 days", value: "+3d" },
-    { label: "Next week", value: "next week" },
+  const options: Array<{ label: string; getUntil: () => number }> = [
+    { label: "Tomorrow", getUntil: () => Date.now() + 24 * 60 * 60 * 1000 },
+    { label: "In 3 days", getUntil: () => Date.now() + 3 * 24 * 60 * 60 * 1000 },
+    { label: "Next week", getUntil: () => Date.now() + 7 * 24 * 60 * 60 * 1000 },
   ];
   return (
     <div className="relative">
@@ -386,10 +406,10 @@ function SnoozeMenu({
         >
           {options.map((o) => (
             <button
-              key={o.value}
+              key={o.label}
               type="button"
               onClick={() => {
-                onSnooze(o.value);
+                onSnooze(o.getUntil());
                 setOpen(false);
               }}
               className="block w-full rounded px-2.5 py-1.5 text-left text-xs text-fg-muted hover:bg-surface hover:text-fg"

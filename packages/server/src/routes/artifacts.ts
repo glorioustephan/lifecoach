@@ -105,9 +105,11 @@ export const artifactRoutes = (lc: Lifecoach) => {
         origin: "cron",
       });
       // "Generate now" is an explicit ask to populate — sweep the whole document
-      // corpus (sinceMs: 0), not just recent imports, so existing recipes surface.
+      // corpus (sinceMs: 0, high limit), not just recent imports, so existing
+      // recipes surface. Already-scanned docs are skipped before any model call.
       const docResult = await scanDocumentArtifacts(deps, {
         sinceMs: 0,
+        sessionLimit: 100_000,
         minConfidence: MIN_CRON_CONFIDENCE,
         origin: "cron",
       });
@@ -115,6 +117,7 @@ export const artifactRoutes = (lc: Lifecoach) => {
         created: [...result.created, ...docResult.created],
         candidateSessions: result.candidateSessions,
         candidateDocuments: docResult.candidateDocuments,
+        documentsScanned: docResult.documentsScanned,
       });
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);

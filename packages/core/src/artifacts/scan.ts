@@ -147,12 +147,16 @@ export const scanDocumentArtifacts = async (
   const limit = opts.sessionLimit ?? 500;
 
   const docs = storage.documents.list({ limit });
+  // Documents that already produced an artifact — skip them before spending a
+  // model call so repeated runs advance through the corpus instead of stalling.
+  const alreadyScanned = storage.artifacts.scannedDocumentIds();
   let candidateDocuments = 0;
   const created: Artifact[] = [];
 
   for (const doc of docs) {
     // list() is ordered newest-first; once we pass the cursor, the rest are older.
     if (doc.ingestedAt < since) break;
+    if (alreadyScanned.has(doc.id)) continue;
     // Skip title-only stubs and bodies too short to plausibly hold an artifact.
     if (doc.metadata?.["contentMirrored"] === false) continue;
     const body = doc.body ?? "";

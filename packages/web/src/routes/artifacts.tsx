@@ -66,15 +66,17 @@ function GenerateButton(): JSX.Element {
 
   const generate = useMutation({
     mutationFn: api.generateArtifacts,
-    onSuccess: ({ created }) => {
+    onSuccess: ({ created, candidateDocuments, documentsScanned }) => {
       void qc.invalidateQueries({ queryKey: ["artifacts"] });
       void qc.invalidateQueries({ queryKey: ["status"] });
-      setBanner(
+      const made =
         created.length === 0
-          ? "No new artifacts found."
-          : `${created.length} artifact${created.length === 1 ? "" : "s"} created.`,
-      );
-      setTimeout(() => setBanner(null), 4000);
+          ? "No new artifacts found"
+          : `${created.length} new artifact${created.length === 1 ? "" : "s"}`;
+      // Surface the scan funnel so a low yield is explainable: how many documents
+      // were swept vs. how many tripped a type heuristic (and cost a model call).
+      setBanner(`${made} · scanned ${documentsScanned} docs, ${candidateDocuments} candidates`);
+      setTimeout(() => setBanner(null), 8000);
     },
     onError: (err: unknown) => {
       setBanner(err instanceof Error ? `Scan failed: ${err.message}` : "Scan failed.");

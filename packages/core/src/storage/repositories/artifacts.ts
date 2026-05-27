@@ -111,6 +111,21 @@ export class ArtifactRepository {
     return row ? rowToArtifact(row) : undefined;
   }
 
+  /**
+   * Set of document ids that have already produced at least one artifact.
+   * Lets the document scan skip them BEFORE spending a model call, so repeated
+   * "Extract Artifacts" runs advance through the corpus instead of re-extracting
+   * (then dedup-discarding) the same documents every time.
+   */
+  scannedDocumentIds(): Set<string> {
+    const rows = this.db
+      .prepare(
+        `SELECT DISTINCT source_document_id AS id FROM artifacts WHERE source_document_id IS NOT NULL`,
+      )
+      .all() as { id: string }[];
+    return new Set(rows.map((r) => r.id));
+  }
+
   private whereClause(filter: ArtifactListFilter): { sql: string; params: unknown[] } {
     const conditions: string[] = [];
     const params: unknown[] = [];
