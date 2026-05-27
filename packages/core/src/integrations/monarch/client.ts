@@ -1,15 +1,86 @@
 import fs from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 import {
   EmailPasswordAuthProvider,
   FixedTokenAuthProvider,
   MonarchGraphQLClient,
-  getAccounts,
-  getTransactions,
-  getPortfolio,
 } from "monarch-money-ts";
 import type { AuthProvider, GetTransactionsOptions } from "monarch-money-ts";
 import { LifecoachError } from "../../util/errors.js";
+
+// The library's typed API methods (getAccounts/getTransactions/getPortfolio)
+// validate responses against STRICT zod schemas that reject null fields Monarch
+// legitimately returns (e.g. logoUrl/institution on manual accounts, plaidName on
+// manual transactions) — which fails the whole sync. We issue the same queries
+// via the GraphQL client directly with permissive schemas and rely on our own
+// defensive mapping, so sync no longer depends on patching the library.
+const looseRows = z.array(z.record(z.unknown()));
+
+const GET_ACCOUNTS_QUERY = `
+  query Web_GetAccounts($filters: AccountFilters) {
+    accounts(filters: $filters) {
+      id
+      isAsset
+      type { name display __typename }
+      subtype { name display __typename }
+      displayName
+      displayBalance
+      signedBalance
+      institution { name __typename }
+      __typename
+    }
+  }
+`;
+const looseAccountsResponse = z.object({ accounts: looseRows });
+
+const GET_TRANSACTIONS_QUERY = `
+  query Web_GetTransactionsList($offset: Int, $limit: Int, $filters: TransactionFilterInput, $orderBy: TransactionOrdering) {
+    allTransactions(filters: $filters) {
+      totalCount
+      results(offset: $offset, limit: $limit, orderBy: $orderBy) {
+        id
+        amount
+        pending
+        date
+        category { id name __typename }
+        merchant { id name __typename }
+        __typename
+      }
+      __typename
+    }
+  }
+`;
+const looseTransactionsResponse = z.object({
+  allTransactions: z.object({ results: looseRows }).passthrough(),
+});
+
+const GET_PORTFOLIO_QUERY = `
+  query Web_GetPortfolio($portfolioInput: PortfolioInput) {
+    portfolio(input: $portfolioInput) {
+      aggregateHoldings {
+        edges {
+          node {
+            id
+            quantity
+            basis
+            totalValue
+            security { ticker closingPrice __typename }
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+  }
+`;
+const loosePortfolioResponse = z.object({
+  portfolio: z
+    .object({ aggregateHoldings: z.object({ edges: looseRows }).passthrough() })
+    .passthrough(),
+});
 
 // ─── Public interfaces ───────────────────────────────────────────────────────
 
@@ -153,8 +224,13 @@ export class MonarchClient {
   async listAccounts(): Promise<MonarchAccount[]> {
     const { auth, graphql } = this.ensureAuth();
     try {
-      const response = await getAccounts(auth, graphql);
-      return ((response as any).accounts ?? response ?? []).map((acc: any) => ({
+      const response = await graphql.request(
+        GET_ACCOUNTS_QUERY,
+        auth,
+        looseAccountsResponse,
+        { filters: {} },
+      );
+      return response.accounts.map((acc: any) => ({
         id: acc.id,
         displayName: acc.displayName,
         type: acc.type ?? { name: "unknown", display: "Unknown" },
@@ -174,8 +250,13 @@ export class MonarchClient {
   async listTransactions(options?: Partial<GetTransactionsOptions>): Promise<MonarchTransaction[]> {
     const { auth, graphql } = this.ensureAuth();
     try {
-      const response = await getTransactions(auth, graphql, options as GetTransactionsOptions);
-      return ((response as any).allTransactions?.results ?? []).map((txn: any) => ({
+      const response = await graphql.request(GET_TRANSACTIONS_QUERY, auth, looseTransactionsResponse, {
+        offset: options?.offset,
+        limit: options?.limit,
+        orderBy: options?.orderBy,
+        filters: options?.filters ?? {},
+      });
+      return response.allTransactions.results.map((txn: any) => ({
         id: txn.id,
         date: txn.date,
         amount: txn.amount,
@@ -208,8 +289,10 @@ export class MonarchClient {
   async getHoldings(): Promise<MonarchHolding[]> {
     const { auth, graphql } = this.ensureAuth();
     try {
-      const response = await getPortfolio(auth, graphql);
-      return ((response as any).aggregateHoldings?.edges ?? (response as any).portfolio?.aggregateHoldings?.edges ?? [])
+      const response = await graphql.request(GET_PORTFOLIO_QUERY, auth, loosePortfolioResponse, {
+        portfolioInput: {},
+      });
+      return (response.portfolio?.aggregateHoldings?.edges ?? [])
         .map((edge: any) => edge.node ?? edge)
         .map((holding: any) => ({
           symbol: holding.security?.ticker ?? holding.holdings?.[0]?.ticker ?? "UNKNOWN",

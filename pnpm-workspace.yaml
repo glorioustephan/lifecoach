@@ -13,6 +13,3 @@ allowBuilds:
 onlyBuiltDependencies:
   - better-sqlite3
   - esbuild
-
-patchedDependencies:
-  monarch-money-ts@0.2.0: patches/monarch-money-ts@0.2.0.patch
