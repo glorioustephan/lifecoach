@@ -11,9 +11,11 @@
 // This script dismisses (1) and deletes today's snapshot of (2) so the next
 // Monarch sync recomputes a corrected number. Idempotent and safe to re-run.
 //
-// Usage (from repo root — resolves better-sqlite3 through packages/core):
-//   node scripts/cleanup-bad-inbox-2026-05.mjs --db ./data/lifecoach.db --dry-run
-//   node scripts/cleanup-bad-inbox-2026-05.mjs --db ./data/lifecoach.db
+// Usage (cwd doesn't matter — both deps and default DB path are resolved
+// relative to this file's location):
+//   node scripts/cleanup-bad-inbox-2026-05.mjs --dry-run
+//   node scripts/cleanup-bad-inbox-2026-05.mjs
+//   node scripts/cleanup-bad-inbox-2026-05.mjs --db /custom/path/lifecoach.db
 
 import { argv, exit } from "node:process";
 import { createRequire } from "node:module";
@@ -37,7 +39,11 @@ for (let i = 2; i < argv.length; i++) {
   else if (a.startsWith("--db=")) args.set("db", a.slice(5));
 }
 
-const dbPath = args.get("db") ?? "./data/lifecoach.db";
+// Default to <repo-root>/data/lifecoach.db derived from the script's own
+// location so the command works the same whether you run it from the repo
+// root or via `pnpm --filter @lifecoach/core exec` (which changes cwd).
+const defaultDbPath = path.resolve(here, "..", "data", "lifecoach.db");
+const dbPath = args.get("db") ?? defaultDbPath;
 const dryRun = Boolean(args.get("dry-run"));
 
 const db = new Database(dbPath);
