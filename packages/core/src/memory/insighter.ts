@@ -82,6 +82,10 @@ const TOOL_INPUT_SCHEMA = {
                     "message",
                     "reflection",
                     "insight",
+                    "account",
+                    "transaction",
+                    "budget",
+                    "holding",
                   ],
                 },
                 refId: { type: "string" },
@@ -120,7 +124,35 @@ interface ContextData {
   recentMeasurements: Array<{ id: string; metric: string; value: number; unit: string | null; recordedAt: number }>;
   latestReflections: Array<{ id: string; kind: string; body: string; periodEnd: number; openThreads: string[]; concerns: string[] }>;
   recentInsights: Array<{ id: string; topic: string; body: string; createdAt: number; state: string }>;
+  /**
+   * Bounded financial context — only summaries/rollups, never raw transaction
+   * rows. The Insighter is the single home for financial insights now; the
+   * previous standalone FinancialAnalyzer has been retired so cross-domain
+   * insights (e.g. "spending spiked the week sleep collapsed") become possible.
+   */
+  financial: {
+    accounts: Array<{ id: string; displayName: string; type: string; balance: number }>;
+    netWorthSummary: { totalAssets: number; totalLiabilities: number; netWorth: number };
+    budgets: Array<{ id: string; category: string; month: string; limit: number; spent: number }>;
+    categoryRollup30d: Array<{ category: string; total: number; count: number }>;
+    holdings: Array<{ id: string; symbol: string; quantity: number; marketValue: number; costBasis?: number }>;
+    /** Recurring expense candidates ≥$50/mo, grounding for the expense-research insight pattern. */
+    recurringCandidates: Array<{ merchant: string; monthlyEstimate: number; sampleCount: number }>;
+  };
 }
+
+const FINANCIAL_LIABILITY_TYPES = new Set<string>(["debt", "credit_card"]);
+const RECURRING_CANDIDATE_MIN_MONTHLY = 50;
+const RECURRING_FREQUENCY_TO_MONTHLY: Record<string, number> = {
+  weekly: 52 / 12,
+  biweekly: 26 / 12,
+  monthly: 1,
+  bimonthly: 0.5,
+  quarterly: 1 / 3,
+  semiannual: 1 / 6,
+  annual: 1 / 12,
+  yearly: 1 / 12,
+};
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
 
@@ -225,6 +257,8 @@ const gather = (storage: Storage): ContextData => {
     )
     .all(nowMs - 30 * ONE_DAY) as ContextData["recentInsights"];
 
+  const financial = gatherFinancial(storage, nowMs);
+
   return {
     facts,
     attentionSignals,
@@ -234,6 +268,114 @@ const gather = (storage: Storage): ContextData => {
     recentMeasurements,
     latestReflections,
     recentInsights,
+    financial,
+  };
+};
+
+/**
+ * Bounded financial context for the unified Insighter. We deliberately
+ * aggregate into rollups + summaries rather than dumping raw transactions —
+ * an insight pass should reason over trends, not every coffee. All emitted
+ * rows carry IDs so the model can cite them via evidenceRefs.
+ */
+const gatherFinancial = (
+  storage: Storage,
+  nowMs: number,
+): ContextData["financial"] => {
+  const accounts = storage.financial.listAccounts({ status: "active" });
+  let totalAssets = 0;
+  let totalLiabilities = 0;
+  for (const a of accounts) {
+    if (FINANCIAL_LIABILITY_TYPES.has(a.type)) totalLiabilities += Math.abs(a.balance);
+    else totalAssets += a.balance;
+  }
+
+  const month = new Date(nowMs);
+  const thisMonth = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}`;
+  const budgets = storage.financial.listBudgets(thisMonth);
+
+  // Last-30d category rollup (NOT raw transactions — those are noise here).
+  const since30 = nowMs - 30 * ONE_DAY;
+  const txns30 = storage.financial.queryTransactions({ from: since30 });
+  const rollup = new Map<string, { total: number; count: number }>();
+  for (const t of txns30) {
+    if (t.amount >= 0) continue; // expenses only (negative)
+    const cat = t.category ?? "uncategorized";
+    const entry = rollup.get(cat) ?? { total: 0, count: 0 };
+    entry.total += Math.abs(t.amount);
+    entry.count += 1;
+    rollup.set(cat, entry);
+  }
+  const categoryRollup30d = Array.from(rollup.entries())
+    .map(([category, v]) => ({ category, total: v.total, count: v.count }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 12);
+
+  // Latest holdings snapshot only.
+  const allHoldings = storage.financial.queryHoldings();
+  const latestSnap = allHoldings.reduce((m, h) => Math.max(m, h.snapshotDate), 0);
+  const holdings = allHoldings
+    .filter((h) => h.snapshotDate === latestSnap)
+    .sort((a, b) => (b.marketValue ?? 0) - (a.marketValue ?? 0))
+    .slice(0, 10)
+    .map((h) => ({
+      id: h.id,
+      symbol: h.symbol,
+      quantity: h.quantity,
+      marketValue: h.marketValue,
+      costBasis: h.costBasis,
+    }));
+
+  // Recurring expense candidates ≥$50/mo (for the expense-research pattern in 1E).
+  // Group recurring txns over last 90d by merchant; normalize to monthly cost.
+  const since90 = nowMs - 90 * ONE_DAY;
+  const recurringTxns = storage.financial
+    .queryTransactions({ from: since90 })
+    .filter((t) => t.isRecurring && t.amount < 0);
+  const byMerchant = new Map<string, { totalAbs: number; count: number; freq?: string }>();
+  for (const t of recurringTxns) {
+    const key = (t.merchant ?? "Unknown").trim();
+    const entry = byMerchant.get(key) ?? { totalAbs: 0, count: 0 };
+    entry.totalAbs += Math.abs(t.amount);
+    entry.count += 1;
+    if (!entry.freq && t.recurringFrequency) entry.freq = t.recurringFrequency.toLowerCase();
+    byMerchant.set(key, entry);
+  }
+  const recurringCandidates = Array.from(byMerchant.entries())
+    .map(([merchant, v]) => {
+      const freqMul = v.freq ? RECURRING_FREQUENCY_TO_MONTHLY[v.freq] : undefined;
+      // If frequency known, normalize a single charge × freq; else use 90d avg.
+      const monthlyEstimate = freqMul
+        ? (v.totalAbs / v.count) * freqMul
+        : v.totalAbs / 3; // 90 days ≈ 3 months
+      return { merchant, monthlyEstimate, sampleCount: v.count };
+    })
+    .filter((c) => c.monthlyEstimate >= RECURRING_CANDIDATE_MIN_MONTHLY)
+    .sort((a, b) => b.monthlyEstimate - a.monthlyEstimate)
+    .slice(0, 10);
+
+  return {
+    accounts: accounts.map((a) => ({
+      id: a.id,
+      displayName: a.displayName,
+      type: a.type,
+      balance: a.balance,
+    })),
+    netWorthSummary: {
+      totalAssets,
+      totalLiabilities,
+      netWorth: totalAssets - totalLiabilities,
+    },
+    budgets: budgets.map((b) => ({
+      id: b.id,
+      category: b.category,
+      month: b.month,
+      limit: b.limit,
+      spent: b.spent,
+    })),
+    categoryRollup30d,
+    holdings,
+    recurringCandidates,
   };
 };
 
@@ -316,6 +458,67 @@ const renderContext = (data: ContextData): string => {
     }
   }
 
+  // Financial section — rolled-up summaries only; never raw transactions.
+  const fin = data.financial;
+  const hasFinance =
+    fin.accounts.length > 0 ||
+    fin.budgets.length > 0 ||
+    fin.categoryRollup30d.length > 0 ||
+    fin.holdings.length > 0 ||
+    fin.recurringCandidates.length > 0;
+  if (hasFinance) {
+    parts.push("\n## Financial state (rollups — cite via evidenceRefs)");
+    if (fin.accounts.length > 0) {
+      parts.push(
+        `### Accounts (net worth: $${fin.netWorthSummary.netWorth.toFixed(0)} = assets $${fin.netWorthSummary.totalAssets.toFixed(0)} − liabilities $${fin.netWorthSummary.totalLiabilities.toFixed(0)})`,
+      );
+      for (const a of fin.accounts) {
+        parts.push(
+          `- [account=${a.id}] ${a.displayName} (${a.type}): $${a.balance.toFixed(2)}`,
+        );
+      }
+    }
+    if (fin.budgets.length > 0) {
+      parts.push("\n### Budgets (this month)");
+      for (const b of fin.budgets) {
+        const pct = b.limit > 0 ? Math.round((b.spent / b.limit) * 100) : 0;
+        const status = pct > 100 ? "OVER" : pct > 80 ? "near" : "on";
+        parts.push(
+          `- [budget=${b.id}] ${b.category}: $${b.spent.toFixed(2)} / $${b.limit.toFixed(2)} (${pct}%, ${status})`,
+        );
+      }
+    }
+    if (fin.categoryRollup30d.length > 0) {
+      parts.push("\n### Spending by category — last 30 days (NOTE: based on Monarch's categorization; may include miscategorized rows)");
+      for (const r of fin.categoryRollup30d) {
+        parts.push(`- ${r.category}: $${r.total.toFixed(2)} (${r.count} txns)`);
+      }
+    }
+    if (fin.holdings.length > 0) {
+      parts.push("\n### Investment holdings (latest snapshot)");
+      for (const h of fin.holdings) {
+        const gl =
+          h.costBasis !== undefined ? h.marketValue - h.costBasis : undefined;
+        const glPct =
+          h.costBasis && h.costBasis !== 0 ? ((gl ?? 0) / h.costBasis) * 100 : undefined;
+        parts.push(
+          `- [holding=${h.id}] ${h.symbol}: ${h.quantity} units = $${h.marketValue.toFixed(2)}` +
+            (gl !== undefined
+              ? ` (g/l: $${gl.toFixed(2)}${glPct !== undefined ? `, ${glPct.toFixed(1)}%` : ""})`
+              : ""),
+        );
+      }
+    }
+    if (fin.recurringCandidates.length > 0) {
+      parts.push("\n### Recurring expenses ≥$50/mo (candidates for review)");
+      for (const c of fin.recurringCandidates) {
+        parts.push(
+          `- ${c.merchant}: ~$${c.monthlyEstimate.toFixed(0)}/mo (${c.sampleCount} samples in last 90d)`,
+        );
+      }
+    }
+  }
+
   if (data.recentMessages.length > 0) {
     parts.push("\n## Recent messages (last 7d, newest first)");
     for (const m of data.recentMessages) {
@@ -358,6 +561,8 @@ Call \`record_insights\` with **0–3 high-quality insights**. Quality bar:
 3. **Evidence-backed.** Prefer the SQLite attention signals, and include concrete \`evidenceRefs\` with refType/refId/quote so the user can see why this surfaced.
 4. **Non-redundant.** Check the "Prior insights" section. No nagging: don't repeat an old insight unless the evidence changed materially.
 5. **Honest but not alarmist.** Health-related observations should cite the measurements and avoid medical authority. A 12% HRV dip is worth flagging; a 2% one isn't.
+
+**Financial observations.** Financial state appears as "Financial state (rollups)" above with citable IDs (\`account=…\`, \`budget=…\`, \`holding=…\`). Treat money like any other life signal — when a financial pattern coincides with a life pattern (sleep, stress, a goal, a recurring theme in messages), that coincidence IS the insight; that's the thing only this coach can see. No financial advice, just observations and simple math. Be especially honest about uncertainty: category rollups depend on Monarch's categorization which can be wrong. When you cite a category number, **invite the user to challenge it** (e.g. "If 'Dining $1,036' looks high, tell me which transactions don't belong and I'll recategorize them so the picture stays accurate"). Treat the recurring-expenses list as candidates for a separate, gated discussion — surface at most one such item per pass, with a clear monthly dollar figure.
 
 If genuinely nothing notable jumps out, return an empty array. That's a valid answer.`;
 

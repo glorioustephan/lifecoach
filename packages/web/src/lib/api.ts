@@ -91,15 +91,12 @@ export interface FinancialBudget {
   spent: number;
 }
 
-export interface FinancialInsightRow {
-  id: string;
-  topic: string;
-  body: string;
-  category: string;
-  priority: number;
-  recommendation?: string;
-  createdAt: number;
-}
+/**
+ * Financial insights are now the finance-tagged subset of unified inbox
+ * insights (same shape as InsightRow), so the Finances page can render them
+ * with the same Discuss / Acted / Dismiss / Snooze lifecycle as the Inbox.
+ */
+export type FinancialInsightRow = InsightRow;
 
 export interface MonarchSettings {
   hasCredentials: boolean;

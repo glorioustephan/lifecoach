@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { DollarSign, TrendingUp, AlertCircle, RefreshCw } from "lucide-react";
+import { DollarSign, RefreshCw } from "lucide-react";
 import { ViewHeader } from "~/components/ui/ViewHeader";
 import { Button } from "~/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/Card";
@@ -8,6 +8,7 @@ import { EmptyState } from "~/components/ui/EmptyState";
 import { api } from "~/lib/api";
 import { cn } from "~/lib/cn";
 import { formatCurrency, formatPercent } from "~/lib/money";
+import { InsightCard } from "~/components/inbox/InsightCard";
 
 export const Route = createFileRoute("/finances")({
   component: FinancesRoute,
@@ -282,48 +283,19 @@ function FinancesRoute(): JSX.Element {
             </section>
           )}
 
-          {/* Financial Insights */}
+          {/* Financial Insights — finance subset of the unified Inbox. Renders */}
+          {/* with the same Discuss / Acted / Dismiss / Snooze actions, so a   */}
+          {/* miscategorized or off-base number can be challenged inline. */}
           {insights.length > 0 && (
             <section>
               <h2 className="mb-3 text-xs uppercase tracking-wide text-fg-faint">
                 Financial Insights
               </h2>
-              <div className="space-y-3">
+              <ul className="space-y-3">
                 {insights.map((insight) => (
-                  <Card
-                    key={insight.id}
-                    className={cn(
-                      insight.priority === 3 && "border-destructive-500/30",
-                      insight.priority === 2 && "border-warning-500/30",
-                    )}
-                  >
-                    <CardHeader>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <CardTitle className="text-sm">{insight.topic}</CardTitle>
-                          <p className="mt-0.5 text-xs capitalize text-fg-faint">
-                            {insight.category}
-                          </p>
-                        </div>
-                        {insight.priority === 3 && (
-                          <AlertCircle className="size-4 shrink-0 text-destructive-300" strokeWidth={1.75} />
-                        )}
-                        {insight.priority === 2 && (
-                          <TrendingUp className="size-4 shrink-0 text-warning-500" strokeWidth={1.75} />
-                        )}
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <p className="text-sm text-fg-muted">{insight.body}</p>
-                      {insight.recommendation && (
-                        <p className="text-sm font-medium text-fg">
-                          {insight.recommendation}
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
+                  <InsightCard key={insight.id} insight={insight} />
                 ))}
-              </div>
+              </ul>
             </section>
           )}
 

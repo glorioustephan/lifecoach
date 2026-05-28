@@ -174,14 +174,8 @@ export const registerSync = (program: Command): void => {
         const run = await lc.storage.jobs.run("sync.monarch", async () => {
           const result = await syncMonarch(activeClient, lc.storage);
           recordMonarchSync(lc.storage);
-          // Best-effort: regenerate insights from the freshly synced data.
-          if (lc.financialAnalyzer) {
-            try {
-              await lc.financialAnalyzer.generate(lc.storage);
-            } catch {
-              /* insights are non-critical; sync already succeeded */
-            }
-          }
+          // Financial insights are now produced by the unified Insighter on its
+          // own daily cron (07:30) — we no longer kick them off from sync.
           return result;
         });
         if (run.status === "skipped") {

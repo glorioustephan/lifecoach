@@ -16,6 +16,11 @@ export const evidenceRefType = z.enum([
   "message",
   "reflection",
   "insight",
+  // Finance evidence (unified Insighter cites these once financial context is gathered):
+  "account",
+  "transaction",
+  "budget",
+  "holding",
 ]);
 export type EvidenceRefType = z.infer<typeof evidenceRefType>;
 
