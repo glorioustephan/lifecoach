@@ -407,6 +407,15 @@ export const api = {
     get<{ milestones: MilestoneRow[] }>(
       `/api/goals/${encodeURIComponent(goalId)}/milestones`,
     ),
+  /**
+   * Batch milestone lookup for the goals page — one round-trip instead of
+   * N. Returns an object keyed by goal id; goals with no milestones are
+   * omitted, so callers should default with `?? []`.
+   */
+  goalMilestonesBatch: (goalIds: string[]) =>
+    get<{ milestonesByGoal: Record<string, MilestoneRow[]> }>(
+      `/api/goals/milestones/batch?goalIds=${goalIds.map(encodeURIComponent).join(",")}`,
+    ),
   createMilestone: (
     goalId: string,
     body: { title: string; body?: string; dueAt?: number; orderIndex?: number },

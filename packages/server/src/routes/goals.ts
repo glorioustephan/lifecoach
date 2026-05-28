@@ -196,6 +196,23 @@ export const goalRoutes = (lc: Lifecoach) => {
   });
 
   // ── Milestones nested under /goals/:goalId/milestones ───────────────────────
+  //
+  // Batch lookup for the goals page: ?goalIds=a,b,c — returns
+  // { milestonesByGoal: { goalId: [...] } } so the page renders N goals
+  // with one round-trip instead of N. Falls back to the per-goal route below
+  // for sheets and detail views.
+  app.get("/milestones/batch", (c) => {
+    const raw = c.req.query("goalIds") ?? "";
+    const goalIds = raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const milestonesByGoal = lc.storage.milestones.listByGoalIds(goalIds);
+    return c.json({
+      milestonesByGoal: Object.fromEntries(milestonesByGoal),
+    });
+  });
+
   app.get("/:goalId/milestones", (c) => {
     const goalId = c.req.param("goalId");
     if (!lc.storage.goals.get(goalId)) return c.json({ error: "not_found" }, 404);

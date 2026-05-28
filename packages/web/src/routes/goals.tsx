@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Target, Plus } from "lucide-react";
 import { ViewHeader } from "~/components/ui/ViewHeader";
 import { Button } from "~/components/ui/Button";
@@ -74,20 +74,22 @@ function GoalsRoute(): JSX.Element {
     grouped.get(g.kind)?.push(g);
   }
 
-  // Fetch milestones for every visible goal in parallel. React Query dedupes
-  // and caches, so opening/closing the edit sheet doesn't re-fetch.
-  const milestoneQueries = useQueries({
-    queries: (goalsData?.goals ?? []).map((g) => ({
-      queryKey: ["goals", g.id, "milestones"] as const,
-      queryFn: () => api.goalMilestones(g.id),
-      staleTime: 30_000,
-    })),
+  // One batch round-trip for every visible goal's milestones instead of N
+  // parallel /goals/:id/milestones calls. Keeps the goal-detail sheet's own
+  // per-goal query untouched so opening a sheet still hits a single URL.
+  const goalIds = useMemo(
+    () => (goalsData?.goals ?? []).map((g) => g.id),
+    [goalsData],
+  );
+  const { data: batchMilestones } = useQuery({
+    queryKey: ["goals", "milestones", "batch", goalIds],
+    queryFn: () => api.goalMilestonesBatch(goalIds),
+    enabled: goalIds.length > 0,
+    staleTime: 30_000,
   });
-  const milestonesById = new Map<string, MilestoneRow[]>();
-  (goalsData?.goals ?? []).forEach((g, idx) => {
-    const data = milestoneQueries[idx]?.data;
-    if (data) milestonesById.set(g.id, data.milestones);
-  });
+  const milestonesById = new Map<string, MilestoneRow[]>(
+    Object.entries(batchMilestones?.milestonesByGoal ?? {}),
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">

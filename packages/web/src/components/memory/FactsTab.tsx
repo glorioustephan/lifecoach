@@ -10,6 +10,7 @@ import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { api, type FactRow } from "~/lib/api";
 import { formatRelative } from "~/lib/time";
 import { toast } from "~/lib/use-toast";
+import { useConfirmDiscard } from "~/lib/use-confirm-discard";
 
 const FACTS_PAGE_SIZE = 50;
 const FACT_CATEGORIES = factCategory.options;
@@ -165,9 +166,9 @@ function EditFactSheet({
     !!fact &&
     (subject !== fact.subject || body !== fact.body || category !== fact.category);
 
+  const confirmDiscard = useConfirmDiscard(dirty);
   const requestClose = (): void => {
-    if (dirty && !window.confirm("Discard unsaved changes?")) return;
-    onClose();
+    if (confirmDiscard()) onClose();
   };
 
   const save = useMutation({

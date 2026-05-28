@@ -6,6 +6,7 @@ import { Button } from "~/components/ui/Button";
 import { Markdown } from "~/components/chat/Markdown";
 import { api, type ArtifactRow } from "~/lib/api";
 import { toast } from "~/lib/use-toast";
+import { useConfirmDiscard } from "~/lib/use-confirm-discard";
 
 /**
  * Edit-sheet for an artifact. Seeded with the current row on open, dirty-
@@ -43,9 +44,9 @@ export function EditArtifactSheet({
       tagsRaw !== artifact.tags.join(", "));
 
   // Guard against losing edits on Escape / overlay-click / X.
+  const confirmDiscard = useConfirmDiscard(dirty);
   const requestClose = (): void => {
-    if (dirty && !window.confirm("Discard unsaved changes?")) return;
-    onClose();
+    if (confirmDiscard()) onClose();
   };
 
   const save = useMutation({

@@ -99,6 +99,33 @@ export class MilestoneRepository {
   }
 
   /**
+   * One-shot milestone list keyed by goal id. Replaces the N+1 the goals
+   * page would otherwise fire (one GET /goals/:id/milestones per visible
+   * goal). Returns a map so the caller can render in goal order without a
+   * second pass. Empty goals are NOT included in the map — callers should
+   * default-on-miss with `?? []`.
+   */
+  listByGoalIds(goalIds: ReadonlyArray<string>): Map<string, Milestone[]> {
+    const result = new Map<string, Milestone[]>();
+    if (goalIds.length === 0) return result;
+    const placeholders = goalIds.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(
+        `SELECT ${FULL} FROM milestones
+         WHERE goal_id IN (${placeholders})
+         ORDER BY order_index ASC, created_at ASC`,
+      )
+      .all(...goalIds) as MilestoneRow[];
+    for (const row of rows) {
+      const m = rowToMilestone(row);
+      const existing = result.get(m.goalId) ?? [];
+      existing.push(m);
+      result.set(m.goalId, existing);
+    }
+    return result;
+  }
+
+  /**
    * Milestones completed within `[fromMs, toMs)` with their parent goal
    * title joined. Used by the reflector to enumerate "milestones we hit
    * this week" with enough context for the prompt.
