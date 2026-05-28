@@ -1,10 +1,10 @@
-import { defineConfig } from 'vitepress'
+import { defineConfig, type DefaultTheme } from 'vitepress'
 import { readdirSync, statSync, readFileSync, existsSync } from 'node:fs'
-import { join, relative, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 
 const DOCS_ROOT = resolve(__dirname, '..')
 
-const SECTIONS = [
+const SECTIONS: Array<{ text: string; dir: string }> = [
   { text: 'Architecture', dir: 'architecture' },
   { text: 'Reference', dir: 'reference' },
   { text: 'Specs', dir: 'specs' },
@@ -14,7 +14,9 @@ const SECTIONS = [
   { text: 'Prompts', dir: 'prompts' },
 ]
 
-type SidebarItem = { text: string; link?: string; items?: SidebarItem[]; collapsed?: boolean }
+const SECTION_DIRS = new Set(SECTIONS.map((s) => s.dir))
+
+type SidebarItem = DefaultTheme.SidebarItem
 
 function readTitle(absPath: string, fallback: string): string {
   try {
@@ -30,6 +32,12 @@ function readTitle(absPath: string, fallback: string): string {
   return fallback
 }
 
+function prettify(slug: string): string {
+  return slug
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 function walk(dirAbs: string, dirRel: string): SidebarItem[] {
   if (!existsSync(dirAbs)) return []
   const entries = readdirSync(dirAbs).filter((e) => !e.startsWith('.'))
@@ -42,20 +50,22 @@ function walk(dirAbs: string, dirRel: string): SidebarItem[] {
     if (st.isDirectory()) {
       const children = walk(abs, rel)
       if (children.length) {
-        subdirs.push({ text: name, items: children, collapsed: true })
+        subdirs.push({ text: prettify(name), items: children, collapsed: true })
       }
     } else if (name.endsWith('.md')) {
       const slug = name.replace(/\.md$/, '')
       const link = `/${dirRel}/${slug === 'index' ? '' : slug}`
-      files.push({ text: readTitle(abs, slug), link })
+      files.push({ text: readTitle(abs, prettify(slug)), link })
     }
   }
   files.sort((a, b) => {
-    if (a.text.toLowerCase() === 'index') return -1
-    if (b.text.toLowerCase() === 'index') return 1
-    return a.text.localeCompare(b.text)
+    const at = (a.text ?? '').toLowerCase()
+    const bt = (b.text ?? '').toLowerCase()
+    if (at === 'index') return -1
+    if (bt === 'index') return 1
+    return at.localeCompare(bt)
   })
-  subdirs.sort((a, b) => a.text.localeCompare(b.text))
+  subdirs.sort((a, b) => (a.text ?? '').localeCompare(b.text ?? ''))
   return [...files, ...subdirs]
 }
 
@@ -75,15 +85,53 @@ function hasMarkdown(dirAbs: string): boolean {
   return false
 }
 
+// Loose root markdown files (anything in docs/*.md that isn't index.md).
+function rootGuides(): SidebarItem[] {
+  return readdirSync(DOCS_ROOT)
+    .filter((name) => name.endsWith('.md') && name !== 'index.md' && !name.startsWith('.'))
+    .map((name) => {
+      const slug = name.replace(/\.md$/, '')
+      return {
+        text: readTitle(join(DOCS_ROOT, name), prettify(slug)),
+        link: `/${slug}`,
+      }
+    })
+    .sort((a, b) => (a.text ?? '').localeCompare(b.text ?? ''))
+}
+
+const guides = rootGuides()
 const activeSections = SECTIONS.filter((s) => hasMarkdown(join(DOCS_ROOT, s.dir)))
 
-const nav = activeSections.map((s) => ({ text: s.text, link: `/${s.dir}/` }))
+const nav: DefaultTheme.NavItem[] = [
+  { text: 'Home', link: '/' },
+  ...(guides.length
+    ? [{ text: 'Guides', items: guides.map((g) => ({ text: g.text!, link: g.link! })) }]
+    : []),
+  ...activeSections.map((s) => ({ text: s.text, link: `/${s.dir}/` })),
+]
 
-const sidebar: Record<string, SidebarItem[]> = {}
+const rootSidebar: SidebarItem[] = [
+  ...(guides.length ? [{ text: 'Guides', items: guides }] : []),
+  ...activeSections.map((s) => ({
+    text: s.text,
+    link: `/${s.dir}/`,
+    items: walk(join(DOCS_ROOT, s.dir), s.dir),
+    collapsed: true,
+  })),
+]
+
+const sidebar: DefaultTheme.SidebarMulti = {
+  '/': rootSidebar,
+}
 for (const s of activeSections) {
   sidebar[`/${s.dir}/`] = [
     { text: s.text, items: walk(join(DOCS_ROOT, s.dir), s.dir) },
   ]
+}
+// Also pin the guides sidebar to each loose root page individually so
+// navigating to e.g. /deployment keeps the same left nav.
+for (const g of guides) {
+  if (g.link) sidebar[g.link] = rootSidebar
 }
 
 export default defineConfig({
@@ -98,6 +146,8 @@ export default defineConfig({
     nav,
     sidebar,
     outline: [2, 3],
-    socialLinks: [],
+    socialLinks: [
+      { icon: 'github', link: 'https://github.com/glorioustephan/lifecoach' },
+    ],
   },
 })
