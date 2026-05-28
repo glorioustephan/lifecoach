@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sheet, SheetBody, SheetHeader } from "~/components/ui/Sheet";
 import { TabNav } from "~/components/ui/TabNav";
 import { Button } from "~/components/ui/Button";
+import { formControlClass } from "~/components/ui/formStyles";
 import { Markdown } from "~/components/chat/Markdown";
 import { api, type ArtifactRow } from "~/lib/api";
 import { toast } from "~/lib/use-toast";
@@ -107,7 +108,7 @@ export function EditArtifactSheet({
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-faint outline-none focus:border-accent/40 transition-colors"
+              className={formControlClass("w-full bg-surface px-3 py-2 text-sm")}
             />
           </div>
 
@@ -121,7 +122,7 @@ export function EditArtifactSheet({
               value={tagsRaw}
               onChange={(e) => setTagsRaw(e.target.value)}
               placeholder="e.g. dinner, quick, healthy"
-              className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-faint outline-none focus:border-accent/40 transition-colors"
+              className={formControlClass("w-full bg-surface px-3 py-2 text-sm")}
             />
           </div>
 
@@ -153,7 +154,7 @@ export function EditArtifactSheet({
                   id="artifact-body"
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
-                  className="w-full min-h-[300px] rounded-md border border-border-subtle bg-surface px-3 py-2 font-mono text-xs text-fg outline-none focus:border-accent/40 resize-y transition-colors"
+                  className={formControlClass("min-h-[300px] w-full resize-y bg-surface px-3 py-2 font-mono text-xs")}
                 />
               </div>
             )}

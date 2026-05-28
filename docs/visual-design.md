@@ -639,7 +639,7 @@ border-b border-border-subtle last:border-0
 - Center-bottom: metadata `text-xs text-fg-muted` — project · priority dot · due date
 - Right: optional `text-xs text-warning-200` if overdue
 
-**Priority dot:** inline `size-2 rounded-full` — P1: `bg-destructive-500`, P2: `bg-warning-500`, P3: `bg-neutral-500`, P4: none.
+**Priority dot:** inline `size-2 rounded-full` — P1: `bg-destructive-500`, P2: `bg-warning-500`, P3: `bg-fg-faint`, P4: none.
 
 **"New" pip (post-sync highlight):** 60-second highlight using `bg-accent/5 border-accent/20`. Applied as a class that is removed by a timeout in the component.
 
@@ -658,7 +658,7 @@ Left: status dot `size-2 rounded-full`
 - Connected + recent: `bg-success-500`
 - Connected + stale (>1h): `bg-warning-500`
 - Error: `bg-destructive-500`
-- Disconnected: `bg-neutral-600`
+- Disconnected: `bg-fg-faint`
 - Syncing: `bg-accent animate-pulse`
 
 Text: "Synced 2m ago" / "Error" / "Syncing…"
@@ -686,7 +686,7 @@ flex items-center justify-between px-4 py-3 border-b border-border
 - Center: title
 - Right: primary action `text-accent text-sm font-medium`
 
-Mobile-only: drag handle `mx-auto mt-2 mb-0 w-10 h-1 rounded-full bg-neutral-600` rendered ABOVE the sheet header (outside the sticky region).
+Mobile-only: drag handle `mx-auto mt-2 mb-0 w-10 h-1 rounded-full bg-fg-faint` rendered ABOVE the sheet header (outside the sticky region).
 
 ---
 

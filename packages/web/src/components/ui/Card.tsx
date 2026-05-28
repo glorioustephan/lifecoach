@@ -7,7 +7,7 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 export const Card = ({ className, children, ...props }: CardProps): JSX.Element => (
   <div
     className={cn(
-      "rounded-lg border border-border-subtle bg-surface-elevated shadow-sm",
+      "rounded-md border border-border bg-surface",
       className,
     )}
     {...props}

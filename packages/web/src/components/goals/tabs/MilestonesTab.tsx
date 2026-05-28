@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Circle, Plus, Trash2 } from "lucide-react";
 import { Button } from "~/components/ui/Button";
+import { formControlClass } from "~/components/ui/formStyles";
 import { api, type GoalRow, type MilestoneRow } from "~/lib/api";
 import { cn } from "~/lib/cn";
 
@@ -132,7 +133,7 @@ export function MilestonesTab({ goal }: { goal: GoalRow }): JSX.Element {
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
           placeholder="Add a milestone…"
-          className="flex-1 rounded-md border border-border-subtle bg-surface-elevated px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:border-accent"
+          className={formControlClass("flex-1 px-3 py-1.5 text-sm")}
         />
         <Button
           variant="secondary"

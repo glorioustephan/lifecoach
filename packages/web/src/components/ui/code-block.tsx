@@ -1,6 +1,113 @@
 import { cn } from "@/lib/utils"
 import React, { useEffect, useState } from "react"
-import { codeToHtml } from "shiki"
+import type { HighlighterCore } from "shiki/core"
+
+type SupportedLanguage =
+  | "bash"
+  | "css"
+  | "html"
+  | "javascript"
+  | "json"
+  | "markdown"
+  | "python"
+  | "shellsession"
+  | "sql"
+  | "tsx"
+  | "typescript"
+
+const languageAliases: Record<string, SupportedLanguage | "text"> = {
+  js: "javascript",
+  jsx: "javascript",
+  md: "markdown",
+  py: "python",
+  sh: "bash",
+  shell: "bash",
+  shellscript: "bash",
+  ts: "typescript",
+}
+
+const supportedLanguages = new Set<SupportedLanguage>([
+  "bash",
+  "css",
+  "html",
+  "javascript",
+  "json",
+  "markdown",
+  "python",
+  "shellsession",
+  "sql",
+  "tsx",
+  "typescript",
+])
+
+const normalizeLanguage = (language: string): SupportedLanguage | "text" => {
+  const normalized = language.trim().toLowerCase()
+  if (normalized === "" || normalized === "text" || normalized === "plaintext") {
+    return "text"
+  }
+  const alias = languageAliases[normalized]
+  if (alias !== undefined) return alias
+  return supportedLanguages.has(normalized as SupportedLanguage)
+    ? (normalized as SupportedLanguage)
+    : "text"
+}
+
+let highlighterPromise: Promise<HighlighterCore> | null = null
+
+const loadHighlighter = async (): Promise<HighlighterCore> => {
+  highlighterPromise ??= (async () => {
+    const [
+      { createHighlighterCore },
+      { createJavaScriptRegexEngine },
+      githubDark,
+      bash,
+      css,
+      html,
+      javascript,
+      json,
+      markdown,
+      python,
+      shellsession,
+      sql,
+      tsx,
+      typescript,
+    ] = await Promise.all([
+      import("shiki/core"),
+      import("shiki/engine/javascript"),
+      import("shiki/themes/github-dark.mjs"),
+      import("shiki/langs/bash.mjs"),
+      import("shiki/langs/css.mjs"),
+      import("shiki/langs/html.mjs"),
+      import("shiki/langs/javascript.mjs"),
+      import("shiki/langs/json.mjs"),
+      import("shiki/langs/markdown.mjs"),
+      import("shiki/langs/python.mjs"),
+      import("shiki/langs/shellsession.mjs"),
+      import("shiki/langs/sql.mjs"),
+      import("shiki/langs/tsx.mjs"),
+      import("shiki/langs/typescript.mjs"),
+    ])
+
+    return createHighlighterCore({
+      themes: [githubDark.default],
+      langs: [
+        bash.default,
+        css.default,
+        html.default,
+        javascript.default,
+        json.default,
+        markdown.default,
+        python.default,
+        shellsession.default,
+        sql.default,
+        tsx.default,
+        typescript.default,
+      ],
+      engine: createJavaScriptRegexEngine(),
+    })
+  })()
+  return highlighterPromise
+}
 
 export type CodeBlockProps = {
   children?: React.ReactNode
@@ -40,16 +147,29 @@ function CodeBlockCode({
   const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     async function highlight() {
       if (!code) {
         setHighlightedHtml("<pre><code></code></pre>")
         return
       }
 
-      const html = await codeToHtml(code, { lang: language, theme })
-      setHighlightedHtml(html)
+      try {
+        const highlighter = await loadHighlighter()
+        const html = highlighter.codeToHtml(code, {
+          lang: normalizeLanguage(language),
+          theme: theme === "github-dark" ? "github-dark" : "github-dark",
+        })
+        if (!cancelled) setHighlightedHtml(html)
+      } catch {
+        if (!cancelled) setHighlightedHtml(null)
+      }
     }
     highlight()
+
+    return () => {
+      cancelled = true
+    }
   }, [code, language, theme])
 
   const classNames = cn(

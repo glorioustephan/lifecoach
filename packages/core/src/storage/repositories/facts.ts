@@ -1,6 +1,7 @@
 import type { Database } from "better-sqlite3";
 import type { Fact, FactCategory, FactUpdate, NewFact } from "@lifecoach/schemas";
 import { newId, now } from "../../util/ids.js";
+import { parseRecord } from "../../util/json.js";
 
 interface FactRow {
   id: string;
@@ -20,7 +21,7 @@ const rowToFact = (row: FactRow): Fact => ({
   category: row.category as FactCategory,
   subject: row.subject,
   body: row.body,
-  data: row.data ? (JSON.parse(row.data) as Record<string, unknown>) : undefined,
+  data: parseRecord(row.data),
   source: row.source ?? undefined,
   confidence: row.confidence,
   validFrom: row.valid_from,
@@ -142,7 +143,7 @@ export class FactRepository {
       confidence: row.confidence,
       validFrom: row.valid_from,
       validTo: row.valid_to,
-      data: row.data ? (JSON.parse(row.data) as Record<string, unknown>) : undefined,
+      data: parseRecord(row.data),
       createdAt: row.created_at,
     }));
   }
@@ -184,7 +185,7 @@ export class FactRepository {
       confidence: row.confidence,
       validFrom: row.valid_from,
       validTo: row.valid_to,
-      data: row.data ? (JSON.parse(row.data) as Record<string, unknown>) : undefined,
+      data: parseRecord(row.data),
       createdAt: row.created_at,
     };
   }

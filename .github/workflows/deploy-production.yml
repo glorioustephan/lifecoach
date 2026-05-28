@@ -34,8 +34,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build workspace
-        run: pnpm build
+      - name: Verify workspace
+        run: pnpm verify
 
   deploy:
     name: Deploy to Mac Mini

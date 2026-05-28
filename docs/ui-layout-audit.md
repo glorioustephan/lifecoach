@@ -7,6 +7,11 @@
 
 Fix directions reference semantic tokens + the shared primitives (`ViewHeader`, `EmptyState`, `Sheet`, `TabNav`, `FilterBar`, `Card`) per `docs/ui-design-system.md`. **Never** raw palette.
 
+> Status note, 2026-05-28: this is a historical capture, not the current
+> queue. Several high-severity items have since been fixed in code. Re-verify a
+> listed issue against the running app before implementing it, and prefer the
+> current shared primitives over the older fix directions below.
+
 ---
 
 ## Severity summary

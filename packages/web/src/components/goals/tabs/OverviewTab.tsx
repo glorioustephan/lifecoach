@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "~/components/ui/Button";
+import { compactFormControlClass, formControlClass } from "~/components/ui/formStyles";
 import {
   api,
   type GoalCadence,
@@ -103,7 +104,7 @@ export function OverviewTab({
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-fg focus:outline-none focus:border-accent"
+            className={formControlClass("w-full px-3 py-2 text-sm")}
           />
         </Field>
 
@@ -132,7 +133,7 @@ export function OverviewTab({
             <select
               value={cadence}
               onChange={(e) => setCadence(e.target.value as GoalCadence)}
-              className="rounded-md border border-border-subtle bg-surface-elevated px-2 py-1 text-xs text-fg"
+              className={compactFormControlClass()}
             >
               <option value="">— none —</option>
               <option value="daily">Daily</option>
@@ -150,7 +151,7 @@ export function OverviewTab({
             value={outcome}
             onChange={(e) => setOutcome(e.target.value)}
             rows={3}
-            className="w-full resize-none rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-fg focus:outline-none focus:border-accent"
+            className={formControlClass("w-full resize-none px-3 py-2 text-sm")}
           />
         </Field>
 
@@ -162,7 +163,7 @@ export function OverviewTab({
             value={obstacle}
             onChange={(e) => setObstacle(e.target.value)}
             rows={2}
-            className="w-full resize-none rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-fg focus:outline-none focus:border-accent"
+            className={formControlClass("w-full resize-none px-3 py-2 text-sm")}
           />
         </Field>
 
@@ -175,7 +176,7 @@ export function OverviewTab({
             onChange={(e) => setImplementationIntention(e.target.value)}
             rows={2}
             placeholder="After I make my morning coffee, I will walk for 10 minutes in the neighborhood."
-            className="w-full resize-none rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:border-accent"
+            className={formControlClass("w-full resize-none px-3 py-2 text-sm")}
           />
         </Field>
 
@@ -185,7 +186,7 @@ export function OverviewTab({
               value={identityStatement}
               onChange={(e) => setIdentityStatement(e.target.value)}
               placeholder="I am someone who shows up for their own health."
-              className="w-full rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:border-accent"
+              className={formControlClass("w-full px-3 py-2 text-sm")}
             />
           </Field>
         )}
@@ -195,7 +196,7 @@ export function OverviewTab({
             <select
               value={horizon}
               onChange={(e) => setHorizon(e.target.value as GoalRow["horizon"])}
-              className="w-full rounded-md border border-border-subtle bg-surface-elevated px-2 py-1.5 text-xs text-fg"
+              className={compactFormControlClass("w-full py-1.5")}
             >
               {(Object.keys(HORIZON_LABEL) as GoalRow["horizon"][]).map((h) => (
                 <option key={h} value={h}>
@@ -208,7 +209,7 @@ export function OverviewTab({
             <select
               value={reviewCadence}
               onChange={(e) => setReviewCadence(e.target.value as GoalReviewCadence)}
-              className="w-full rounded-md border border-border-subtle bg-surface-elevated px-2 py-1.5 text-xs text-fg"
+              className={compactFormControlClass("w-full py-1.5")}
             >
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
@@ -224,7 +225,7 @@ export function OverviewTab({
               type="date"
               value={dueAtStr}
               onChange={(e) => setDueAtStr(e.target.value)}
-              className="rounded-md border border-border-subtle bg-surface-elevated px-2 py-1.5 text-xs text-fg"
+              className={compactFormControlClass("py-1.5")}
             />
           </Field>
         )}

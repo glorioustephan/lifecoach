@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Target, Plus } from "lucide-react";
 import { ViewHeader } from "~/components/ui/ViewHeader";
 import { Button } from "~/components/ui/Button";
+import { formControlClass } from "~/components/ui/formStyles";
 import {
   api,
   type GoalKind,
@@ -232,14 +233,14 @@ function NewGoalForm({
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="What do you want to do, become, or build?"
-        className="w-full bg-transparent text-sm text-fg placeholder:text-fg-faint focus:outline-none"
+        className={formControlClass("w-full border-transparent bg-transparent px-0 py-1 text-sm")}
       />
       <textarea
         value={outcome}
         onChange={(e) => setOutcome(e.target.value)}
         rows={2}
         placeholder="What does success feel like? (optional, you can fill this in later)"
-        className="w-full resize-none bg-transparent text-xs text-fg-muted placeholder:text-fg-faint focus:outline-none"
+        className={formControlClass("w-full resize-none border-transparent bg-transparent px-0 py-1 text-xs text-fg-muted")}
       />
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1">

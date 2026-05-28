@@ -10,7 +10,7 @@
   "scripts": {
     "dev:setup": "bash scripts/dev-setup.sh",
     "dev": "pnpm dev:setup && pnpm --parallel --filter @lifecoach/server --filter @lifecoach/web run dev",
-    "dev:reset": "rm -rf data-dev && pnpm dev",
+    "dev:reset": "rm -rf data-development && pnpm dev",
     "deploy:macmini": "bash scripts/deploy-to-macmini.sh",
     "deploy:macmini:env": "bash scripts/deploy-env-to-macmini.sh",
     "deploy:production": "bash scripts/deploy-production.sh",
@@ -21,6 +21,7 @@
     "web:build": "pnpm --filter @lifecoach/web build",
     "start": "pnpm web:build && LIFECOACH_SERVE_BUILT_WEB=1 pnpm --filter @lifecoach/server start",
     "typecheck": "pnpm -r typecheck",
+    "verify": "pnpm typecheck && pnpm --filter @lifecoach/core test && pnpm --filter @lifecoach/server test && pnpm --filter @lifecoach/web build",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "docs:dev": "vitepress dev docs",

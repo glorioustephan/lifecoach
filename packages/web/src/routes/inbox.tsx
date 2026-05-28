@@ -3,10 +3,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 import { ViewHeader } from "~/components/ui/ViewHeader";
+import { Button } from "~/components/ui/Button";
 import { TabNav } from "~/components/ui/TabNav";
 import { PaginationNav } from "~/components/ui/PaginationNav";
-import { api, type InsightRow, type InsightState } from "~/lib/api";
-import { cn } from "~/lib/cn";
+import { api, type InsightState } from "~/lib/api";
 import { BriefingPanel } from "~/components/inbox/BriefingPanel";
 import { InsightCard } from "~/components/inbox/InsightCard";
 import { toast } from "~/lib/use-toast";
@@ -29,13 +29,8 @@ function InboxRoute(): JSX.Element {
     hasNextPage,
   } = useInfiniteQuery({
     queryKey: ["inbox", filter],
-    queryFn: async ({ pageParam }: { pageParam: number }) => {
-      const resp = await fetch(
-        `/api/inbox?state=${filter}&page=${pageParam}&limit=${PAGE_SIZE}`
-      );
-      if (!resp.ok) throw new Error(resp.statusText);
-      return resp.json() as Promise<{ insights: InsightRow[]; total: number }>;
-    },
+    queryFn: ({ pageParam }: { pageParam: number }) =>
+      api.inbox({ state: filter, page: pageParam, limit: PAGE_SIZE }),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => {
       const loaded = allPages.reduce((n, p) => n + p.insights.length, 0);
@@ -72,20 +67,17 @@ function InboxRoute(): JSX.Element {
         title="Inbox"
         subtitle="Background-intelligence surfaces — your morning ritual"
         actions={
-          <button
+          <Button
             type="button"
             onClick={() => generate.mutate()}
             disabled={generate.isPending}
-            className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-md border border-border-subtle px-3 text-xs transition-colors",
-              generate.isPending
-                ? "border-accent/40 bg-accent/10 text-accent"
-                : "text-fg-muted hover:border-accent/40 hover:bg-surface-elevated hover:text-fg",
-            )}
+            loading={generate.isPending}
+            variant="secondary"
+            size="sm"
           >
             <Sparkles className="size-3.5" strokeWidth={1.75} />
-            {generate.isPending ? "generating…" : "Generate Insights"}
-          </button>
+            Generate Insights
+          </Button>
         }
       />
       <div className="flex-1 overflow-y-auto mobile-safe-bottom">
@@ -166,18 +158,20 @@ const EmptyState = ({
           The coach will surface patterns, anomalies, and opportunities here. Run
           the insight pass to look for new ones.
         </p>
-        <button
+        <Button
           type="button"
           onClick={onGenerate}
           disabled={pending}
-          className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-400 disabled:opacity-60"
+          loading={pending}
+          variant="primary"
+          size="sm"
+          className="mt-2"
         >
           <Sparkles className="size-4" strokeWidth={1.75} />
-          {pending ? "thinking…" : "Look for new insights"}
-        </button>
+          Look for new insights
+        </Button>
       </div>
     );
   }
   return <p className="mt-10 text-center text-sm text-fg-muted">No {filter} insights.</p>;
 };
-

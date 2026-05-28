@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "~/components/ui/Button";
+import { compactFormControlClass, formControlClass } from "~/components/ui/formStyles";
 import { api, type GoalRow } from "~/lib/api";
 import { cn } from "~/lib/cn";
 
@@ -162,7 +163,7 @@ export function SignalsSection({ goal }: { goal: GoalRow }): JSX.Element {
               ? "Sentence — what does success read like?"
               : "Short label, e.g. 'Pace under 5:30/km'"
           }
-          className="w-full rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:border-accent"
+          className={formControlClass("w-full px-2 py-1.5 text-sm")}
         />
         {kind === "quantitative" && (
           <div className="grid grid-cols-3 gap-2">
@@ -170,20 +171,20 @@ export function SignalsSection({ goal }: { goal: GoalRow }): JSX.Element {
               value={metric}
               onChange={(e) => setMetric(e.target.value)}
               placeholder="metric"
-              className="rounded-md border border-border-subtle bg-surface-elevated px-2 py-1 text-xs text-fg placeholder:text-fg-faint focus:outline-none focus:border-accent"
+              className={compactFormControlClass()}
             />
             <input
               type="number"
               value={targetValue}
               onChange={(e) => setTargetValue(e.target.value)}
               placeholder="target"
-              className="rounded-md border border-border-subtle bg-surface-elevated px-2 py-1 text-xs text-fg placeholder:text-fg-faint focus:outline-none focus:border-accent"
+              className={compactFormControlClass()}
             />
             <input
               value={unit}
               onChange={(e) => setUnit(e.target.value)}
               placeholder="unit"
-              className="rounded-md border border-border-subtle bg-surface-elevated px-2 py-1 text-xs text-fg placeholder:text-fg-faint focus:outline-none focus:border-accent"
+              className={compactFormControlClass()}
             />
           </div>
         )}

@@ -1,6 +1,7 @@
 import type { Database } from "better-sqlite3";
 import type { Document, NewDocument } from "@lifecoach/schemas";
 import { newId, now } from "../../util/ids.js";
+import { parseRecord } from "../../util/json.js";
 
 interface DocumentRow {
   id: string;
@@ -23,7 +24,7 @@ const rowToDocument = (row: DocumentRow): Document => ({
   mime: row.mime ?? undefined,
   title: row.title ?? undefined,
   body: row.body,
-  metadata: row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : undefined,
+  metadata: parseRecord(row.metadata),
   ingestedAt: row.ingested_at,
   externalId: row.external_id,
   externalSource: row.external_source,

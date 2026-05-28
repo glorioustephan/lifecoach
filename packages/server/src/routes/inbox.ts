@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Lifecoach } from "@lifecoach/core";
+import { parseEnumQuery, parsePagination } from "../lib/query.js";
 
 const snoozeSchema = z.object({
   until: z.union([z.number().int(), z.string()]),
@@ -21,22 +22,17 @@ export const inboxRoutes = (lc: Lifecoach) => {
 
   // List insights by state with pagination (default: active).
   app.get("/", (c) => {
-    const state = (c.req.query("state") ?? "active") as
-      | "active"
-      | "acted"
-      | "dismissed"
-      | "snoozed"
-      | "all";
-    const limit = Number(c.req.query("limit") ?? "25");
-    const page = Number(c.req.query("page") ?? "1");
-    const offset = (page - 1) * limit;
-
-    // Get all insights for this state to calculate total
-    const allInsights = lc.storage.insights.list({ state, limit: 1_000_000 });
-    const total = allInsights.length;
-
-    // Get paginated slice
-    const insights = allInsights.slice(offset, offset + limit);
+    const state = parseEnumQuery(
+      c.req.query("state"),
+      ["active", "acted", "dismissed", "snoozed", "all"],
+      "active",
+    );
+    const { limit, offset } = parsePagination((key) => c.req.query(key), {
+      defaultLimit: 25,
+      maxLimit: 100,
+    });
+    const total = lc.storage.insights.count({ state });
+    const insights = lc.storage.insights.list({ state, limit, offset });
     return c.json({ insights, total });
   });
 

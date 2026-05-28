@@ -24,6 +24,20 @@ for command_name in "${required_commands[@]}"; do
   fi
 done
 
+required_node_major="22"
+node_major="$(node -p 'process.versions.node.split(".")[0]')"
+if [ "$node_major" != "$required_node_major" ]; then
+  echo "Error: Node.js $required_node_major.x is required for production deploy; found $(node --version)." >&2
+  exit 1
+fi
+
+required_pnpm_version="11.1.0"
+pnpm_version="$(pnpm --version)"
+if [ "$pnpm_version" != "$required_pnpm_version" ]; then
+  echo "Error: pnpm $required_pnpm_version is required for production deploy; found $pnpm_version." >&2
+  exit 1
+fi
+
 current_branch="$(git branch --show-current)"
 if [ "$current_branch" != "main" ]; then
   echo "Error: production checkout must be on main; found '$current_branch'" >&2
@@ -65,6 +79,7 @@ echo "Building workspace..."
 pnpm build
 
 echo "Running database migrations..."
+echo "Note: migrations can include schema constraints. Check docs/deployment.md for manual preflights before first deploy after new migrations."
 pnpm lifecoach init --no-profile
 
 echo "Reloading PM2 ecosystem..."

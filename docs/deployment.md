@@ -12,7 +12,7 @@ the source of code, while secrets and personal data stay outside git:
 ## Flow
 
 1. A push lands on `main`.
-2. GitHub Actions installs dependencies and builds the workspace.
+2. GitHub Actions installs dependencies and runs `pnpm verify`.
 3. The deploy job joins the tailnet with the Tailscale GitHub Action.
 4. The job SSHes to the Mac Mini.
 5. The Mac Mini runs `scripts/deploy-production.sh`.
@@ -20,7 +20,8 @@ the source of code, while secrets and personal data stay outside git:
 The server-side script refuses to deploy if the Mac Mini checkout has local
 tracked edits. It then fast-forwards `main`, installs dependencies, builds,
 runs `pnpm lifecoach init --no-profile` so migrations apply, reloads PM2, and
-checks `/health`.
+checks `/health`. The script also refuses to run unless Node.js 22.x and
+pnpm 11.1.0 are active, matching CI.
 
 ## Configuration ownership
 
@@ -46,6 +47,9 @@ Keep these values on the Mac Mini, not in git and not in GitHub Actions:
 | `TODOIST_API_TOKEN` | Todoist sync |
 | `CAPACITIES_API_TOKEN` | Capacities lookup, sync, and write-back API access |
 | `CAPACITIES_DEFAULT_SPACE_ID` | Default Capacities target for daily notes and reflection write-back |
+| `MONARCH_EMAIL` / `MONARCH_PASSWORD` | Optional fallback credentials for Monarch Money sync |
+| `MONARCH_SESSION_FILE` | Optional persisted Monarch session path |
+| `LIFECOACH_SECRET_KEY` | Encrypts stored integration credentials |
 | `LIFECOACH_ENV=production` | Keeps production data in `data-production/` |
 | `PORT=3717` | Server listen port, if different from the default |
 
@@ -123,6 +127,12 @@ LIFECOACH_ENV=production pnpm lifecoach init --no-profile
 pm2 startOrReload ecosystem.config.cjs --update-env
 pm2 save
 ```
+
+Before the first deploy that includes a migration adding a new uniqueness
+constraint, run the duplicate check documented in that migration against the
+production database. For example,
+`packages/core/src/storage/migrations/1779980907_add_transactions_external_id_unique.sql`
+documents the preflight for duplicate transaction `external_id` values.
 
 Then add the deploy public key to:
 

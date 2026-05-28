@@ -3,6 +3,7 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import type { Lifecoach } from "@lifecoach/core";
 import { streamChatTurn } from "../lib/stream-bridge.js";
+import { parseLimit } from "../lib/query.js";
 
 const sendSchema = z.object({
   sessionId: z.string().min(1).optional(),
@@ -16,7 +17,10 @@ export const chatRoutes = (lc: Lifecoach) => {
   // enriched with a short preview (the first user message, truncated) and
   // a message count so the sheet can render meaningful row labels.
   app.get("/sessions", (c) => {
-    const limit = Number(c.req.query("limit") ?? "30");
+    const limit = parseLimit((key) => c.req.query(key), {
+      defaultLimit: 30,
+      maxLimit: 100,
+    });
     const archived = c.req.query("archived") === "true";
     const sessions = archived
       ? lc.storage.sessions.archived(limit)

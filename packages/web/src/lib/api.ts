@@ -345,8 +345,17 @@ export const api = {
   reflections: () => get<{ reflections: ReflectionRow[] }>("/api/memory/reflections"),
   generateReflection: (kind: "daily" | "weekly" | "monthly") =>
     postJson<{ reflection: ReflectionRow | null }>("/api/memory/reflections/generate", { kind }),
-  inbox: (state: InsightState = "active") =>
-    get<{ insights: InsightRow[] }>(`/api/inbox?state=${encodeURIComponent(state)}&limit=50`),
+  inbox: (
+    opts: { state?: InsightState; page?: number; limit?: number } = {},
+  ) => {
+    const params = new URLSearchParams();
+    params.set("state", opts.state ?? "active");
+    params.set("limit", String(opts.limit ?? 50));
+    if (opts.page !== undefined) params.set("page", String(opts.page));
+    return get<{ insights: InsightRow[]; total: number }>(
+      `/api/inbox?${params.toString()}`,
+    );
+  },
   generateInsights: () => postJson<{ insights: InsightRow[] }>("/api/inbox/generate", {}),
   actInsight: (id: string) =>
     postJson<{ ok: true }>(`/api/inbox/${encodeURIComponent(id)}/act`, {}),
@@ -521,16 +530,25 @@ export const api = {
   createProject: (body: { title: string; body?: string; targetDate?: number }) =>
     postJson<{ project: ProjectRow }>("/api/goals/projects", body),
   tasks: (
-    opts: { status?: "active" | "completed" | "overdue" | "all"; limit?: number } = {},
+    opts: {
+      status?: "active" | "completed" | "overdue" | "all";
+      limit?: number;
+      page?: number;
+      projectId?: string;
+    } = {},
   ) => {
     const params = new URLSearchParams();
     if (opts.status) params.set("status", opts.status);
     if (opts.limit) params.set("limit", String(opts.limit));
+    if (opts.page) params.set("page", String(opts.page));
+    if (opts.projectId) params.set("projectId", opts.projectId);
     const qs = params.toString();
     return get<{ tasks: TaskRow[]; total: number }>(
       `/api/tasks${qs ? `?${qs}` : ""}`,
     );
   },
+  completeTask: (id: string) =>
+    postJson<{ ok: true }>(`/api/tasks/${encodeURIComponent(id)}/complete`, {}),
   briefing: () =>
     get<{
       generatedAt: number;

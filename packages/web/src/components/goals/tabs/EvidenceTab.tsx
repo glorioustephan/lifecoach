@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { Button } from "~/components/ui/Button";
+import { formControlClass } from "~/components/ui/formStyles";
 import { api, type GoalRow } from "~/lib/api";
 import { formatRelative } from "~/lib/time";
 
@@ -57,7 +58,7 @@ export function EvidenceTab({ goal }: { goal: GoalRow }): JSX.Element {
           onChange={(e) => setBody(e.target.value)}
           rows={2}
           placeholder="What happened that bears on this goal?"
-          className="w-full resize-none rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:border-accent"
+          className={formControlClass("w-full resize-none px-3 py-2 text-sm")}
         />
         <div className="flex justify-end">
           <Button

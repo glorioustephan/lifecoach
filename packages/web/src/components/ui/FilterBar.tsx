@@ -1,5 +1,6 @@
 import { Search } from "lucide-react";
 import { cn } from "~/lib/cn";
+import { formControlClass } from "./formStyles";
 
 interface FilterBarProps {
   search: string;
@@ -23,7 +24,7 @@ export function FilterBar({
           placeholder={placeholder}
           value={search}
           onChange={(e) => onSearchChange(e.currentTarget.value)}
-          className="h-8 w-full rounded-md border border-border-subtle bg-surface-elevated pl-8 pr-3 text-sm text-fg placeholder:text-fg-faint focus:border-accent/60 focus:outline-none transition-colors"
+          className={formControlClass("h-11 w-full pl-8 pr-3 text-sm")}
         />
       </div>
       {children}

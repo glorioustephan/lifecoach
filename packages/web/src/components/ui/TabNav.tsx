@@ -31,8 +31,7 @@ export function TabNav<T extends string>({
               key={tab.id}
               type="button"
               onClick={() => onChange(tab.id)}
-              role="tab"
-              aria-selected={active === tab.id}
+              aria-pressed={active === tab.id}
               className={cn(
                 "inline-flex min-h-9 items-center rounded-full px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap first:-ml-3",
                 active === tab.id
@@ -57,8 +56,7 @@ export function TabNav<T extends string>({
             key={tab.id}
             type="button"
             onClick={() => onChange(tab.id)}
-            role="tab"
-            aria-selected={active === tab.id}
+            aria-pressed={active === tab.id}
             className={cn(
               "relative -mb-px px-3 py-2 text-sm transition-colors first:-ml-3",
               active === tab.id ? "text-fg" : "text-fg-muted hover:text-fg",

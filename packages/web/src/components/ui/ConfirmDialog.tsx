@@ -28,7 +28,7 @@ export const ConfirmDialog = ({
 }: ConfirmDialogProps): JSX.Element => (
   <Dialog.Root open={open} onOpenChange={onOpenChange}>
     <Dialog.Portal>
-      <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[1px]" />
+      <Dialog.Overlay className="fixed inset-0 z-50 bg-bg/80 backdrop-blur-[1px]" />
       <Dialog.Content
         className="fixed inset-0 z-50 flex items-center justify-center outline-none"
         onClick={() => onOpenChange(false)}

@@ -9,6 +9,7 @@ import {
   MIN_CRON_CONFIDENCE,
   type Lifecoach,
 } from "@lifecoach/core";
+import { parseOffsetPagination } from "../lib/query.js";
 
 const extractSchema = z.object({
   content: z.string().min(1),
@@ -34,8 +35,10 @@ export const artifactRoutes = (lc: Lifecoach) => {
   app.get("/", (c) => {
     const type = c.req.query("type") || undefined;
     const q = c.req.query("q") || undefined;
-    const limit = Math.min(Number(c.req.query("limit") ?? "20") || 20, 100);
-    const offset = Math.max(Number(c.req.query("offset") ?? "0") || 0, 0);
+    const { limit, offset } = parseOffsetPagination((key) => c.req.query(key), {
+      defaultLimit: 20,
+      maxLimit: 100,
+    });
     const { items, total } = lc.storage.artifacts.list({
       ...(type ? { type } : {}),
       ...(q ? { q } : {}),

@@ -46,7 +46,7 @@ export const GlobalStatus = (): JSX.Element => {
             <span
               className={
                 agentState === "idle"
-                  ? "size-2 rounded-full bg-neutral-600"
+                  ? "size-2 rounded-full bg-fg-faint"
                   : "size-2 animate-pulse rounded-full bg-accent"
               }
               aria-hidden

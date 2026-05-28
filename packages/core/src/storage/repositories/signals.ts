@@ -1,6 +1,7 @@
 import type { Database } from "better-sqlite3";
 import type { EvidenceRef, InsightPriority } from "@lifecoach/schemas";
 import { newId, now } from "../../util/ids.js";
+import { parseEvidenceRefs } from "../../util/json.js";
 
 export type AttentionSignalKind =
   | "overdue_task"
@@ -53,16 +54,6 @@ interface AttentionSignalRow {
 
 const FULL =
   "id, kind, title, body, priority, evidence_refs, dedup_key, state, first_seen_at, last_seen_at, acted_on_at, dismissed_at";
-
-const parseEvidenceRefs = (raw: string): EvidenceRef[] => {
-  const parsed = JSON.parse(raw) as unknown;
-  if (!Array.isArray(parsed)) return [];
-  return parsed.filter((ref): ref is EvidenceRef => {
-    if (!ref || typeof ref !== "object") return false;
-    const maybe = ref as Partial<EvidenceRef>;
-    return typeof maybe.refType === "string" && typeof maybe.refId === "string";
-  });
-};
 
 const rowToSignal = (row: AttentionSignalRow): AttentionSignal => ({
   id: row.id,

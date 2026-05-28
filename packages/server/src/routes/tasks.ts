@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Lifecoach } from "@lifecoach/core";
+import { parseEnumQuery, parsePagination } from "../lib/query.js";
 
 const taskLinkSchema = z.object({
   goalId: z.string().nullable(),
@@ -11,14 +12,15 @@ export const taskRoutes = (lc: Lifecoach) => {
   const app = new Hono();
 
   app.get("/", (c) => {
-    const status = (c.req.query("status") ?? "active") as
-      | "active"
-      | "completed"
-      | "overdue"
-      | "all";
-    const limit = Number(c.req.query("limit") ?? "25");
-    const page = Number(c.req.query("page") ?? "1");
-    const offset = (page - 1) * limit;
+    const status = parseEnumQuery(
+      c.req.query("status"),
+      ["active", "completed", "overdue", "all"],
+      "active",
+    );
+    const { limit, offset } = parsePagination((key) => c.req.query(key), {
+      defaultLimit: 25,
+      maxLimit: 100,
+    });
     const projectId = c.req.query("projectId");
 
     const filterParams = {

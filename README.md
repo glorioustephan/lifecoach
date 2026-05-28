@@ -95,9 +95,9 @@ The three interaction surfaces (CLI, MCP, web UI) all drive the **same agent run
 # 1. Install dependencies
 pnpm install
 
-# 2. Set up the development environment (creates .env.local + data-development/)
+# 2. Set up the development environment (creates .env.development + data-development/)
 pnpm dev:setup
-# → Edit .env.local with your API keys
+# → Edit .env.development with your API keys
 
 # 3. Initialize the DB + seed your profile
 pnpm lifecoach init
@@ -106,7 +106,7 @@ pnpm lifecoach init
 pnpm lifecoach chat
 ```
 
-### Environment variables (`.env.local` for dev, `.env.production` or `.env` on the Mac Mini)
+### Environment variables (`.env.development` for dev, `.env.production` or `.env` on the Mac Mini)
 
 | Variable | Required | Description |
 |---|---|---|
@@ -117,6 +117,9 @@ pnpm lifecoach chat
 | `TODOIST_API_TOKEN` | optional | Todoist task sync |
 | `CAPACITIES_API_TOKEN` | optional | Capacities workspace mirror + reflection write-back |
 | `CAPACITIES_DEFAULT_SPACE_ID` | optional | Default Capacities space for daily notes and reflection write-back |
+| `MONARCH_EMAIL` / `MONARCH_PASSWORD` | optional | Monarch Money sync fallback credentials |
+| `MONARCH_SESSION_FILE` | optional | Persisted Monarch browser/session file path |
+| `LIFECOACH_SECRET_KEY` | optional | Encrypts stored integration credentials |
 | `LIFECOACH_ENV` | optional | `development` or `production` — drives data directory selection |
 | `LIFECOACH_DATA_DIR` | optional | Override the data directory path explicitly |
 | `LIFECOACH_AUTH` | optional | Set to `off` to disable email auth (dev only) |
@@ -149,7 +152,7 @@ runtime app configuration lives on the Mac Mini. See
 write-back setup.
 
 ```bash
-# Local dev (uses .env.local, writes to data-development/)
+# Local dev (uses .env.development, writes to data-development/)
 pnpm dev
 
 # Reset local dev data cleanly
@@ -262,9 +265,13 @@ See [`docs/pm2-setup.md`](docs/pm2-setup.md) for the full PM2 reference. Summary
 |---|---|---|
 | `lifecoach-server` | always | Hono HTTP+API server (port 3717) |
 | `lifecoach-sync-todoist` | every 30 min | Pull Todoist tasks into local storage |
+| `lifecoach-sync-financial` | 02:00 daily | Sync Monarch Money accounts, transactions, and holdings |
 | `lifecoach-daily-reflect` | 06:00 daily | Generate morning reflection |
 | `lifecoach-insights` | 07:30 daily | Run the insight loop (after reflection) |
+| `lifecoach-artifacts` | 08:00 daily | Extract durable artifacts from recent conversations/documents |
+| `lifecoach-goal-review` | 18:00 Sunday | Review goal progress before weekly reflection |
 | `lifecoach-weekly-reflect` | 19:00 Sunday | Generate weekly reflection |
+| `lifecoach-monthly-reflect` | 10:00 on the 1st | Generate monthly reflection |
 
 ## Privacy posture
 

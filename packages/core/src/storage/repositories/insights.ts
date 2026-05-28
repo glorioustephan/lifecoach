@@ -1,12 +1,7 @@
 import type { Database } from "better-sqlite3";
-import type {
-  EvidenceRef,
-  Insight,
-  InsightPriority,
-  InsightState,
-  NewInsight,
-} from "@lifecoach/schemas";
+import type { Insight, InsightPriority, InsightState, NewInsight } from "@lifecoach/schemas";
 import { newId, now } from "../../util/ids.js";
+import { parseEvidenceRefs, parseStringArray } from "../../util/json.js";
 
 interface InsightRow {
   id: string;
@@ -25,22 +20,12 @@ interface InsightRow {
 const FULL =
   "id, topic, body, rationale, source_fact_ids, evidence_refs, priority, created_at, acted_on_at, dismissed_at, snoozed_until";
 
-const parseEvidenceRefs = (raw: string): EvidenceRef[] => {
-  const parsed = JSON.parse(raw) as unknown;
-  if (!Array.isArray(parsed)) return [];
-  return parsed.filter((ref): ref is EvidenceRef => {
-    if (!ref || typeof ref !== "object") return false;
-    const maybe = ref as Partial<EvidenceRef>;
-    return typeof maybe.refType === "string" && typeof maybe.refId === "string";
-  });
-};
-
 const rowToInsight = (row: InsightRow): Insight => ({
   id: row.id,
   topic: row.topic,
   body: row.body,
   rationale: row.rationale ?? undefined,
-  sourceFactIds: JSON.parse(row.source_fact_ids) as string[],
+  sourceFactIds: parseStringArray(row.source_fact_ids),
   evidenceRefs: parseEvidenceRefs(row.evidence_refs),
   priority: (row.priority as InsightPriority) ?? 1,
   createdAt: row.created_at,
@@ -52,6 +37,7 @@ const rowToInsight = (row: InsightRow): Insight => ({
 export interface InsightListFilter {
   state?: InsightState | "all";
   limit?: number;
+  offset?: number;
 }
 
 /**
@@ -161,9 +147,9 @@ export class InsightRepository {
     const rows = this.db
       .prepare(
         `SELECT ${FULL} FROM insights WHERE ${where}
-         ORDER BY priority DESC, created_at DESC LIMIT ?`,
+         ORDER BY priority DESC, created_at DESC LIMIT ? OFFSET ?`,
       )
-      .all(limit) as InsightRow[];
+      .all(limit, filter.offset ?? 0) as InsightRow[];
     return rows.map(rowToInsight);
   }
 
@@ -256,8 +242,30 @@ export class InsightRepository {
       .run(id);
   }
 
-  count(): number {
-    const row = this.db.prepare("SELECT COUNT(*) as c FROM insights").get() as {
+  count(filter: Pick<InsightListFilter, "state"> = {}): number {
+    const state = filter.state ?? "all";
+    const nowMs = now();
+    let where = "1=1";
+    switch (state) {
+      case "active":
+        where = `acted_on_at IS NULL AND dismissed_at IS NULL
+                 AND (snoozed_until IS NULL OR snoozed_until <= ${nowMs})`;
+        break;
+      case "acted":
+        where = "acted_on_at IS NOT NULL";
+        break;
+      case "dismissed":
+        where = "dismissed_at IS NOT NULL";
+        break;
+      case "snoozed":
+        where = `snoozed_until IS NOT NULL AND snoozed_until > ${nowMs}
+                 AND acted_on_at IS NULL AND dismissed_at IS NULL`;
+        break;
+      case "all":
+        where = "1=1";
+        break;
+    }
+    const row = this.db.prepare(`SELECT COUNT(*) as c FROM insights WHERE ${where}`).get() as {
       c: number;
     };
     return row.c;

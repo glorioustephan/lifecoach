@@ -1,6 +1,7 @@
 import type { Database } from "better-sqlite3";
 import type { Artifact, ArtifactOrigin, NewArtifact } from "@lifecoach/schemas";
 import { newId, now } from "../../util/ids.js";
+import { parseStringArray } from "../../util/json.js";
 
 interface ArtifactRow {
   id: string;
@@ -29,11 +30,11 @@ const rowToArtifact = (row: ArtifactRow): Artifact => ({
   title: row.title,
   body: row.body,
   category: row.category,
-  tags: JSON.parse(row.tags) as string[],
+  tags: parseStringArray(row.tags),
   confidence: row.confidence,
   origin: row.origin as ArtifactOrigin,
   sourceSessionId: row.source_session_id,
-  sourceMessageIds: JSON.parse(row.source_message_ids) as string[],
+  sourceMessageIds: parseStringArray(row.source_message_ids),
   sourceDocumentId: row.source_document_id,
   createdAt: row.created_at,
   updatedAt: row.updated_at,

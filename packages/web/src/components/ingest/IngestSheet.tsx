@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { CheckCircle2, FileText, AlertCircle } from "lucide-react";
 import { useIngest } from "./IngestProvider";
+import { Button } from "~/components/ui/Button";
 import { Sheet, SheetBody, SheetHeader } from "~/components/ui/Sheet";
 import { cn } from "~/lib/cn";
 import { toast } from "~/lib/use-toast";
@@ -198,20 +199,22 @@ const IngestForm = ({
     </label>
 
     <div className="flex justify-end gap-2 pt-2">
-      <button
+      <Button
         type="button"
         onClick={onCancel}
-        className="rounded-md px-3 py-1.5 text-sm text-fg-muted transition-colors hover:bg-surface-elevated/50"
+        variant="ghost"
+        size="sm"
       >
         Cancel
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
         onClick={onIngest}
-        className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-400"
+        variant="primary"
+        size="sm"
       >
         Ingest
-      </button>
+      </Button>
     </div>
   </div>
 );

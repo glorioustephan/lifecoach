@@ -295,7 +295,7 @@ npx shadcn@latest init
 When prompted:
 - **Style**: Default (or New York — either works; New York is closer to prompt-kit's aesthetic)
 - **Base color**: Neutral
-- **CSS variables**: YES — but answer the CSS file path as `src/styles/global.css` and immediately revert any `@layer base` CSS variable block it writes (our `@theme {}` in `theme.css` takes precedence)
+- **CSS variables**: YES — but answer the CSS file path as `src/styles/global.css` and immediately inspect any `@layer base` CSS variable block it writes. Preserve the lifecoach `@theme {}` contract; do not blanket-revert another agent's changes.
 - **TypeScript**: YES
 - **Components path**: `src/components/ui` (matches our existing structure)
 - **Utils path**: `src/lib/utils` (the shim we created in Step B)
@@ -303,7 +303,7 @@ When prompted:
 
 This writes `packages/web/components.json`. Do **not** let it overwrite `theme.css`.
 
-After init, inspect and revert any CSS changes to `global.css` that conflict with our `@theme {}` block.
+After init, inspect any CSS changes to `global.css` and manually repair conflicts with our `@theme {}` block.
 
 ### Component Installation Order
 
@@ -426,17 +426,18 @@ prompt-kit components reference shadcn default tokens (`--background`, `--foregr
 
 > Note: Tailwind v4 uses `--color-*` for its CSS variable namespace. shadcn's v4 integration uses `--background` etc. without the `color-` prefix. After running `shadcn init` with v4, verify which naming convention it writes and adjust the bridge accordingly.
 
-### Why Scaffolding Was Not Executed
+### Current Scaffolding Status
 
-The shadcn CLI (`npx shadcn@latest init` + component adds) was intentionally not run in this worktree for the following concrete reasons:
+The original audit was written before prompt-kit adoption. The repo now has
+`packages/web/components.json`, the `@/` alias, the `@/lib/utils` shim, the
+Radix/prompt-kit dependencies, the token bridge, and the prompt-kit UI
+components in `packages/web/src/components/ui/`.
 
-1. **No network access to `prompt-kit.com`**: The registry endpoint (`https://prompt-kit.com/c/*.json`) is unreachable from this environment. The `npx shadcn@latest add "https://prompt-kit.com/c/..."` commands would fail at fetch time.
-
-2. **`components.json` does not exist**: Without running `shadcn init`, any `add` command would abort with "No components.json found." Running `init` interactively requires a TTY; the non-interactive flags (`--defaults`, `--yes`) would write opinionated CSS that conflicts with our `@theme {}` block and require immediate manual revert — making automated scaffolding net-negative.
-
-3. **Additive-only constraint**: The task requires no deletion of working components. Scaffolding without the ability to validate the build output risks overwriting `global.css` or generating duplicate component files at wrong paths.
-
-4. **The plan is complete and executable manually**: All commands are exact and ordered. A developer can execute the remediation plan step-by-step in under 30 minutes on a machine with network access.
+Do not rerun the full checklist below as a fresh migration. Treat it as
+historical context and only add a missing prompt-kit component when a new UI
+surface needs it. Any add command must be run from `packages/web`, must avoid
+overwriting `Button.tsx`, and must be followed by a semantic-token review plus
+`pnpm --filter @lifecoach/web typecheck`.
 
 ---
 
@@ -448,7 +449,7 @@ Copy this into a GitHub Issue or Linear ticket:
 - [ ] Step B: Create `src/lib/utils.ts` shim
 - [ ] Step C: Install Radix UI primitives (`avatar`, `tooltip`, `collapsible`, `hover-card`)
 - [ ] Step D: Install npm deps (`shiki`, `marked`, `remark-breaks`, `use-stick-to-bottom`, `class-variance-authority`)
-- [ ] Step E: Run `shadcn init` (accept defaults, revert CSS conflicts)
+- [ ] Step E: Run `shadcn init` (accept defaults, manually repair CSS conflicts)
 - [ ] Tier 1: Install `response-stream`, `text-shimmer`, `file-upload`, `image`, `chat-container`, `code-block`
 - [ ] Add `text-shimmer` keyframe to `theme.css`
 - [ ] Tier 2: Install shadcn primitives (`button`, `textarea`, `tooltip`, `avatar`) then `prompt-input`, `scroll-button`, `prompt-suggestion`, `loader`, `feedback-bar`, `thinking-bar`, `system-message`, `message`
@@ -477,7 +478,10 @@ These notes are authoritative for any agent or human running `npx shadcn add` or
 
 **Rule**: future `npx shadcn add button` runs MUST be run with `--overwrite=false` or the add must be skipped for the button primitive. If shadcn overwrites `Button.tsx` with its default (which removes the lifecoach `primary` variant, `loading` prop, and dual-API comment), all existing app code using `variant="primary"` or `loading` breaks silently. On macOS the case-insensitive filesystem means `button.tsx` and `Button.tsx` are the same file — there is no safe way to have both coexist as separate files.
 
-Action: after any `npx shadcn add` session, verify `Button.tsx` still exports `AppButton`, `buttonVariants`, and has the `loading` prop. If it was overwritten, restore from git with `git checkout HEAD -- packages/web/src/components/ui/Button.tsx`.
+Action: after any `npx shadcn add` session, verify `Button.tsx` still exports
+`Button`, `buttonVariants`, and the `loading` prop. If the file was overwritten,
+stop and recover the intended contents from review context rather than running a
+blanket checkout that could discard another agent's work.
 
 ### Token bridge location
 

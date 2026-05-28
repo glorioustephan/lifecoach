@@ -24,6 +24,7 @@ import {
   PromptInputTextarea,
   PromptInputActions,
 } from "~/components/ui/prompt-input";
+import { IconButton } from "~/components/ui/IconButton";
 
 interface Props {
   disabled?: boolean;
@@ -68,14 +69,16 @@ export const Composer = ({ disabled, onSubmit }: Props): JSX.Element => {
       >
         {/* Attach file button */}
         <PromptInputActions className="mb-0.5 self-end">
-          <button
+          <IconButton
             type="button"
             aria-label="Attach file"
             onClick={() => fileInputRef.current?.click()}
-            className="flex size-9 shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-surface-elevated hover:text-fg-muted"
+            disabled={disabled}
+            size="sm"
+            className="shrink-0"
           >
             <Paperclip className="size-4" strokeWidth={1.75} />
-          </button>
+          </IconButton>
         </PromptInputActions>
 
         <input
@@ -106,22 +109,17 @@ export const Composer = ({ disabled, onSubmit }: Props): JSX.Element => {
 
         {/* Send button */}
         <PromptInputActions className="mb-0.5 self-end">
-          <button
+          <IconButton
             type="button"
             onClick={handleSubmit}
             disabled={!canSend}
             aria-label="Send"
-            className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-md transition-all",
-              "active:scale-95",
-              canSend
-                ? "bg-accent text-accent-fg hover:bg-accent-400"
-                : "bg-surface-elevated text-fg-faint",
-              disabled && "opacity-50",
-            )}
+            variant={canSend ? "primary" : "default"}
+            size="sm"
+            className="shrink-0 active:scale-95"
           >
             <ArrowUp className="size-4" strokeWidth={2} />
-          </button>
+          </IconButton>
         </PromptInputActions>
       </PromptInput>
     </div>

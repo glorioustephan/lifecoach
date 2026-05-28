@@ -6,6 +6,7 @@ import { PaginationNav } from "~/components/ui/PaginationNav";
 import { Button } from "~/components/ui/Button";
 import { IconButton } from "~/components/ui/IconButton";
 import { Sheet, SheetBody, SheetHeader } from "~/components/ui/Sheet";
+import { formControlClass } from "~/components/ui/formStyles";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { api, type FactRow } from "~/lib/api";
 import { formatRelative } from "~/lib/time";
@@ -229,7 +230,7 @@ function EditFactSheet({
                 type="text"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-faint outline-none focus:border-accent/40 transition-colors"
+                className={formControlClass("w-full bg-surface px-3 py-2 text-sm")}
               />
             </div>
 
@@ -244,7 +245,7 @@ function EditFactSheet({
                 id="fact-category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm text-fg outline-none focus:border-accent/40 transition-colors"
+                className={formControlClass("w-full bg-surface px-3 py-2 text-sm")}
               >
                 {FACT_CATEGORIES.map((c) => (
                   <option key={c} value={c}>
@@ -265,7 +266,7 @@ function EditFactSheet({
                 id="fact-body"
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
-                className="w-full min-h-[200px] resize-y rounded-md border border-border-subtle bg-surface px-3 py-2 font-mono text-xs text-fg outline-none focus:border-accent/40 transition-colors"
+                className={formControlClass("min-h-[200px] w-full resize-y bg-surface px-3 py-2 font-mono text-xs")}
               />
             </div>
 

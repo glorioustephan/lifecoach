@@ -1,6 +1,7 @@
 import type { Database } from "better-sqlite3";
-import type { Message, MessageRole, NewMessage, ToolUse } from "@lifecoach/schemas";
+import type { Message, MessageRole, NewMessage } from "@lifecoach/schemas";
 import { newId, now } from "../../util/ids.js";
+import { parseToolUse } from "../../util/json.js";
 
 interface MessageRow {
   id: string;
@@ -16,7 +17,7 @@ const rowToMessage = (row: MessageRow): Message => ({
   sessionId: row.session_id,
   role: row.role as MessageRole,
   content: row.content,
-  toolUse: row.tool_use ? (JSON.parse(row.tool_use) as ToolUse) : undefined,
+  toolUse: parseToolUse(row.tool_use),
   createdAt: row.created_at,
 });
 

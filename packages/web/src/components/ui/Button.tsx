@@ -9,7 +9,7 @@
  *      loading prop, focus ring). The public button for all app code.
  *
  * RULE: Never let `npx shadcn add button` overwrite this file.
- * If it does: git checkout HEAD -- packages/web/src/components/ui/Button.tsx
+ * If it does, stop and recover the intended contents from review context.
  */
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "~/lib/cn";
@@ -34,11 +34,11 @@ export const buttonVariants = cva(
         link:      "text-accent underline-offset-4 hover:underline",
       },
       size: {
-        default: "px-3 py-2 text-sm font-medium",
-        sm:      "px-3 py-1.5 text-xs font-medium",
-        md:      "px-3 py-2 text-sm font-medium",
-        lg:      "px-4 py-2.5 text-base font-medium",
-        icon:    "size-9",
+        default: "min-h-11 px-3 py-2 text-sm font-medium",
+        sm:      "min-h-11 px-3 py-1.5 text-xs font-medium",
+        md:      "min-h-11 px-3 py-2 text-sm font-medium",
+        lg:      "min-h-12 px-4 py-2.5 text-base font-medium",
+        icon:    "size-11",
       },
     },
     defaultVariants: {

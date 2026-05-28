@@ -19,6 +19,7 @@ The deploy script (`scripts/deploy-production.sh`) runs `pm2 startOrReload ecosy
 | `lifecoach-daily-reflect` | Daily 06:00 | Daily reflection |
 | `lifecoach-insights` | Daily 07:30 | Insight generation (runs after daily reflection) |
 | `lifecoach-artifacts` | Daily 08:00 | Artifact extraction (auto-disables after 5 empty runs) |
+| `lifecoach-goal-review` | Sundays 18:00 | Goal progress review before weekly reflection |
 | `lifecoach-weekly-reflect` | Sundays 19:00 | Weekly reflection (includes financial section) |
 | `lifecoach-monthly-reflect` | 1st of month 10:00 | Monthly reflection (includes financial section) |
 
@@ -56,6 +57,7 @@ pm2 restart lifecoach-monthly-reflect
 The Mac Mini `.env` (or `.env.production`) must contain Monarch credentials:
 
 ```bash
+LIFECOACH_SECRET_KEY=<long-random-secret>
 MONARCH_SESSION_FILE=.mm/mm_session.json
 ```
 

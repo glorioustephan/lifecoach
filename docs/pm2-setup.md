@@ -10,9 +10,13 @@ If you already use PM2 for other services, Lifecoach slots in next to them — n
 |---|---|---|
 | `lifecoach-server` | always running, auto-restart on crash | the Hono HTTP+API server (default port 3717) |
 | `lifecoach-sync-todoist` | every 30 minutes (`*/30 * * * *`) | `lifecoach sync todoist` — pulls Todoist tasks into local storage |
+| `lifecoach-sync-financial` | 02:00 daily | `lifecoach sync financial` — syncs Monarch Money accounts, transactions, and holdings |
 | `lifecoach-daily-reflect` | 06:00 daily | `lifecoach reflect daily` |
 | `lifecoach-insights` | 07:30 daily | `lifecoach insights generate` (runs after the morning reflection so it has fresh context) |
+| `lifecoach-artifacts` | 08:00 daily | `lifecoach artifacts extract` |
+| `lifecoach-goal-review` | 18:00 Sunday | `lifecoach goal-review` |
 | `lifecoach-weekly-reflect` | 19:00 Sunday | `lifecoach reflect weekly` |
+| `lifecoach-monthly-reflect` | 10:00 on the 1st | `lifecoach reflect monthly` |
 
 Logs land in `data-{env}/logs/<name>.{out,err}.log` — the directory is created automatically by the ecosystem config on startup; gitignored. Cron-style commands also record a durable run ledger in SQLite (`job_runs` + `job_locks`) with status, duration, error summary, and generated row references.
 
@@ -47,7 +51,7 @@ Run that exact line. After it succeeds, `pm2 save` again so the saved process li
 ```bash
 pm2 status
 ```
-You should see five entries — server `online`, the four cron jobs `stopped` (they're stopped between fires; PM2 still tracks them and respects the cron schedule).
+You should see nine entries — server `online`, the eight cron jobs `stopped` (they're stopped between fires; PM2 still tracks them and respects the cron schedule).
 
 Tail live logs:
 ```bash
@@ -68,6 +72,8 @@ curl http://localhost:3717/health
 # Run a cron job RIGHT NOW (skip the schedule)
 pm2 restart lifecoach-daily-reflect
 pm2 restart lifecoach-sync-todoist
+pm2 restart lifecoach-sync-financial
+pm2 restart lifecoach-goal-review
 
 # Pull new code and reload everything in place (no downtime restart for the server)
 git pull
@@ -117,9 +123,13 @@ The sync process uses [PM2's `cron_restart`](https://pm2.keymetrics.io/docs/usag
 
 ```
 */30 * * * *    # every 30 minutes    sync-todoist
+0 2 * * *       # 02:00 every day     sync-financial
 0 6 * * *       # 06:00 every day     daily-reflect
 30 7 * * *      # 07:30 every day     insights
+0 8 * * *       # 08:00 every day     artifacts
+0 18 * * 0      # 18:00 every Sunday  goal-review
 0 19 * * 0      # 19:00 every Sunday  weekly-reflect
+0 10 1 * *      # 10:00 on the 1st    monthly-reflect
 ```
 
 To change the Todoist sync frequency, edit `ecosystem.config.cjs` and run `pm2 reload ecosystem.config.cjs`.

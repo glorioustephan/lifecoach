@@ -1,6 +1,7 @@
 import type { Database } from "better-sqlite3";
 import type { NewTask, Task, TaskPriority } from "@lifecoach/schemas";
 import { newId, now } from "../../util/ids.js";
+import { parseStringArray } from "../../util/json.js";
 
 interface TaskRow {
   id: string;
@@ -31,7 +32,7 @@ const rowToTask = (row: TaskRow): Task => ({
   description: row.description,
   projectId: row.project_id,
   projectName: row.project_name,
-  labels: JSON.parse(row.labels) as string[],
+  labels: parseStringArray(row.labels),
   priority: (row.priority as TaskPriority | null) ?? null,
   dueAt: row.due_at,
   dueString: row.due_string,

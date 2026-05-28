@@ -2,19 +2,24 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Lifecoach } from "@lifecoach/core";
 import { indexGoal, indexMilestone } from "@lifecoach/core";
-import { goalStatus, goalHorizon, goalKind as goalKindSchema, projectStatus } from "@lifecoach/schemas";
-
-const goalKind = z.enum(["outcome", "process", "identity"]);
-const goalCadence = z.enum(["daily", "weekly", "monthly"]);
-const reviewCadence = z.enum(["weekly", "monthly", "quarterly", "as-needed"]);
-const goalStatusQuery = z.enum(["active", "paused", "done", "abandoned", "all"]);
+import {
+  goalCadence,
+  goalHorizon,
+  goalKind as goalKindSchema,
+  goalReviewCadence,
+  goalStatus,
+  goalSignalKind,
+  milestoneStatus,
+  projectStatus,
+} from "@lifecoach/schemas";
+import { parseEnumQuery, parseLimit } from "../lib/query.js";
 
 // Create accepts the expanded WOOP / kind / cadence surface from the goal
 // edit Sheet. All new fields are optional; defaults match the schema layer.
 const goalCreateSchema = z.object({
   title: z.string().min(1),
   body: z.string().optional(),
-  horizon: z.enum(["this-week", "this-month", "this-quarter", "this-year", "open"]).optional(),
+  horizon: goalHorizon.optional(),
   successCriteria: z.string().optional(),
   dueAt: z.number().int().optional(),
   targetMetric: z.string().optional(),
@@ -22,34 +27,34 @@ const goalCreateSchema = z.object({
   projectId: z.string().optional(),
   parentGoalId: z.string().optional(),
   // Phase 1 additions:
-  kind: goalKind.optional(),
+  kind: goalKindSchema.optional(),
   cadence: goalCadence.optional(),
   outcome: z.string().optional(),
   obstacle: z.string().optional(),
   implementationIntention: z.string().optional(),
   identityStatement: z.string().optional(),
-  reviewCadence: reviewCadence.optional(),
+  reviewCadence: goalReviewCadence.optional(),
 });
 
 // Update accepts every patchable field. `undefined` leaves a field alone;
 // `null` clears it (mirrors GoalRepository.update semantics).
 const goalUpdateSchema = z.object({
   title: z.string().min(1).optional(),
-  status: z.enum(["active", "paused", "done", "abandoned"]).optional(),
+  status: goalStatus.optional(),
   currentProgress: z.number().nullable().optional(),
   body: z.string().nullable().optional(),
-  horizon: z.enum(["this-week", "this-month", "this-quarter", "this-year", "open"]).optional(),
+  horizon: goalHorizon.optional(),
   successCriteria: z.string().nullable().optional(),
   targetValue: z.number().nullable().optional(),
   targetMetric: z.string().nullable().optional(),
   dueAt: z.number().int().nullable().optional(),
-  kind: goalKind.optional(),
+  kind: goalKindSchema.optional(),
   cadence: goalCadence.nullable().optional(),
   outcome: z.string().nullable().optional(),
   obstacle: z.string().nullable().optional(),
   implementationIntention: z.string().nullable().optional(),
   identityStatement: z.string().nullable().optional(),
-  reviewCadence: reviewCadence.optional(),
+  reviewCadence: goalReviewCadence.optional(),
   archivedAt: z.number().int().nullable().optional(),
 });
 
@@ -63,7 +68,7 @@ const milestoneCreateSchema = z.object({
 const milestoneUpdateSchema = z.object({
   title: z.string().min(1).optional(),
   body: z.string().nullable().optional(),
-  status: z.enum(["pending", "active", "done", "abandoned"]).optional(),
+  status: milestoneStatus.optional(),
   orderIndex: z.number().int().optional(),
   dueAt: z.number().int().nullable().optional(),
 });
@@ -74,7 +79,7 @@ const milestoneReorderSchema = z.object({
 
 const goalSignalCreateSchema = z.object({
   label: z.string().min(1),
-  kind: z.enum(["quantitative", "qualitative"]).optional(),
+  kind: goalSignalKind.optional(),
   metric: z.string().optional(),
   targetValue: z.number().optional(),
   unit: z.string().optional(),
@@ -82,7 +87,7 @@ const goalSignalCreateSchema = z.object({
 
 const goalSignalUpdateSchema = z.object({
   label: z.string().min(1).optional(),
-  kind: z.enum(["quantitative", "qualitative"]).optional(),
+  kind: goalSignalKind.optional(),
   metric: z.string().nullable().optional(),
   targetValue: z.number().nullable().optional(),
   currentValue: z.number().nullable().optional(),
@@ -110,7 +115,11 @@ export const goalRoutes = (lc: Lifecoach) => {
     // Validate every enum-shaped query param via its Zod validator so we
     // never widen URL strings into typed enums with `as`. Bad input falls
     // back to the documented default rather than corrupting the call.
-    const status = goalStatus.safeParse(c.req.query("status") ?? "active").data ?? "active";
+    const status = parseEnumQuery(
+      c.req.query("status"),
+      ["active", "paused", "done", "abandoned", "all"],
+      "active",
+    );
     const horizonRaw = c.req.query("horizon");
     const horizon = horizonRaw ? goalHorizon.safeParse(horizonRaw).data : undefined;
     const kindRaw = c.req.query("kind");
@@ -320,7 +329,10 @@ export const goalRoutes = (lc: Lifecoach) => {
   app.get("/:goalId/evidence", (c) => {
     const goalId = c.req.param("goalId");
     if (!lc.storage.goals.get(goalId)) return c.json({ error: "not_found" }, 404);
-    const limit = Number(c.req.query("limit") ?? "100");
+    const limit = parseLimit((key) => c.req.query(key), {
+      defaultLimit: 100,
+      maxLimit: 200,
+    });
     return c.json({ evidence: lc.storage.goalEvidence.list({ goalId, limit }) });
   });
 
@@ -358,7 +370,11 @@ export const goalRoutes = (lc: Lifecoach) => {
   // ── Projects, mounted under /projects (also accessible from /goals/projects)
   const projects = new Hono();
   projects.get("/", (c) => {
-    const status = projectStatus.safeParse(c.req.query("status") ?? "active").data ?? "active";
+    const status = parseEnumQuery(
+      c.req.query("status"),
+      ["active", "paused", "done", "abandoned", "all"],
+      "active",
+    );
     return c.json({ projects: lc.storage.projects.list({ status, limit: 100 }) });
   });
   projects.post("/", async (c) => {
@@ -377,7 +393,7 @@ export const goalRoutes = (lc: Lifecoach) => {
     const id = c.req.param("id");
     const body = await c.req.json().catch(() => null);
     const parsed = z
-      .object({ status: z.enum(["active", "paused", "done", "abandoned"]) })
+      .object({ status: projectStatus })
       .safeParse(body);
     if (!parsed.success) return c.json({ error: "invalid_input" }, 400);
     const ex = lc.storage.projects.get(id);

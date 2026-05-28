@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Lifecoach } from "@lifecoach/core";
 import { forgetDocument, kindWindow } from "@lifecoach/core";
-import { factUpdateSchema, factCategory } from "@lifecoach/schemas";
+import { factUpdateSchema, factCategory, type Fact } from "@lifecoach/schemas";
+import { parseOptionalFiniteNumber, parsePagination } from "../lib/query.js";
 
 const reflectSchema = z.object({
   kind: z.enum(["daily", "weekly", "monthly"]),
@@ -23,15 +24,12 @@ export const memoryRoutes = (lc: Lifecoach) => {
   app.get("/facts", (c) => {
     const category = c.req.query("category");
     const includeExpired = c.req.query("includeExpired") === "true";
-    const limit = Number(c.req.query("limit") ?? "50");
-    const page = Number(c.req.query("page") ?? "1");
-    const offset = (page - 1) * limit;
+    const { limit, offset } = parsePagination((key) => c.req.query(key), {
+      defaultLimit: 50,
+      maxLimit: 200,
+    });
 
-    let allFacts: typeof lc.storage.facts.byCategory extends (
-      ...args: any[]
-    ) => infer R
-      ? R
-      : never;
+    let allFacts: Fact[];
 
     if (category) {
       const parsedCategory = factCategory.safeParse(category);
@@ -41,17 +39,7 @@ export const memoryRoutes = (lc: Lifecoach) => {
       allFacts = lc.storage.facts.byCategory(parsedCategory.data, includeExpired);
     } else {
       // No category filter — return all categories
-      const categories = [
-        "health",
-        "preference",
-        "recipe",
-        "task",
-        "routine",
-        "goal",
-        "relationship",
-        "other",
-      ] as const;
-      allFacts = categories.flatMap((cat) =>
+      allFacts = factCategory.options.flatMap((cat) =>
         lc.storage.facts.byCategory(cat, includeExpired),
       );
     }
@@ -96,9 +84,10 @@ export const memoryRoutes = (lc: Lifecoach) => {
   // raw SQL on storage.handle.db) so the route is testable with a mock
   // storage and respects any future filtering rules the repo adds.
   app.get("/documents", (c) => {
-    const limit = Number(c.req.query("limit") ?? "20");
-    const page = Number(c.req.query("page") ?? "1");
-    const offset = (page - 1) * limit;
+    const { limit, offset } = parsePagination((key) => c.req.query(key), {
+      defaultLimit: 20,
+      maxLimit: 100,
+    });
     const total = lc.storage.documents.count();
     const documents = lc.storage.documents.list({ limit, offset }).map((d) => ({
       id: d.id,
@@ -129,8 +118,8 @@ export const memoryRoutes = (lc: Lifecoach) => {
   app.get("/measurements", (c) => {
     const metric = c.req.query("metric");
     if (!metric) return c.json({ error: "metric required" }, 400);
-    const from = c.req.query("from") ? Number(c.req.query("from")) : undefined;
-    const to = c.req.query("to") ? Number(c.req.query("to")) : undefined;
+    const from = parseOptionalFiniteNumber(c.req.query("from"));
+    const to = parseOptionalFiniteNumber(c.req.query("to"));
     return c.json({
       measurements: lc.storage.measurements.query(metric, {
         ...(from !== undefined ? { from } : {}),
@@ -143,9 +132,10 @@ export const memoryRoutes = (lc: Lifecoach) => {
   // returns the full Reflection; project to the same wire shape the prior
   // hand-rolled SQL emitted so existing web consumers don't break.
   app.get("/reflections", (c) => {
-    const limit = Number(c.req.query("limit") ?? "10");
-    const page = Number(c.req.query("page") ?? "1");
-    const offset = (page - 1) * limit;
+    const { limit, offset } = parsePagination((key) => c.req.query(key), {
+      defaultLimit: 10,
+      maxLimit: 100,
+    });
     const total = lc.storage.reflections.count();
     const rows = lc.storage.reflections.list({ limit, offset }).map((r) => ({
       id: r.id,

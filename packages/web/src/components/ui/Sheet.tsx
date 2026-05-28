@@ -57,7 +57,7 @@ export const Sheet = ({
     <Dialog.Portal>
       <Dialog.Overlay
         className={cn(
-          "fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px]",
+          "fixed inset-0 z-50 bg-bg/80 backdrop-blur-[2px]",
           "data-[state=open]:animate-in data-[state=closed]:animate-out",
           "data-[state=open]:fade-in data-[state=closed]:fade-out duration-200",
         )}
@@ -96,7 +96,7 @@ export const SheetHeader = ({ title, onClose, action }: SheetHeaderProps): JSX.E
         type="button"
         onClick={onClose}
         aria-label="Close"
-        className="flex size-9 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+        className="flex size-11 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
       >
         <X className="size-4" strokeWidth={1.75} />
       </button>

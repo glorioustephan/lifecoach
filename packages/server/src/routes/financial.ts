@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Lifecoach } from "@lifecoach/core";
 import { backfillFromCsv, parseMonarchCsv, computeNetWorth, buildMtdRollup } from "@lifecoach/core";
 import { FINANCE_EVIDENCE_REF_TYPES } from "@lifecoach/schemas";
+import { parseLimit, parseOptionalFiniteNumber } from "../lib/query.js";
 
 const accountsWithNetWorth = (lc: Lifecoach) => {
   const accounts = lc.storage.financial.listAccounts({ status: "active" });
@@ -21,11 +22,16 @@ export const financialRoutes = (lc: Lifecoach) => {
 
   app.get("/transactions", (c) => {
     const q = (k: string) => c.req.query(k);
-    const limit = Math.min(Number(q("limit") ?? "50") || 50, 500);
+    const limit = parseLimit((key) => c.req.query(key), {
+      defaultLimit: 50,
+      maxLimit: 500,
+    });
+    const from = parseOptionalFiniteNumber(q("from"));
+    const to = parseOptionalFiniteNumber(q("to"));
     const transactions = lc.storage.financial
       .queryTransactions({
-        ...(q("from") ? { from: Number(q("from")) } : {}),
-        ...(q("to") ? { to: Number(q("to")) } : {}),
+        ...(from !== undefined ? { from } : {}),
+        ...(to !== undefined ? { to } : {}),
         ...(q("category") ? { category: q("category") as string } : {}),
         ...(q("accountId") ? { accountId: q("accountId") as string } : {}),
       })

@@ -151,6 +151,160 @@ export interface MonarchHolding {
   costBasis?: number;
 }
 
+const namedTypeFallback = { name: "unknown", display: "Unknown" };
+const namedTypeSchema = z
+  .object({
+    name: z.string().catch(namedTypeFallback.name),
+    display: z.string().catch(namedTypeFallback.display),
+  })
+  .passthrough()
+  .catch(namedTypeFallback);
+
+const institutionSchema = z
+  .object({
+    name: z.string().catch("Unknown"),
+    primaryColor: z.string().optional(),
+  })
+  .passthrough()
+  .transform((institution) => ({
+    name: institution.name,
+    ...(institution.primaryColor !== undefined
+      ? { primaryColor: institution.primaryColor }
+      : {}),
+  }))
+  .nullable()
+  .catch(null);
+
+const monarchAccountSchema = z
+  .object({
+    id: z.string().catch(""),
+    displayName: z.string().catch("Unknown"),
+    type: namedTypeSchema,
+    subtype: namedTypeSchema,
+    displayBalance: z.coerce.number().finite().optional(),
+    signedBalance: z.coerce.number().finite().optional(),
+    isAsset: z.boolean().catch(true),
+    institution: institutionSchema,
+  })
+  .passthrough()
+  .transform(
+    (acc): MonarchAccount => ({
+      id: acc.id,
+      displayName: acc.displayName,
+      type: acc.type,
+      subtype: acc.subtype,
+      currentBalance: acc.displayBalance ?? acc.signedBalance ?? 0,
+      isAsset: acc.isAsset,
+      institution: acc.institution,
+    }),
+  );
+
+const recurringStreamSchema = z
+  .object({
+    frequency: z.string().nullable().optional(),
+    isActive: z.boolean().catch(false),
+  })
+  .passthrough()
+  .nullable()
+  .optional();
+
+const monarchTransactionSchema = z
+  .object({
+    id: z.string().catch(""),
+    date: z.string().catch(""),
+    amount: z.coerce.number().finite().catch(0),
+    pending: z.boolean().catch(false),
+    isRecurring: z.boolean().catch(false),
+    isTransfer: z.boolean().nullable().optional().catch(null),
+    account: z
+      .object({ id: z.string().catch("") })
+      .passthrough()
+      .nullable()
+      .optional(),
+    category: z
+      .object({
+        name: z.string().catch("Uncategorized"),
+        group: z
+          .object({ type: z.string().catch("") })
+          .passthrough()
+          .nullable()
+          .optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+    merchant: z
+      .object({
+        name: z.string().catch("Unknown"),
+        recurringTransactionStream: recurringStreamSchema,
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+  })
+  .passthrough()
+  .transform(
+    (txn): MonarchTransaction => ({
+      id: txn.id,
+      date: txn.date,
+      amount: txn.amount,
+      merchant: txn.merchant?.name ?? "Unknown",
+      category: txn.category ? { name: txn.category.name } : null,
+      categoryGroupType: txn.category?.group?.type.toLowerCase() ?? null,
+      isPending: txn.pending,
+      accountId: txn.account?.id ?? null,
+      isRecurring: txn.isRecurring,
+      isTransfer: txn.isTransfer ?? null,
+      recurringFrequency: txn.merchant?.recurringTransactionStream?.isActive
+        ? (txn.merchant.recurringTransactionStream.frequency ?? null)
+        : null,
+    }),
+  );
+
+const holdingNodeSchema = z
+  .object({
+    quantity: z.coerce.number().finite().catch(0),
+    basis: z.coerce.number().finite().optional(),
+    totalValue: z.coerce.number().finite().catch(0),
+    security: z
+      .object({
+        ticker: z.string().catch("UNKNOWN"),
+        closingPrice: z.coerce.number().finite().catch(0),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+    holdings: z
+      .array(z.object({ ticker: z.string().catch("UNKNOWN") }).passthrough())
+      .optional(),
+  })
+  .passthrough();
+
+const holdingEdgeSchema = z
+  .union([
+    z.object({ node: z.unknown() }).passthrough().transform((edge) => edge.node),
+    z.unknown(),
+  ])
+  .pipe(holdingNodeSchema)
+  .transform(
+    (holding): MonarchHolding => ({
+      symbol: holding.security?.ticker ?? holding.holdings?.[0]?.ticker ?? "UNKNOWN",
+      quantity: holding.quantity,
+      currentPrice: holding.security?.closingPrice ?? 0,
+      marketValue: holding.totalValue,
+      ...(holding.basis !== undefined ? { costBasis: holding.basis } : {}),
+    }),
+  );
+
+export const mapMonarchAccount = (raw: unknown): MonarchAccount =>
+  monarchAccountSchema.parse(raw);
+
+export const mapMonarchTransaction = (raw: unknown): MonarchTransaction =>
+  monarchTransactionSchema.parse(raw);
+
+export const mapMonarchHolding = (raw: unknown): MonarchHolding =>
+  holdingEdgeSchema.parse(raw);
+
 // ─── Persisted session shape ─────────────────────────────────────────────────
 
 interface PersistedSession {
@@ -264,15 +418,7 @@ export class MonarchClient {
         looseAccountsResponse,
         { filters: {} },
       );
-      return response.accounts.map((acc: any) => ({
-        id: acc.id,
-        displayName: acc.displayName,
-        type: acc.type ?? { name: "unknown", display: "Unknown" },
-        subtype: acc.subtype ?? { name: "unknown", display: "Unknown" },
-        currentBalance: acc.displayBalance ?? acc.signedBalance ?? 0,
-        isAsset: acc.isAsset ?? true,
-        institution: acc.institution ?? null,
-      }));
+      return response.accounts.map(mapMonarchAccount);
     } catch (err) {
       throw new LifecoachError(
         `Failed to list Monarch accounts: ${err instanceof Error ? err.message : String(err)}`,
@@ -290,23 +436,7 @@ export class MonarchClient {
         orderBy: options?.orderBy,
         filters: options?.filters ?? {},
       });
-      return response.allTransactions.results.map((txn: any) => ({
-        id: txn.id,
-        date: txn.date,
-        amount: txn.amount,
-        merchant: txn.merchant?.name ?? "Unknown",
-        category: txn.category ? { name: txn.category.name } : null,
-        categoryGroupType:
-          (txn.category?.group?.type as string | undefined)?.toLowerCase() ?? null,
-        isPending: txn.pending ?? false,
-        accountId: txn.account?.id ?? null,
-        isRecurring: txn.isRecurring ?? false,
-        isTransfer: txn.isTransfer != null ? Boolean(txn.isTransfer) : null,
-        recurringFrequency:
-          txn.merchant?.recurringTransactionStream?.isActive
-            ? (txn.merchant.recurringTransactionStream.frequency ?? null)
-            : null,
-      }));
+      return response.allTransactions.results.map(mapMonarchTransaction);
     } catch (err) {
       throw new LifecoachError(
         `Failed to list Monarch transactions: ${err instanceof Error ? err.message : String(err)}`,
@@ -335,15 +465,7 @@ export class MonarchClient {
       const response = await graphql.request(GET_PORTFOLIO_QUERY, auth, loosePortfolioResponse, {
         portfolioInput: {},
       });
-      return (response.portfolio?.aggregateHoldings?.edges ?? [])
-        .map((edge: any) => edge.node ?? edge)
-        .map((holding: any) => ({
-          symbol: holding.security?.ticker ?? holding.holdings?.[0]?.ticker ?? "UNKNOWN",
-          quantity: holding.quantity ?? 0,
-          currentPrice: holding.security?.closingPrice ?? 0,
-          marketValue: holding.totalValue ?? 0,
-          costBasis: holding.basis,
-        }));
+      return (response.portfolio?.aggregateHoldings?.edges ?? []).map(mapMonarchHolding);
     } catch (err) {
       throw new LifecoachError(
         `Failed to get Monarch holdings: ${err instanceof Error ? err.message : String(err)}`,

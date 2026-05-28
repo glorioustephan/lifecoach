@@ -23,6 +23,7 @@ import {
   type AccountType,
 } from "@lifecoach/schemas";
 import { newId, now } from "../../util/ids.js";
+import { parseStringArray } from "../../util/json.js";
 
 interface AccountRow {
   id: string;
@@ -239,7 +240,7 @@ const rowToFinancialInsight = (row: FinancialInsightRow): FinancialInsight => ({
   category: insightCategory.parse(row.category),
   priority: financialInsightPriority.parse(row.priority),
   recommendation: row.recommendation ?? undefined,
-  sourceDataIds: JSON.parse(row.source_data_ids) as string[],
+  sourceDataIds: parseStringArray(row.source_data_ids),
   dismissedAt: row.dismissed_at ?? undefined,
   createdAt: row.created_at,
   updatedAt: row.updated_at,

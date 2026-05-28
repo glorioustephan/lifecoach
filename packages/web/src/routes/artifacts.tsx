@@ -5,6 +5,7 @@ import { ChevronDown, SlidersHorizontal, Sparkles } from "lucide-react";
 import { ARTIFACT_DESCRIPTORS } from "@lifecoach/schemas";
 import { ViewHeader } from "~/components/ui/ViewHeader";
 import { Button } from "~/components/ui/Button";
+import { formControlClass } from "~/components/ui/formStyles";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -154,7 +155,7 @@ function ArtifactsRoute(): JSX.Element {
               placeholder="Search…"
               value={searchInput}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint outline-none focus:border-accent/40 transition-colors"
+              className={formControlClass("w-full bg-surface px-3 py-1.5 text-sm")}
             />
           </div>
         </div>

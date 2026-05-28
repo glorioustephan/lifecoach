@@ -112,7 +112,7 @@ export const loadConfig = (overrides: Partial<LifecoachConfig> = {}): LifecoachC
   if (rawDataDir) {
     dataDir = path.resolve(root, rawDataDir);
   } else {
-    // Default to environment-specific data directory (data-dev, data-production, etc.)
+    // Default to environment-specific data directory (data-development, data-production, etc.)
     const env = process.env.LIFECOACH_ENV || process.env.NODE_ENV || "development";
     dataDir = path.join(root, `data-${env}`);
   }

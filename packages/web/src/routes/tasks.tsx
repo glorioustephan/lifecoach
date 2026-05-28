@@ -1,31 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Circle, CheckCircle2, Loader2 } from "lucide-react";
+import { Circle, Loader2 } from "lucide-react";
 import { ViewHeader } from "~/components/ui/ViewHeader";
+import { IconButton } from "~/components/ui/IconButton";
 import { PaginationNav } from "~/components/ui/PaginationNav";
 import { cn } from "~/lib/cn";
+import { api, type TaskRow } from "~/lib/api";
 import { toast } from "~/lib/use-toast";
 
 export const Route = createFileRoute("/tasks")({
   component: TasksRoute,
 });
 
-interface TaskRow {
-  id: string;
-  content: string;
-  projectName: string | null;
-  priority: number | null;
-  dueAt: number | null;
-  dueString: string | null;
-  labels: string[];
-  completedAt: number | null;
-}
-
 function priorityColor(p: number | null): string {
   if (p === 4) return "bg-destructive-500";
   if (p === 3) return "bg-warning-500";
-  if (p === 2) return "bg-neutral-500";
+  if (p === 2) return "bg-fg-faint";
   return "";
 }
 
@@ -37,19 +28,11 @@ function TasksRoute(): JSX.Element {
 
   const { data, isLoading } = useQuery<{ tasks: TaskRow[]; total: number }>({
     queryKey: ["tasks", "active", page],
-    queryFn: async () => {
-      const resp = await fetch(`/api/tasks?status=active&page=${page}&limit=${PAGE_SIZE}`);
-      if (!resp.ok) throw new Error(resp.statusText);
-      return resp.json();
-    },
+    queryFn: () => api.tasks({ status: "active", page, limit: PAGE_SIZE }),
   });
 
   const complete = useMutation({
-    mutationFn: async (id: string) => {
-      const resp = await fetch(`/api/tasks/${id}/complete`, { method: "POST" });
-      if (!resp.ok) throw new Error(resp.statusText);
-      return resp.json();
-    },
+    mutationFn: (id: string) => api.completeTask(id),
     onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: ["tasks"] });
       const prev = qc.getQueryData(["tasks", "active", page]);
@@ -102,11 +85,13 @@ function TasksRoute(): JSX.Element {
               <ul className="divide-y divide-border-subtle rounded-md border border-border bg-surface">
                 {data.tasks.map((t) => (
                   <li key={t.id} className="flex items-start gap-3 px-4 py-3">
-                    <button
+                    <IconButton
                       type="button"
                       onClick={() => complete.mutate(t.id)}
                       disabled={complete.isPending && complete.variables === t.id}
-                      className="group mt-0.5 flex size-8 shrink-0 -ml-1.5 items-center justify-center rounded-full hover:bg-success-500/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                      variant="success"
+                      size="sm"
+                      className="group -ml-1.5 mt-0.5 shrink-0 rounded-full"
                       title="Mark task as complete"
                     >
                       {complete.isPending && complete.variables === t.id ? (
@@ -114,7 +99,7 @@ function TasksRoute(): JSX.Element {
                       ) : (
                         <Circle className="size-5 text-fg-faint group-hover:text-success-500/60 transition-colors" strokeWidth={1.75} />
                       )}
-                    </button>
+                    </IconButton>
                     <div className="min-w-0 flex-1">
                       <p className={cn("truncate text-sm", t.completedAt ? "text-fg-faint line-through" : "text-fg")}>
                         {t.content}
