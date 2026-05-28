@@ -21,7 +21,7 @@
     "web:build": "pnpm --filter @lifecoach/web build",
     "start": "pnpm web:build && LIFECOACH_SERVE_BUILT_WEB=1 pnpm --filter @lifecoach/server start",
     "typecheck": "pnpm -r typecheck",
-    "verify": "pnpm typecheck && pnpm --filter @lifecoach/core test && pnpm --filter @lifecoach/server test && pnpm --filter @lifecoach/web build",
+    "verify": "pnpm --filter @lifecoach/web build && pnpm typecheck && pnpm --filter @lifecoach/core test && pnpm --filter @lifecoach/server test",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "docs:dev": "vitepress dev docs",
