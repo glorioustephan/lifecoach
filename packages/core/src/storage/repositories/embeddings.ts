@@ -3,7 +3,15 @@ import type { RecallHit } from "@lifecoach/schemas";
 import { createHash } from "node:crypto";
 import { now } from "../../util/ids.js";
 
-export type RefType = "fact" | "document" | "message" | "reflection" | "task";
+export type RefType =
+  | "fact"
+  | "document"
+  | "message"
+  | "reflection"
+  | "task"
+  // "finance" carries indexed financial NARRATIVES (monthly rollups, "money
+  // moments" — significant decisions/insights). Never raw transaction rows.
+  | "finance";
 
 export interface EmbeddingInsert {
   refType: RefType;

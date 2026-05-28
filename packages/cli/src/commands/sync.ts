@@ -172,7 +172,9 @@ export const registerSync = (program: Command): void => {
 
         const activeClient = client;
         const run = await lc.storage.jobs.run("sync.monarch", async () => {
-          const result = await syncMonarch(activeClient, lc.storage);
+          const result = await syncMonarch(activeClient, lc.storage, {
+            semantic: lc.memory.semantic,
+          });
           recordMonarchSync(lc.storage);
           // Financial insights are now produced by the unified Insighter on its
           // own daily cron (07:30) — we no longer kick them off from sync.

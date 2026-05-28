@@ -9,9 +9,11 @@ export const buildRecallTool = (memory: Memory) =>
     {
       query: z.string().min(1).describe("Natural-language search query"),
       scope: z
-        .enum(["facts", "documents", "messages", "reflections", "tasks", "all"])
+        .enum(["facts", "documents", "messages", "reflections", "tasks", "finance", "all"])
         .optional()
-        .describe("Where to search. Default: all."),
+        .describe(
+          "Where to search. Default: all. 'finance' searches indexed financial narratives (monthly rollups + significant money moments) for conversational recall of financial history.",
+        ),
       limit: z.number().int().min(1).max(50).optional().describe("Max hits to return. Default: 8."),
     },
     async ({ query, scope, limit }) => {

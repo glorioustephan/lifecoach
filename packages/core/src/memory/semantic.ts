@@ -168,10 +168,30 @@ export class SemanticMemory {
         return "reflection";
       case "tasks":
         return "task";
+      case "finance":
+        return "finance";
       case "all":
       default:
         return undefined;
     }
+  }
+
+  /**
+   * Index a financial NARRATIVE (monthly rollup, money moment) — never a raw
+   * row. `refId` is the caller's stable id (e.g. "month:2026-05" or
+   * "insight:<id>") so re-indexing replaces the previous embedding cleanly.
+   */
+  async indexFinanceNarrative(input: {
+    refId: string;
+    text: string;
+    sourceUpdatedAt?: number;
+  }): Promise<void> {
+    await this.indexRef({
+      refType: "finance",
+      refId: input.refId,
+      text: input.text,
+      ...(input.sourceUpdatedAt !== undefined ? { sourceUpdatedAt: input.sourceUpdatedAt } : {}),
+    });
   }
 
   private keywordFallback(

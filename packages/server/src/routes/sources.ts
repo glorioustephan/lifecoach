@@ -148,7 +148,7 @@ export const sourceRoutes = (lc: Lifecoach) => {
 
     try {
       const job = await lc.storage.jobs.run("sync.monarch", async () => {
-        const result = await syncMonarch(client, lc.storage);
+        const result = await syncMonarch(client, lc.storage, { semantic: lc.memory.semantic });
         recordMonarchSync(lc.storage);
         // Financial insights are now produced by the unified Insighter on its
         // own daily cron (07:30) — we no longer kick them off from sync.

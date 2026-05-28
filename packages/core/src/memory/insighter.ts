@@ -8,9 +8,13 @@ import {
 } from "@lifecoach/schemas";
 import type { Storage } from "../storage/index.js";
 import type { IdentityMemory } from "./identity.js";
+import type { SemanticMemory } from "./semantic.js";
 import { refreshAttentionSignals } from "./attention.js";
+import { indexMoneyMomentFromInsight } from "./finance-narratives.js";
 import { withRetry } from "../util/retry.js";
 import { LifecoachError } from "../util/errors.js";
+
+const FINANCE_EVIDENCE_REF_TYPES = new Set(["account", "transaction", "budget", "holding"]);
 
 const insightPayloadSchema = z.object({
   insights: z
@@ -572,17 +576,25 @@ export interface InsighterOptions {
   apiKey: string;
   model?: string;
   maxRetries?: number;
+  /**
+   * Optional: when provided, finance-evidenced insights are also indexed as
+   * "money moments" via Voyage so they're recallable later ("that time we
+   * discussed the cell plan"). Non-critical — failures don't fail the pass.
+   */
+  semantic?: SemanticMemory;
 }
 
 export class Insighter {
   private readonly client: Anthropic;
   private readonly model: string;
   private readonly maxRetries: number;
+  private readonly semantic: SemanticMemory | undefined;
 
   constructor(opts: InsighterOptions) {
     this.client = new Anthropic({ apiKey: opts.apiKey });
     this.model = opts.model ?? "claude-sonnet-4-6";
     this.maxRetries = opts.maxRetries ?? 4;
+    this.semantic = opts.semantic;
   }
 
   async generate(storage: Storage, identity: IdentityMemory): Promise<Insight[]> {
@@ -619,7 +631,21 @@ export class Insighter {
         "INSIGHT_INVALID_PAYLOAD",
       );
     }
-    return persist(storage, parsed.data);
+    const created = persist(storage, parsed.data);
+    // Money-moment indexing — embed each finance-evidenced insight as prose
+    // so the coach can semantically recall financial decisions later. Fire and
+    // forget; embedding failures must not fail the insight pass.
+    if (this.semantic) {
+      const semantic = this.semantic;
+      for (const ins of created) {
+        if (ins.evidenceRefs.some((r) => FINANCE_EVIDENCE_REF_TYPES.has(r.refType))) {
+          void indexMoneyMomentFromInsight(semantic, ins).catch(() => {
+            /* non-critical */
+          });
+        }
+      }
+    }
+    return created;
   }
 }
 

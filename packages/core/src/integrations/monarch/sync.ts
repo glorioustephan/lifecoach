@@ -1,8 +1,10 @@
 import type { MonarchClient } from "./client.js";
 import type { Storage } from "../../storage/index.js";
+import type { SemanticMemory } from "../../memory/semantic.js";
 import { now } from "../../util/ids.js";
 import { LifecoachError } from "../../util/errors.js";
 import { snapshotFinancialMetrics } from "./snapshot-metrics.js";
+import { indexFinanceNarratives } from "../../memory/finance-narratives.js";
 
 export interface MonarchSyncResult {
   accountsFetched: number;
@@ -25,7 +27,19 @@ const TRANSACTIONS_PAGE_SIZE = 200;
  * syncMonarch: Three-phase idempotent sync from Monarch to Life Coach storage.
  * All operations are safe to retry; upserts by external ID prevent duplicates.
  */
-export async function syncMonarch(client: MonarchClient, storage: Storage): Promise<MonarchSyncResult> {
+export interface SyncMonarchOptions {
+  /**
+   * When provided, the sync re-indexes the last 3 months of financial
+   * NARRATIVES (monthly rollups) via Voyage at the end. Failures are non-fatal.
+   */
+  semantic?: SemanticMemory;
+}
+
+export async function syncMonarch(
+  client: MonarchClient,
+  storage: Storage,
+  opts: SyncMonarchOptions = {},
+): Promise<MonarchSyncResult> {
   const result: MonarchSyncResult = {
     accountsFetched: 0,
     accountsUpserted: 0,
@@ -186,6 +200,21 @@ export async function syncMonarch(client: MonarchClient, storage: Storage): Prom
         "[Monarch Sync] Phase 4: metric snapshot failed (non-fatal):",
         err instanceof Error ? err.message : String(err),
       );
+    }
+
+    // Phase 5: Re-index the last 3 months of financial NARRATIVES so the
+    // coach can semantically recall financial history (Voyage). Idempotent —
+    // each month-key replaces its previous embedding. Non-fatal.
+    if (opts.semantic) {
+      try {
+        const out = await indexFinanceNarratives(opts.semantic, storage);
+        console.log("[Monarch Sync] Phase 5: Indexed finance narratives", out.refIds);
+      } catch (err) {
+        console.warn(
+          "[Monarch Sync] Phase 5: narrative indexing failed (non-fatal):",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
     }
 
     result.success = true;

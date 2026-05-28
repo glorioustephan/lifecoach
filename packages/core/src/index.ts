@@ -59,7 +59,13 @@ export const createLifecoach = (overrides?: Partial<LifecoachConfig>): Lifecoach
     ? new Reflector({ apiKey: config.anthropicApiKey, model: config.extractionModel })
     : null;
   const insighter = config.anthropicApiKey
-    ? new Insighter({ apiKey: config.anthropicApiKey, model: config.extractionModel })
+    ? new Insighter({
+        apiKey: config.anthropicApiKey,
+        model: config.extractionModel,
+        // Lets finance-evidenced insights also embed as Voyage "money moments"
+        // for conversational recall ("that time we discussed the cell plan").
+        semantic: memory.semantic,
+      })
     : null;
   const artifactExtractor = config.anthropicApiKey
     ? new ArtifactExtractor({ apiKey: config.anthropicApiKey, model: config.extractionModel })
