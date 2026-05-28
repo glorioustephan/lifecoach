@@ -43,6 +43,7 @@ interface TransactionRow {
   notes: string | null;
   is_recurring: number;
   recurring_frequency: string | null;
+  category_group_type: string | null;
   synced_at: number;
   created_at: number;
   updated_at: number;
@@ -161,6 +162,7 @@ const rowToTransaction = (row: TransactionRow): Transaction => ({
   notes: row.notes ?? undefined,
   isRecurring: row.is_recurring === 1,
   recurringFrequency: row.recurring_frequency ?? undefined,
+  categoryGroupType: row.category_group_type ?? undefined,
   syncedAt: row.synced_at,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -342,8 +344,8 @@ export class FinancialRepository {
     const ts = now();
     this.db
       .prepare(
-        `INSERT INTO transactions(id, external_id, account_id, date, amount, currency, merchant, category, description, is_pending, notes, is_recurring, recurring_frequency, synced_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO transactions(id, external_id, account_id, date, amount, currency, merchant, category, description, is_pending, notes, is_recurring, recurring_frequency, category_group_type, synced_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -359,6 +361,7 @@ export class FinancialRepository {
         transaction.notes ?? null,
         transaction.isRecurring ? 1 : 0,
         transaction.recurringFrequency ?? null,
+        transaction.categoryGroupType ?? null,
         transaction.syncedAt,
         ts,
         ts,
@@ -377,7 +380,7 @@ export class FinancialRepository {
       // sentinel account heal once the real per-transaction account is known.
       this.db
         .prepare(
-          `UPDATE transactions SET account_id = ?, amount = ?, merchant = ?, category = ?, description = ?, is_pending = ?, is_recurring = ?, recurring_frequency = ?, synced_at = ?, updated_at = ? WHERE id = ?`,
+          `UPDATE transactions SET account_id = ?, amount = ?, merchant = ?, category = ?, description = ?, is_pending = ?, is_recurring = ?, recurring_frequency = ?, category_group_type = ?, synced_at = ?, updated_at = ? WHERE id = ?`,
         )
         .run(
           transaction.accountId,
@@ -388,6 +391,7 @@ export class FinancialRepository {
           transaction.isPending ? 1 : 0,
           transaction.isRecurring ? 1 : 0,
           transaction.recurringFrequency ?? null,
+          transaction.categoryGroupType ?? null,
           transaction.syncedAt,
           ts,
           existing.id,
@@ -400,7 +404,7 @@ export class FinancialRepository {
   getTransaction(id: string): Transaction | undefined {
     const row = this.db
       .prepare(
-        `SELECT id, external_id, account_id, date, amount, currency, merchant, category, description, is_pending, notes, is_recurring, recurring_frequency, synced_at, created_at, updated_at
+        `SELECT id, external_id, account_id, date, amount, currency, merchant, category, description, is_pending, notes, is_recurring, recurring_frequency, category_group_type, synced_at, created_at, updated_at
          FROM transactions WHERE id = ?`,
       )
       .get(id) as TransactionRow | undefined;
@@ -420,7 +424,7 @@ export class FinancialRepository {
     // EFFECTIVE category may differ (override > rule > raw). We fetch without
     // a category filter and apply both the corrections and any category filter
     // in JS, so every consumer sees one consistent corrected view.
-    let sql = `SELECT id, external_id, account_id, date, amount, currency, merchant, category, description, is_pending, notes, is_recurring, recurring_frequency, synced_at, created_at, updated_at FROM transactions WHERE 1=1`;
+    let sql = `SELECT id, external_id, account_id, date, amount, currency, merchant, category, description, is_pending, notes, is_recurring, recurring_frequency, category_group_type, synced_at, created_at, updated_at FROM transactions WHERE 1=1`;
     const params: unknown[] = [];
 
     if (filters?.accountId) {

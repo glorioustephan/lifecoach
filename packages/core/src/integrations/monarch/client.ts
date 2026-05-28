@@ -45,7 +45,12 @@ const GET_TRANSACTIONS_QUERY = `
         date
         isRecurring
         account { id __typename }
-        category { id name __typename }
+        category {
+          id
+          name
+          group { id name type __typename }
+          __typename
+        }
         merchant {
           id
           name
@@ -107,6 +112,13 @@ export interface MonarchTransaction {
   amount: number;
   merchant: string;
   category?: { name: string } | null;
+  /**
+   * Monarch's category-group type, when available. Known values include
+   * `income`, `expense`, and `transfer`. Used to exclude transfers from the
+   * monthly burn / savings-rate snapshot so cash moved between accounts isn't
+   * counted as spending.
+   */
+  categoryGroupType?: string | null;
   isPending: boolean;
   /** Real Monarch account id (null only if the response omits it). */
   accountId: string | null;
@@ -275,6 +287,8 @@ export class MonarchClient {
         amount: txn.amount,
         merchant: txn.merchant?.name ?? "Unknown",
         category: txn.category ? { name: txn.category.name } : null,
+        categoryGroupType:
+          (txn.category?.group?.type as string | undefined)?.toLowerCase() ?? null,
         isPending: txn.pending ?? false,
         accountId: txn.account?.id ?? null,
         isRecurring: txn.isRecurring ?? false,

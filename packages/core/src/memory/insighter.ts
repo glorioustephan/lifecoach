@@ -398,6 +398,7 @@ const gatherFinancial = (
   const rollup = new Map<string, { total: number; count: number }>();
   for (const t of txns30) {
     if (t.amount >= 0) continue; // expenses only (negative)
+    if (t.categoryGroupType?.toLowerCase() === "transfer") continue; // exclude transfers
     const cat = t.category ?? "uncategorized";
     const entry = rollup.get(cat) ?? { total: 0, count: 0 };
     entry.total += Math.abs(t.amount);
@@ -482,8 +483,34 @@ const MAX_CHARS = 80_000;
 const formatTimestamp = (ms: number): string =>
   new Date(ms).toISOString().slice(0, 16).replace("T", " ");
 
-const renderContext = (data: ContextData): string => {
-  const parts: string[] = [];
+/**
+ * Compact human-readable age vs. `nowMs`. Used to annotate dated rows so the
+ * model never has to compute "how long ago" — it copies a phrase the renderer
+ * already produced. Without this, the model invents plausible-looking dates
+ * (e.g. a future "May 28" when today is May 27) and reinforces them next pass
+ * via the prior-insights feedback loop.
+ */
+const relativeAge = (ms: number, nowMs: number): string => {
+  const diff = nowMs - ms;
+  if (diff < 0) {
+    const futureDays = Math.round(-diff / ONE_DAY);
+    return futureDays <= 1 ? "in the future" : `${futureDays}d in the future`;
+  }
+  const days = Math.floor(diff / ONE_DAY);
+  if (days === 0) return "today";
+  if (days === 1) return "1d ago";
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return months === 1 ? "1mo ago" : `${months}mo ago`;
+};
+
+const renderContext = (data: ContextData, nowMs: number): string => {
+  const todayIso = new Date(nowMs).toISOString().slice(0, 10);
+  const parts: string[] = [
+    `## Temporal anchor`,
+    `Today: ${todayIso} (epochMs=${nowMs}). Do NOT invent dates. If a fact's exact date is not in the data below, say "recent" or omit the date — never synthesize one. When you need to describe how long ago something happened, copy the parenthetical age shown next to each row.`,
+    ``,
+  ];
 
   if (data.attentionSignals.length > 0) {
     parts.push("## SQLite attention signals (ranked candidates)");
@@ -501,7 +528,7 @@ const renderContext = (data: ContextData): string => {
   if (data.latestReflections.length > 0) {
     parts.push("## Recent reflections (newest first)");
     for (const r of data.latestReflections) {
-      parts.push(`### ${r.kind} [id=${r.id}] (ending ${formatTimestamp(r.periodEnd)})`);
+      parts.push(`### ${r.kind} [id=${r.id}] (ending ${formatTimestamp(r.periodEnd)}, ${relativeAge(r.periodEnd, nowMs)})`);
       if (r.openThreads.length > 0) {
         parts.push(`open threads: ${r.openThreads.join("; ")}`);
       }
@@ -524,7 +551,7 @@ const renderContext = (data: ContextData): string => {
     for (const t of data.activeTasks) {
       const meta: string[] = [];
       if (t.priority) meta.push(`p${5 - t.priority}`);
-      if (t.dueAt) meta.push(`due ${new Date(t.dueAt).toISOString().slice(0, 10)}`);
+      if (t.dueAt) meta.push(`due ${new Date(t.dueAt).toISOString().slice(0, 10)} (${relativeAge(t.dueAt, nowMs)})`);
       if (t.projectName) meta.push(t.projectName);
       if (t.labels.length > 0) meta.push("#" + t.labels.join(" #"));
       parts.push(`- [id=${t.id}] ${t.content}${meta.length ? ` (${meta.join(" · ")})` : ""}`);
@@ -562,7 +589,7 @@ const renderContext = (data: ContextData): string => {
       parts.push("\nRecent goal evidence (last 14d, newest first):");
       for (const e of data.goalState.recentEvidence) {
         parts.push(
-          `- [goal=${e.goalId} evidence=${e.id}] (${e.origin}) ${new Date(e.recordedAt).toISOString().slice(0, 10)}: ${e.body}`,
+          `- [goal=${e.goalId} evidence=${e.id}] (${e.origin}) ${new Date(e.recordedAt).toISOString().slice(0, 10)} (${relativeAge(e.recordedAt, nowMs)}): ${e.body}`,
         );
       }
     }
@@ -579,7 +606,7 @@ const renderContext = (data: ContextData): string => {
       const series = rows
         .map(
           (r) =>
-            `${new Date(r.recordedAt).toISOString().slice(0, 10)}[id=${r.id}]=${r.value}${r.unit ?? ""}`,
+            `${new Date(r.recordedAt).toISOString().slice(0, 10)}(${relativeAge(r.recordedAt, nowMs)})[id=${r.id}]=${r.value}${r.unit ?? ""}`,
         )
         .join(", ");
       parts.push(`- ${metric}: ${series}`);
@@ -651,14 +678,14 @@ const renderContext = (data: ContextData): string => {
     parts.push("\n## Recent messages (last 7d, newest first)");
     for (const m of data.recentMessages) {
       const content = m.content.length > 400 ? m.content.slice(0, 400) + "…" : m.content;
-      parts.push(`[${formatTimestamp(m.createdAt)}] ${m.role} [id=${m.id}]: ${content}`);
+      parts.push(`[${formatTimestamp(m.createdAt)} · ${relativeAge(m.createdAt, nowMs)}] ${m.role} [id=${m.id}]: ${content}`);
     }
   }
 
   if (data.recentInsights.length > 0) {
-    parts.push("\n## Prior insights (so you don't repeat yourself)");
+    parts.push("\n## Prior insights (so you don't repeat yourself — do NOT restate these under a new headline)");
     for (const i of data.recentInsights) {
-      parts.push(`- [${i.state}] [id=${i.id}] ${i.topic}: ${i.body.slice(0, 120)}…`);
+      parts.push(`- [${i.state}] [${relativeAge(i.createdAt, nowMs)}] [id=${i.id}] ${i.topic}: ${i.body.slice(0, 120)}…`);
     }
   }
 
@@ -689,6 +716,8 @@ Call \`record_insights\` with **0–3 high-quality insights**. Quality bar:
 3. **Evidence-backed.** Prefer the SQLite attention signals, and include concrete \`evidenceRefs\` with refType/refId/quote so the user can see why this surfaced.
 4. **Non-redundant.** Check the "Prior insights" section. No nagging: don't repeat an old insight unless the evidence changed materially.
 5. **Honest but not alarmist.** Health-related observations should cite the measurements and avoid medical authority. A 12% HRV dip is worth flagging; a 2% one isn't.
+6. **Same-subject suppression.** If a "Prior insight" already covers the same subject and the underlying data has not materially changed, return zero insights for that subject — do not rewrite it under a new headline. The system also enforces this server-side.
+7. **No fabricated dates.** Never write a specific date that does not appear in the data above. If you need to describe staleness, copy the parenthetical "(Nd ago)" annotation the renderer already produced.
 
 **Goal-specific framings** (use sparingly — these aren't required every pass, but they're the right *shape* when the data points to them):
 
@@ -731,7 +760,7 @@ export class Insighter {
 
   async generate(storage: Storage, identity: IdentityMemory): Promise<Insight[]> {
     const data = gather(storage);
-    const rendered = renderContext(data);
+    const rendered = renderContext(data, Date.now());
     const prompt = buildPrompt(identity.render(), rendered);
 
     const response = await withRetry(
@@ -790,13 +819,25 @@ export class Insighter {
 const RECURRING_TOPIC_PREFIX = "Recurring:";
 const RECURRING_DISMISSAL_SUPPRESSION_MS = 270 * ONE_DAY; // ~9 months
 
+/**
+ * Active-subject cooldown: if an active insight (not acted/dismissed/snoozed)
+ * for the same normalized subject was created within this window, suppress
+ * the new one. Without this, the model re-surfaces the same subject under a
+ * fresh headline every pass and the inbox fills with near-duplicates.
+ */
+const SUBJECT_ACTIVE_COOLDOWN_MS = 72 * 60 * 60 * 1000;
+
 const persist = (storage: Storage, payload: InsightPayload): Insight[] => {
   const created: Insight[] = [];
   const nowMs = Date.now();
   const sinceMs = nowMs - 30 * ONE_DAY;
+  const subjectCooldownSince = nowMs - SUBJECT_ACTIVE_COOLDOWN_MS;
   for (const item of payload.insights) {
     const evidenceRefs = item.evidenceRefs ?? [];
     if (isDuplicateInsight(storage, item.topic, evidenceRefs, sinceMs)) continue;
+    if (storage.insights.activeBySubjectSince(item.topic, subjectCooldownSince).length > 0) {
+      continue;
+    }
     if (item.topic.startsWith(RECURRING_TOPIC_PREFIX)) {
       const cutoff = nowMs - RECURRING_DISMISSAL_SUPPRESSION_MS;
       if (storage.insights.dismissedByTopicSince(item.topic, cutoff)) continue;

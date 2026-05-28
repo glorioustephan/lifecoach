@@ -22,6 +22,29 @@ const LIABILITY_TYPES = new Set<string>(["debt", "credit_card"]);
 const LIQUID_ASSET_TYPES = new Set<string>(["checking", "savings"]);
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
+/**
+ * Category names (case-insensitive substring match) treated as transfers when
+ * Monarch did not return a `categoryGroup.type`. Older synced rows have
+ * `categoryGroupType = null`; this fallback keeps the burn figure honest until
+ * the next sync repopulates the column.
+ */
+const TRANSFER_CATEGORY_NAME_PATTERNS = [
+  "transfer",
+  "credit card payment",
+  "loan payment",
+  "balance adjustment",
+];
+
+const isTransferTxn = (t: {
+  categoryGroupType?: string;
+  category?: string;
+}): boolean => {
+  if (t.categoryGroupType) return t.categoryGroupType.toLowerCase() === "transfer";
+  if (!t.category) return false;
+  const cat = t.category.toLowerCase();
+  return TRANSFER_CATEGORY_NAME_PATTERNS.some((p) => cat.includes(p));
+};
+
 const startOfTodayMs = (): number => {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -63,6 +86,10 @@ export const snapshotFinancialMetrics = (storage: Storage): SnapshotResult => {
   let income = 0;
   let expenses = 0;
   for (const t of recentTxns) {
+    // Transfers between owned accounts (Ally ↔ joint, credit-card payments,
+    // loan principal) aren't spending — counting them was inflating monthly
+    // burn by the size of cash movements between accounts.
+    if (isTransferTxn(t)) continue;
     if (t.amount > 0) income += t.amount;
     else if (t.amount < 0) expenses += Math.abs(t.amount);
   }

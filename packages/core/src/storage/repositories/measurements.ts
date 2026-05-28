@@ -118,6 +118,21 @@ export class MeasurementRepository {
     };
   }
 
+  /**
+   * Delete every measurement of `metric` recorded at or after `fromMs`.
+   * Returns the number of rows removed. Used by the financial resync flow to
+   * clear today's stale snapshot before recomputing it after a code change
+   * (e.g. transfer filtering) — without this, the once-per-day idempotency
+   * guard in `snapshotFinancialMetrics` would skip the recompute and leave
+   * the inflated number in place until tomorrow.
+   */
+  deleteSince(metric: string, fromMs: number): number {
+    const info = this.db
+      .prepare(`DELETE FROM measurements WHERE metric = ? AND recorded_at >= ?`)
+      .run(metric, fromMs);
+    return info.changes;
+  }
+
   count(): number {
     const row = this.db.prepare("SELECT COUNT(*) as c FROM measurements").get() as {
       c: number;

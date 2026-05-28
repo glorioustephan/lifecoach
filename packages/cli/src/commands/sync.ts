@@ -197,4 +197,78 @@ export const registerSync = (program: Command): void => {
         lc.close();
       }
     });
+
+  // Force-resync Monarch and recompute today's derived metrics. `sync financial`
+  // is idempotent per day — once monthly_burn etc. are recorded, it skips them.
+  // After a code change that affects the calculation (e.g. transfer filtering)
+  // we need a way to drop today's stale snapshot and recompute now, rather
+  // than waiting for tomorrow's cron.
+  sync
+    .command("financial-resync")
+    .description(
+      "Drop today's financial metric snapshots and re-run Monarch sync so derived metrics (monthly_burn, savings_rate, …) recompute immediately.",
+    )
+    .action(async () => {
+      const lc = createLifecoach();
+      const spinner = ora({
+        text: "resyncing Monarch (clearing today's snapshot first)…",
+        color: "cyan",
+      }).start();
+      try {
+        let client = await buildMonarchClientFromProfile({
+          storage: lc.storage,
+          config: lc.config,
+        });
+        if (!client) {
+          const monarchSessionFile = lc.config.monarchSessionFile || ".mm/mm_session.json";
+          const envClient = new MonarchClient(monarchSessionFile);
+          const sessionLoaded = await envClient.loadSession();
+          if (!sessionLoaded) {
+            const { monarchEmail, monarchPassword, monarchMfaSecret } = lc.config;
+            if (!monarchEmail || !monarchPassword) {
+              spinner.fail("Monarch: no saved credentials, no active session, no env credentials.");
+              lc.close();
+              process.exitCode = 1;
+              return;
+            }
+            spinner.text = "Authenticating with Monarch Money…";
+            await envClient.authenticate(monarchEmail, monarchPassword, monarchMfaSecret);
+          }
+          client = envClient;
+        }
+
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const fromMs = startOfDay.getTime();
+        const derivedMetrics = [
+          "net_worth",
+          "total_debt",
+          "liquid_savings",
+          "portfolio_value",
+          "monthly_burn",
+          "savings_rate",
+        ];
+        let cleared = 0;
+        for (const m of derivedMetrics) {
+          cleared += lc.storage.measurements.deleteSince(m, fromMs);
+        }
+        spinner.text = `cleared ${cleared} stale snapshot rows — re-running sync…`;
+
+        const activeClient = client;
+        const result = await syncMonarch(activeClient, lc.storage, {
+          semantic: lc.memory.semantic,
+        });
+        recordMonarchSync(lc.storage);
+        spinner.succeed(
+          `Monarch resync — ${result.accountsUpserted} accounts, ${result.transactionsUpserted} transactions, ${result.holdingsSnapshotted} holdings (cleared ${cleared} stale metric rows)`,
+        );
+      } catch (err) {
+        recordMonarchError(lc.storage, err instanceof Error ? err.message : String(err));
+        spinner.fail("resync failed");
+        console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+        process.exitCode = 1;
+      } finally {
+        lc.close();
+      }
+    });
 };

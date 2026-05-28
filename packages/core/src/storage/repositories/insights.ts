@@ -54,6 +54,35 @@ export interface InsightListFilter {
   limit?: number;
 }
 
+/**
+ * Reduce a free-form insight topic to a stable "subject key" used by the
+ * fuzzy/subject-level dedupe. The Insighter LLM phrases the same subject
+ * differently each pass ("Bloodwork results window is now open" vs
+ * "Bloodwork results: 12+ days stale"); exact-string matching never fires
+ * and the inbox accumulates near-duplicates. The key keeps the first three
+ * meaningful tokens so distinct subjects ("Sleep onset", "Sleep apnea") stay
+ * distinct while paraphrases collapse together.
+ */
+const SUBJECT_STOP_WORDS = new Set([
+  "a","an","the","is","are","was","were","be","been","being",
+  "of","in","on","at","to","for","with","and","or","but","by",
+  "as","into","over","under","from","up","down","out","off",
+  "your","you","yours","yourself",
+  "still","just","now","again","very","really",
+  "results","result","window","review","reviewed","unreviewed","overdue","stale",
+  "days","day","weeks","week","months","month","prior","multiple","flags","open",
+]);
+
+export const normalizeTopic = (topic: string): string => {
+  const tokens = topic
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length > 0 && !SUBJECT_STOP_WORDS.has(t));
+  if (tokens.length === 0) return topic.trim().toLowerCase();
+  return tokens.slice(0, 3).join("-");
+};
+
 export class InsightRepository {
   constructor(private readonly db: Database) {}
 
@@ -163,15 +192,41 @@ export class InsightRepository {
   }
 
   recentByTopic(topic: string, sinceMs: number): Insight[] {
+    const subjectKey = normalizeTopic(topic);
     const rows = this.db
       .prepare(
         `SELECT ${FULL} FROM insights
-         WHERE LOWER(topic) = LOWER(?)
-           AND created_at >= ?
+         WHERE created_at >= ?
          ORDER BY created_at DESC`,
       )
-      .all(topic.trim(), sinceMs) as InsightRow[];
-    return rows.map(rowToInsight);
+      .all(sinceMs) as InsightRow[];
+    return rows
+      .map(rowToInsight)
+      .filter((i) => normalizeTopic(i.topic) === subjectKey);
+  }
+
+  /**
+   * Returns currently-active insights (not acted, not dismissed, not snoozed)
+   * sharing the normalized subject key, created within `sinceMs`. Used by the
+   * Insighter's 72h subject-level cooldown so the same subject isn't surfaced
+   * twice under different headlines.
+   */
+  activeBySubjectSince(topic: string, sinceMs: number): Insight[] {
+    const subjectKey = normalizeTopic(topic);
+    const nowMs = now();
+    const rows = this.db
+      .prepare(
+        `SELECT ${FULL} FROM insights
+         WHERE created_at >= ?
+           AND acted_on_at IS NULL
+           AND dismissed_at IS NULL
+           AND (snoozed_until IS NULL OR snoozed_until <= ?)
+         ORDER BY created_at DESC`,
+      )
+      .all(sinceMs, nowMs) as InsightRow[];
+    return rows
+      .map(rowToInsight)
+      .filter((i) => normalizeTopic(i.topic) === subjectKey);
   }
 
   /**

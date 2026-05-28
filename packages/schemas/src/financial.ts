@@ -51,6 +51,13 @@ export const transactionSchema = z.object({
   isRecurring: z.boolean().default(false),
   /** Frequency from Monarch merchant.recurringTransactionStream (e.g. "MONTHLY"). */
   recurringFrequency: z.string().optional(),
+  /**
+   * Monarch category-group type for this transaction's category. Known values:
+   * `income`, `expense`, `transfer`. Used to exclude transfers (between owned
+   * accounts, credit-card payments, loan principal) from monthly_burn /
+   * savings_rate so cash movements aren't counted as spending.
+   */
+  categoryGroupType: z.string().optional(),
   syncedAt: z.number().int(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),

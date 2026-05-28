@@ -157,6 +157,7 @@ export async function syncMonarch(
           isPending: monarchTxn.isPending,
           isRecurring: monarchTxn.isRecurring,
           recurringFrequency: monarchTxn.recurringFrequency ?? undefined,
+          categoryGroupType: monarchTxn.categoryGroupType ?? undefined,
           syncedAt: syncTs,
         });
         result.transactionsUpserted += 1;
