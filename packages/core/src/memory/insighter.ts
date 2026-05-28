@@ -1,8 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { z } from "zod";
 import {
-  evidenceRefSchema,
-  insightPriority,
   FINANCE_EVIDENCE_REF_TYPES,
   type EvidenceRef,
   type Insight,
@@ -19,164 +16,20 @@ import { parseStringArray } from "../util/json.js";
 import { withRetry } from "../util/retry.js";
 import { LifecoachError } from "../util/errors.js";
 import { isGoalStalled } from "../util/goal-cadence.js";
+import { renderContext, type InsightContext } from "./insight-render.js";
+import {
+  insightPayloadSchema,
+  buildInsighterPrompt,
+  INSIGHT_TOOL_INPUT_SCHEMA,
+  type InsightPayload,
+} from "./insight-prompt.js";
 
-const insightPayloadSchema = z.object({
-  insights: z
-    .array(
-      z.object({
-        topic: z.string().min(1),
-        body: z.string().min(1),
-        rationale: z.string().optional(),
-        priority: insightPriority.default(1),
-        sourceFactIds: z.array(z.string()).default([]),
-        evidenceRefs: z.array(evidenceRefSchema).default([]),
-      }),
-    )
-    .max(5),
-});
-type InsightPayload = z.infer<typeof insightPayloadSchema>;
-
-const TOOL_INPUT_SCHEMA = {
-  type: "object" as const,
-  properties: {
-    insights: {
-      type: "array",
-      maxItems: 5,
-      description:
-        "0–3 high-quality insights. Be SELECTIVE. Skip if nothing notable jumps out. The user is one person — quality over quantity.",
-      items: {
-        type: "object",
-        properties: {
-          topic: {
-            type: "string",
-            description: "Short title (3–7 words). E.g. 'Sleep onset drifting later'.",
-          },
-          body: {
-            type: "string",
-            description:
-              "1–2 paragraphs. Address the user as 'you'. Be specific (cite numbers, dates, named patterns from the data). Avoid generic advice.",
-          },
-          rationale: {
-            type: "string",
-            description:
-              "1 sentence. Why this matters NOW vs. always. Reference the trigger (a recent shift, a missed routine, a measurement change).",
-          },
-          priority: {
-            type: "integer",
-            enum: [1, 2, 3],
-            description: "1 = nice to notice, 2 = worth noticing, 3 = needs attention soon",
-          },
-          sourceFactIds: {
-            type: "array",
-            items: { type: "string" },
-            description:
-              "Backwards-compatible fact IDs that anchor this insight. Prefer evidenceRefs when possible.",
-          },
-          evidenceRefs: {
-            type: "array",
-            description:
-              "Specific evidence behind the insight. Use visible ref IDs from attention signals and data.",
-            items: {
-              type: "object",
-              properties: {
-                refType: {
-                  type: "string",
-                  enum: [
-                    "fact",
-                    "goal",
-                    "task",
-                    "measurement",
-                    "document",
-                    "message",
-                    "reflection",
-                    "insight",
-                    "account",
-                    "transaction",
-                    "budget",
-                    "holding",
-                  ],
-                },
-                refId: { type: "string" },
-                quote: {
-                  type: "string",
-                  description: "Short quote, measurement value, or task title that supports the insight.",
-                },
-                score: { type: "number" },
-              },
-              required: ["refType", "refId"],
-            },
-          },
-        },
-        required: ["topic", "body", "priority"],
-      },
-    },
-  },
-  required: ["insights"],
-};
+// ContextData lives in insight-render.ts as InsightContext (extracted
+// Wave 5.3). Aliased here for backward-compat across this file's internals
+// so the gather function reads naturally.
+type ContextData = InsightContext;
 
 // ─── Context gathering ──────────────────────────────────────────────────────
-
-interface ContextData {
-  facts: Array<{ id: string; category: string; subject: string; body: string }>;
-  attentionSignals: Array<{
-    id: string;
-    kind: string;
-    title: string;
-    body: string;
-    priority: number;
-    evidenceRefs: EvidenceRef[];
-  }>;
-  recentMessages: Array<{ id: string; role: string; content: string; createdAt: number }>;
-  activeTasks: Array<{ id: string; content: string; priority: number | null; dueAt: number | null; projectName: string | null; labels: string[] }>;
-  recentlyCompletedTasks: Array<{ id: string; content: string; completedAt: number | null }>;
-  recentMeasurements: Array<{ id: string; metric: string; value: number; unit: string | null; recordedAt: number }>;
-  latestReflections: Array<{ id: string; kind: string; body: string; periodEnd: number; openThreads: string[]; concerns: string[] }>;
-  recentInsights: Array<{ id: string; topic: string; body: string; createdAt: number; state: string }>;
-  /**
-   * Bounded financial context — only summaries/rollups, never raw transaction
-   * rows. The Insighter is the single home for financial insights now; the
-   * previous standalone FinancialAnalyzer has been retired so cross-domain
-   * insights (e.g. "spending spiked the week sleep collapsed") become possible.
-   */
-  financial: {
-    accounts: Array<{ id: string; displayName: string; type: string; balance: number }>;
-    netWorthSummary: { totalAssets: number; totalLiabilities: number; netWorth: number };
-    budgets: Array<{ id: string; category: string; month: string; limit: number; spent: number }>;
-    categoryRollup30d: Array<{ category: string; total: number; count: number }>;
-    holdings: Array<{ id: string; symbol: string; quantity: number; marketValue: number; costBasis?: number }>;
-    /** Recurring expense candidates ≥$50/mo, grounding for the expense-research insight pattern. */
-    recurringCandidates: Array<{ merchant: string; monthlyEstimate: number; sampleCount: number }>;
-  };
-  /** Compact goal-state block. Drives the three goal-specific insight shapes
-   *  (stalled / no-next-action / obstacle-untouched). Sized for the prompt. */
-  goalState: {
-    goals: Array<{
-      id: string;
-      title: string;
-      kind: string;
-      cadence: string | null;
-      reviewCadence: string;
-      obstacle: string | null;
-      implementationIntention: string | null;
-      lastReviewedAt: number | null;
-      dueAt: number | null;
-      stalled: boolean;
-      milestonesDone: number;
-      milestonesTotal: number;
-      linkedActiveTaskCount: number;
-      lastEvidenceAt: number | null;
-    }>;
-    /** Evidence rows from the last 14d, newest first. The model uses these
-     *  to spot patterns the user mentioned in chat. */
-    recentEvidence: Array<{
-      id: string;
-      goalId: string;
-      body: string;
-      recordedAt: number;
-      origin: string;
-    }>;
-  };
-}
 
 const RECURRING_CANDIDATE_MIN_MONTHLY = 50;
 
@@ -453,275 +306,6 @@ const gatherFinancial = (
   };
 };
 
-const MAX_CHARS = 80_000;
-
-const formatTimestamp = (ms: number): string =>
-  new Date(ms).toISOString().slice(0, 16).replace("T", " ");
-
-/**
- * Compact human-readable age vs. `nowMs`. Used to annotate dated rows so the
- * model never has to compute "how long ago" — it copies a phrase the renderer
- * already produced. Without this, the model invents plausible-looking dates
- * (e.g. a future "May 28" when today is May 27) and reinforces them next pass
- * via the prior-insights feedback loop.
- */
-const relativeAge = (ms: number, nowMs: number): string => {
-  const diff = nowMs - ms;
-  if (diff < 0) {
-    const futureDays = Math.round(-diff / ONE_DAY);
-    return futureDays <= 1 ? "in the future" : `${futureDays}d in the future`;
-  }
-  const days = Math.floor(diff / ONE_DAY);
-  if (days === 0) return "today";
-  if (days === 1) return "1d ago";
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return months === 1 ? "1mo ago" : `${months}mo ago`;
-};
-
-const renderContext = (data: ContextData, nowMs: number): string => {
-  const todayIso = new Date(nowMs).toISOString().slice(0, 10);
-  const parts: string[] = [
-    `## Temporal anchor`,
-    `Today: ${todayIso} (epochMs=${nowMs}). Do NOT invent dates. If a fact's exact date is not in the data below, say "recent" or omit the date — never synthesize one. When you need to describe how long ago something happened, copy the parenthetical age shown next to each row.`,
-    ``,
-  ];
-
-  if (data.attentionSignals.length > 0) {
-    parts.push("## SQLite attention signals (ranked candidates)");
-    for (const s of data.attentionSignals) {
-      const evidence = s.evidenceRefs
-        .map((e) => `${e.refType}:${e.refId}${e.quote ? ` "${e.quote.slice(0, 120)}"` : ""}`)
-        .join("; ");
-      parts.push(
-        `- [signal=${s.id}] [${s.kind}] p${s.priority} ${s.title}: ${s.body}` +
-          (evidence ? `\n  evidence: ${evidence}` : ""),
-      );
-    }
-  }
-
-  if (data.latestReflections.length > 0) {
-    parts.push("## Recent reflections (newest first)");
-    for (const r of data.latestReflections) {
-      parts.push(`### ${r.kind} [id=${r.id}] (ending ${formatTimestamp(r.periodEnd)}, ${relativeAge(r.periodEnd, nowMs)})`);
-      if (r.openThreads.length > 0) {
-        parts.push(`open threads: ${r.openThreads.join("; ")}`);
-      }
-      if (r.concerns.length > 0) {
-        parts.push(`concerns: ${r.concerns.join("; ")}`);
-      }
-      parts.push(r.body);
-    }
-  }
-
-  if (data.facts.length > 0) {
-    parts.push("\n## Active facts (with IDs you can cite)");
-    for (const f of data.facts) {
-      parts.push(`- [id=${f.id}] [${f.category}/${f.subject}] ${f.body}`);
-    }
-  }
-
-  if (data.activeTasks.length > 0) {
-    parts.push("\n## Active tasks");
-    for (const t of data.activeTasks) {
-      const meta: string[] = [];
-      if (t.priority) meta.push(`p${5 - t.priority}`);
-      if (t.dueAt) meta.push(`due ${new Date(t.dueAt).toISOString().slice(0, 10)} (${relativeAge(t.dueAt, nowMs)})`);
-      if (t.projectName) meta.push(t.projectName);
-      if (t.labels.length > 0) meta.push("#" + t.labels.join(" #"));
-      parts.push(`- [id=${t.id}] ${t.content}${meta.length ? ` (${meta.join(" · ")})` : ""}`);
-    }
-  }
-
-  if (data.recentlyCompletedTasks.length > 0) {
-    parts.push("\n## Recently completed tasks (last 14d)");
-    for (const t of data.recentlyCompletedTasks) {
-      parts.push(`- [id=${t.id}] ${t.content}`);
-    }
-  }
-
-  if (data.goalState.goals.length > 0) {
-    parts.push("\n## Goal state (cite via evidenceRefs refType=goal)");
-    parts.push(
-      "Columns: id, title, kind/cadence, review cadence, last touch (days), stalled?, milestones done/total, linked active tasks. " +
-        "A goal with 0 linked active tasks + 0 recent evidence is a strong candidate for the 'no next action' framing.",
-    );
-    for (const g of data.goalState.goals) {
-      const lastTouchMs = g.lastEvidenceAt ?? g.lastReviewedAt;
-      const lastTouchDays =
-        lastTouchMs !== null
-          ? Math.floor((Date.now() - lastTouchMs) / ONE_DAY) + "d"
-          : "never";
-      const cadenceTag =
-        g.kind === "process" && g.cadence ? `${g.kind}/${g.cadence}` : g.kind;
-      parts.push(
-        `- [goal=${g.id}] ${g.title} (${cadenceTag}, review=${g.reviewCadence}, last touch ${lastTouchDays}, stalled=${g.stalled}, milestones ${g.milestonesDone}/${g.milestonesTotal}, ${g.linkedActiveTaskCount} active task${g.linkedActiveTaskCount === 1 ? "" : "s"})`,
-      );
-      if (g.obstacle) parts.push(`    obstacle: ${g.obstacle}`);
-      if (g.implementationIntention) parts.push(`    plan: ${g.implementationIntention}`);
-    }
-    if (data.goalState.recentEvidence.length > 0) {
-      parts.push("\nRecent goal evidence (last 14d, newest first):");
-      for (const e of data.goalState.recentEvidence) {
-        parts.push(
-          `- [goal=${e.goalId} evidence=${e.id}] (${e.origin}) ${new Date(e.recordedAt).toISOString().slice(0, 10)} (${relativeAge(e.recordedAt, nowMs)}): ${e.body}`,
-        );
-      }
-    }
-  }
-
-  if (data.recentMeasurements.length > 0) {
-    parts.push("\n## Measurements (last 90d, grouped by metric)");
-    const byMetric = new Map<string, ContextData["recentMeasurements"]>();
-    for (const m of data.recentMeasurements) {
-      if (!byMetric.has(m.metric)) byMetric.set(m.metric, []);
-      byMetric.get(m.metric)!.push(m);
-    }
-    for (const [metric, rows] of byMetric) {
-      const series = rows
-        .map(
-          (r) =>
-            `${new Date(r.recordedAt).toISOString().slice(0, 10)}(${relativeAge(r.recordedAt, nowMs)})[id=${r.id}]=${r.value}${r.unit ?? ""}`,
-        )
-        .join(", ");
-      parts.push(`- ${metric}: ${series}`);
-    }
-  }
-
-  // Financial section — rolled-up summaries only; never raw transactions.
-  const fin = data.financial;
-  const hasFinance =
-    fin.accounts.length > 0 ||
-    fin.budgets.length > 0 ||
-    fin.categoryRollup30d.length > 0 ||
-    fin.holdings.length > 0 ||
-    fin.recurringCandidates.length > 0;
-  if (hasFinance) {
-    parts.push("\n## Financial state (rollups — cite via evidenceRefs)");
-    if (fin.accounts.length > 0) {
-      parts.push(
-        `### Accounts (net worth: $${fin.netWorthSummary.netWorth.toFixed(0)} = assets $${fin.netWorthSummary.totalAssets.toFixed(0)} − liabilities $${fin.netWorthSummary.totalLiabilities.toFixed(0)})`,
-      );
-      for (const a of fin.accounts) {
-        parts.push(
-          `- [account=${a.id}] ${a.displayName} (${a.type}): $${a.balance.toFixed(2)}`,
-        );
-      }
-    }
-    if (fin.budgets.length > 0) {
-      parts.push("\n### Budgets (this month)");
-      for (const b of fin.budgets) {
-        const pct = b.limit > 0 ? Math.round((b.spent / b.limit) * 100) : 0;
-        const status = pct > 100 ? "OVER" : pct > 80 ? "near" : "on";
-        parts.push(
-          `- [budget=${b.id}] ${b.category}: $${b.spent.toFixed(2)} / $${b.limit.toFixed(2)} (${pct}%, ${status})`,
-        );
-      }
-    }
-    if (fin.categoryRollup30d.length > 0) {
-      parts.push(
-        "\n### Spending by category — last 30 days (NOTE: based on Monarch's categorization; may include miscategorized rows)",
-      );
-      parts.push(
-        "IMPORTANT — G5 itemization contract: Do NOT cite any dollar figure from this section " +
-          "as a headline number without first calling `financial_monthly_rollup` to get the " +
-          "canonical rollup with contributing_tx_ids[] and guard results. If a user asks " +
-          "'where does that number come from?', call `get_rollup_contributors` with the same " +
-          "period/category to return the drill-down transactions. Never cite a rollup-only " +
-          "summary without itemization being available.",
-      );
-      for (const r of fin.categoryRollup30d) {
-        parts.push(`- ${r.category}: $${r.total.toFixed(2)} (${r.count} txns)`);
-      }
-    }
-    if (fin.holdings.length > 0) {
-      parts.push("\n### Investment holdings (latest snapshot)");
-      for (const h of fin.holdings) {
-        const gl =
-          h.costBasis !== undefined ? h.marketValue - h.costBasis : undefined;
-        const glPct =
-          h.costBasis && h.costBasis !== 0 ? ((gl ?? 0) / h.costBasis) * 100 : undefined;
-        parts.push(
-          `- [holding=${h.id}] ${h.symbol}: ${h.quantity} units = $${h.marketValue.toFixed(2)}` +
-            (gl !== undefined
-              ? ` (g/l: $${gl.toFixed(2)}${glPct !== undefined ? `, ${glPct.toFixed(1)}%` : ""})`
-              : ""),
-        );
-      }
-    }
-    if (fin.recurringCandidates.length > 0) {
-      parts.push("\n### Recurring expenses ≥$50/mo (candidates for review)");
-      for (const c of fin.recurringCandidates) {
-        parts.push(
-          `- ${c.merchant}: ~$${c.monthlyEstimate.toFixed(0)}/mo (${c.sampleCount} samples in last 90d)`,
-        );
-      }
-    }
-  }
-
-  if (data.recentMessages.length > 0) {
-    parts.push("\n## Recent messages (last 7d, newest first)");
-    for (const m of data.recentMessages) {
-      const content = m.content.length > 400 ? m.content.slice(0, 400) + "…" : m.content;
-      parts.push(`[${formatTimestamp(m.createdAt)} · ${relativeAge(m.createdAt, nowMs)}] ${m.role} [id=${m.id}]: ${content}`);
-    }
-  }
-
-  if (data.recentInsights.length > 0) {
-    parts.push("\n## Prior insights (so you don't repeat yourself — do NOT restate these under a new headline)");
-    for (const i of data.recentInsights) {
-      parts.push(`- [${i.state}] [${relativeAge(i.createdAt, nowMs)}] [id=${i.id}] ${i.topic}: ${i.body.slice(0, 120)}…`);
-    }
-  }
-
-  let rendered = parts.join("\n");
-  if (rendered.length > MAX_CHARS) {
-    rendered =
-      rendered.slice(0, MAX_CHARS) +
-      `\n\n[truncated — original was ${rendered.length} chars]`;
-  }
-  return rendered;
-};
-
-const buildPrompt = (identityProfile: string, rendered: string): string =>
-  `You are a personal life/health coach surfacing insights from the user's data.
-
-## Who the user is
-${identityProfile}
-
-## Data
-${rendered}
-
----
-
-Call \`record_insights\` with **0–3 high-quality insights**. Quality bar:
-
-1. **Specific.** Cite numbers, dates, named patterns. "Sleep onset drifted from 9:30 to 11:00 over 5 days" beats "your sleep is off."
-2. **Trigger-relevant.** Don't restate static facts. Insight = a thing that's CHANGED or that the user hasn't noticed about themselves.
-3. **Evidence-backed.** Prefer the SQLite attention signals, and include concrete \`evidenceRefs\` with refType/refId/quote so the user can see why this surfaced.
-4. **Non-redundant.** Check the "Prior insights" section. No nagging: don't repeat an old insight unless the evidence changed materially.
-5. **Honest but not alarmist.** Health-related observations should cite the measurements and avoid medical authority. A 12% HRV dip is worth flagging; a 2% one isn't.
-6. **Same-subject suppression.** If a "Prior insight" already covers the same subject and the underlying data has not materially changed, return zero insights for that subject — do not rewrite it under a new headline. The system also enforces this server-side.
-7. **No fabricated dates.** Never write a specific date that does not appear in the data above. If you need to describe staleness, copy the parenthetical "(Nd ago)" annotation the renderer already produced.
-
-**Goal-specific framings** (use sparingly — these aren't required every pass, but they're the right *shape* when the data points to them):
-
-- **"Goal has gone quiet."** Use when the goal-state row shows \`stalled=true\` AND there's no plausible reason in recent messages — the goal hasn't been mentioned and no linked task moved. Topic format: \`Quiet: <goal title>\`. Be specific about the last-touch age. Cite the goal via \`refType=goal\`.
-- **"No next action on <goal title>."** Use when a goal has \`linkedActiveTaskCount=0\` AND \`milestonesTotal\` is also 0 or stale (no done in 14d). The user committed to something but never decomposed it. Topic format: \`No next action: <goal title>\`. Suggest decomposition in the body.
-- **"Untouched obstacle on <goal title>."** Use when the goal has a non-null \`obstacle\` AND none of the recent goal evidence rows or messages mention handling it. This is the WOOP mental-contrasting cue going stale. Topic format: \`Obstacle untouched: <goal title>\`. Quote the obstacle text.
-
-These are *framings*, not enum values — keep the existing topic-as-free-text contract. Skip them when nothing fits; never invent one to fill a slot.
-
-**Financial observations.** Financial state appears as "Financial state (rollups)" above with citable IDs (\`account=…\`, \`budget=…\`, \`holding=…\`). Treat money like any other life signal — when a financial pattern coincides with a life pattern (sleep, stress, a goal, a recurring theme in messages), that coincidence IS the insight; that's the thing only this coach can see. No financial advice, just observations and simple math. Be especially honest about uncertainty: category rollups depend on Monarch's categorization which can be wrong. When you cite a category number, **invite the user to challenge it** (e.g. "If 'Dining $1,036' looks high, tell me which transactions don't belong and I'll recategorize them so the picture stays accurate"). For recurring-expense downgrade suggestions (from the "Recurring expenses ≥$50/mo" list), use the **exact topic format \`Recurring: <Merchant>\`** (so the system can suppress the same suggestion for ~9 months after a dismissal) and surface **at most one** such item per pass with a clear monthly dollar figure. Don't do the alternative research in this pass — the chat agent does it lazily when the user clicks Discuss.
-
-**G5 itemization guard (mandatory).** Before citing any dollar figure (burn, income, savings rate, category subtotal) as a headline in an insight body:
-1. Call \`financial_monthly_rollup\` for the period in question to get the canonical rollup with \`contributing_tx_ids[]\` and guards G1–G6.
-2. If any guard fails — especially G1 (< 15 days), G2 (high transfer ratio), or G5 (no contributors) — do NOT cite the figure. Surface the guard failure instead: "Savings rate data is incomplete this month — check back after the 15th."
-3. If all guards pass, you may cite the figure. The contributing_tx_ids[] are available via \`get_rollup_contributors\` for any follow-up drill-down — tell the user this is available.
-4. Never emit a financial headline number derived only from the rolled-up context summary above without this verification step.
-
-If genuinely nothing notable jumps out, return an empty array. That's a valid answer.`;
-
 // ─── Generator ──────────────────────────────────────────────────────────────
 
 export interface InsighterOptions {
@@ -752,7 +336,7 @@ export class Insighter {
   async generate(storage: Storage, identity: IdentityMemory): Promise<Insight[]> {
     const data = gather(storage);
     const rendered = renderContext(data, Date.now());
-    const prompt = buildPrompt(identity.render(), rendered);
+    const prompt = buildInsighterPrompt(identity.render(), rendered);
 
     const response = await withRetry(
       () =>
@@ -763,7 +347,7 @@ export class Insighter {
             {
               name: "record_insights",
               description: "Record 0–3 insights about the user.",
-              input_schema: TOOL_INPUT_SCHEMA,
+              input_schema: INSIGHT_TOOL_INPUT_SCHEMA,
             },
           ],
           tool_choice: { type: "tool", name: "record_insights" },
