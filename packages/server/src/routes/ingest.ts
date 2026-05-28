@@ -15,10 +15,16 @@ export const ingestRoutes = (lc: Lifecoach) => {
   const app = new Hono();
 
   app.get("/recent", (c) => {
-    const stmt = lc.storage.handle.db.prepare(
-      "SELECT hash, path, document_id, size_bytes, ingested_at FROM ingested_files ORDER BY ingested_at DESC LIMIT 50",
-    );
-    return c.json({ files: stmt.all() });
+    // Project to the snake_case wire shape the prior raw SQL emitted so
+    // the existing web client doesn't break — kept verbatim.
+    const files = lc.storage.ingestedFiles.recent(50).map((f) => ({
+      hash: f.hash,
+      path: f.path,
+      document_id: f.documentId,
+      size_bytes: f.sizeBytes,
+      ingested_at: f.ingestedAt,
+    }));
+    return c.json({ files });
   });
 
   // Upload-and-ingest. Accepts multipart form data with a 'file' field.

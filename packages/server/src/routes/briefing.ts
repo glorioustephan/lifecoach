@@ -116,22 +116,19 @@ export const briefingRoutes = (lc: Lifecoach) => {
       .filter((i) => i.createdAt > nowMs - 7 * ONE_DAY_MS)
       .slice(0, 3);
 
-    // Latest reflection (any kind)
-    const reflectionRow = lc.storage.handle.db
-      .prepare(
-        `SELECT id, kind, period_start, period_end, body, created_at
-         FROM reflections ORDER BY period_end DESC LIMIT 1`,
-      )
-      .get() as
-      | {
-          id: string;
-          kind: string;
-          period_start: number;
-          period_end: number;
-          body: string;
-          created_at: number;
+    // Latest reflection (any kind) — repository's list returns the full
+    // Reflection; project to the existing wire shape callers expect.
+    const [latest] = lc.storage.reflections.list({ limit: 1 });
+    const reflectionRow = latest
+      ? {
+          id: latest.id,
+          kind: latest.kind,
+          period_start: latest.periodStart,
+          period_end: latest.periodEnd,
+          body: latest.body,
+          created_at: latest.createdAt,
         }
-      | undefined;
+      : undefined;
 
     const finance = computeFinanceTile(lc, nowMs);
 

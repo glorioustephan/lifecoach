@@ -133,6 +133,22 @@ export class MeasurementRepository {
     return info.changes;
   }
 
+  /**
+   * Distinct metric names with at least one observation since `fromMs`. Used
+   * by the attention loop to enumerate recently-touched metrics without
+   * pulling the full row set.
+   */
+  distinctMetrics(fromMs: number): string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT DISTINCT metric FROM measurements
+         WHERE recorded_at >= ?
+         ORDER BY metric ASC`,
+      )
+      .all(fromMs) as Array<{ metric: string }>;
+    return rows.map((r) => r.metric);
+  }
+
   count(): number {
     const row = this.db.prepare("SELECT COUNT(*) as c FROM measurements").get() as {
       c: number;

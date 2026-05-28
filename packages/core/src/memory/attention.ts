@@ -1,7 +1,6 @@
 import type { EvidenceRef, InsightPriority } from "@lifecoach/schemas";
 import { createHash } from "node:crypto";
 import type { Storage, AttentionSignal } from "../storage/index.js";
-import { parseStringArray } from "../util/json.js";
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
 const STALE_GOAL_MS = 14 * ONE_DAY;
@@ -88,28 +87,13 @@ const staleGoalSignals = (storage: Storage): CandidateSignal[] => {
     });
 };
 
-interface ReflectionSignalRow {
-  id: string;
-  body: string;
-  concerns: string;
-  open_threads: string;
-  period_end: number;
-}
-
 const reflectionThreadSignals = (storage: Storage): CandidateSignal[] => {
-  const rows = storage.handle.db
-    .prepare(
-      `SELECT id, body, concerns, open_threads, period_end
-       FROM reflections
-       ORDER BY period_end DESC
-       LIMIT 8`,
-    )
-    .all() as ReflectionSignalRow[];
+  const rows = storage.reflections.list({ limit: 8 });
 
   const signals: CandidateSignal[] = [];
   const latest = rows[0];
   if (latest) {
-    for (const thread of parseStringArray(latest.open_threads).slice(0, 6)) {
+    for (const thread of latest.openThreads.slice(0, 6)) {
       signals.push({
         kind: "open_reflection_thread",
         title: "Open thread from reflection",
@@ -123,7 +107,7 @@ const reflectionThreadSignals = (storage: Storage): CandidateSignal[] => {
 
   const concerns = new Map<string, { text: string; refs: EvidenceRef[] }>();
   for (const row of rows) {
-    for (const concern of parseStringArray(row.concerns)) {
+    for (const concern of row.concerns) {
       const key = concern.toLowerCase().replace(/\s+/g, " ").trim();
       const existing = concerns.get(key) ?? { text: concern, refs: [] };
       existing.refs.push(ref("reflection", row.id, concern, 2));
@@ -163,16 +147,10 @@ const ignoredInsightSignals = (storage: Storage): CandidateSignal[] => {
 
 const measurementShiftSignals = (storage: Storage): CandidateSignal[] => {
   const since = Date.now() - MEASUREMENT_WINDOW_MS;
-  const metrics = storage.handle.db
-    .prepare(
-      `SELECT DISTINCT metric FROM measurements
-       WHERE recorded_at >= ?
-       ORDER BY metric ASC`,
-    )
-    .all(since) as { metric: string }[];
+  const metrics = storage.measurements.distinctMetrics(since);
 
   const signals: CandidateSignal[] = [];
-  for (const { metric } of metrics) {
+  for (const metric of metrics) {
     const summary = storage.measurements.summarize(metric, { from: since });
     if (
       summary.count < 3 ||

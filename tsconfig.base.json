@@ -8,6 +8,10 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
+    // exactOptionalPropertyTypes: scoped audit found 36 sites that would
+    // fail (mostly spread-pattern `{ field: maybeUndefined }`). Deferred
+    // to a focused refactor session — see .claude/plans/wave-4-structural.md
+    // W4.9. Re-enabling without a sweep would surface as failed typecheck.
     "exactOptionalPropertyTypes": false,
     "esModuleInterop": true,
     "isolatedModules": true,

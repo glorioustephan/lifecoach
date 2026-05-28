@@ -60,6 +60,18 @@ export class IngestedFileRepository {
     };
   }
 
+  /** Most recently-ingested files first. Used by the /ingest/recent route. */
+  recent(limit = 50): IngestedFile[] {
+    const rows = this.db
+      .prepare(
+        `SELECT hash, path, document_id, size_bytes, ingested_at
+         FROM ingested_files
+         ORDER BY ingested_at DESC LIMIT ?`,
+      )
+      .all(limit) as IngestedFileRow[];
+    return rows.map(rowTo);
+  }
+
   count(): number {
     const row = this.db.prepare("SELECT COUNT(*) as c FROM ingested_files").get() as {
       c: number;

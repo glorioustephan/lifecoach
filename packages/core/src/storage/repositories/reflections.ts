@@ -134,21 +134,22 @@ export class ReflectionRepository {
    * `period_end DESC` so the most recent window appears first regardless of
    * when the cron run produced it.
    */
-  list(filter?: { kind?: ReflectionKind; limit?: number }): Reflection[] {
+  list(filter?: { kind?: ReflectionKind; limit?: number; offset?: number }): Reflection[] {
     const limit = filter?.limit ?? 10;
+    const offset = filter?.offset ?? 0;
     const params: unknown[] = [];
     let where = "";
     if (filter?.kind) {
       where = "WHERE kind = ?";
       params.push(filter.kind);
     }
-    params.push(limit);
+    params.push(limit, offset);
     const rows = this.db
       .prepare(
         `SELECT id, period_start, period_end, kind, title, themes, wins,
                 concerns, open_threads, body, created_at
          FROM reflections ${where}
-         ORDER BY period_end DESC LIMIT ?`,
+         ORDER BY period_end DESC LIMIT ? OFFSET ?`,
       )
       .all(...params) as ReflectionRow[];
     return rows.map(rowToReflection);

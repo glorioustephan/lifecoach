@@ -92,19 +92,22 @@ export const memoryRoutes = (lc: Lifecoach) => {
     }
   });
 
-  // Documents list with pagination
+  // Documents list with pagination. Goes through the repository (rather than
+  // raw SQL on storage.handle.db) so the route is testable with a mock
+  // storage and respects any future filtering rules the repo adds.
   app.get("/documents", (c) => {
     const limit = Number(c.req.query("limit") ?? "20");
     const page = Number(c.req.query("page") ?? "1");
     const offset = (page - 1) * limit;
-
-    const countStmt = lc.storage.handle.db.prepare("SELECT COUNT(*) as count FROM documents");
-    const total = (countStmt.get() as { count: number }).count;
-
-    const stmt = lc.storage.handle.db.prepare(
-      "SELECT id, source, mime, title, length(body) as body_chars, ingested_at FROM documents ORDER BY ingested_at DESC LIMIT ? OFFSET ?",
-    );
-    const documents = stmt.all(limit, offset);
+    const total = lc.storage.documents.count();
+    const documents = lc.storage.documents.list({ limit, offset }).map((d) => ({
+      id: d.id,
+      source: d.source,
+      mime: d.mime,
+      title: d.title,
+      body_chars: d.body.length,
+      ingested_at: d.ingestedAt,
+    }));
     return c.json({ documents, total });
   });
 
@@ -136,20 +139,22 @@ export const memoryRoutes = (lc: Lifecoach) => {
     });
   });
 
-  // Reflections — list with pagination (newest first)
+  // Reflections — list with pagination (newest first). Repository's list()
+  // returns the full Reflection; project to the same wire shape the prior
+  // hand-rolled SQL emitted so existing web consumers don't break.
   app.get("/reflections", (c) => {
     const limit = Number(c.req.query("limit") ?? "10");
     const page = Number(c.req.query("page") ?? "1");
     const offset = (page - 1) * limit;
-
-    const countStmt = lc.storage.handle.db.prepare("SELECT COUNT(*) as count FROM reflections");
-    const total = (countStmt.get() as { count: number }).count;
-
-    const rows = lc.storage.handle.db
-      .prepare(
-        "SELECT id, period_start, period_end, kind, body, created_at FROM reflections ORDER BY period_end DESC LIMIT ? OFFSET ?",
-      )
-      .all(limit, offset);
+    const total = lc.storage.reflections.count();
+    const rows = lc.storage.reflections.list({ limit, offset }).map((r) => ({
+      id: r.id,
+      period_start: r.periodStart,
+      period_end: r.periodEnd,
+      kind: r.kind,
+      body: r.body,
+      created_at: r.createdAt,
+    }));
     return c.json({ reflections: rows, total });
   });
 
