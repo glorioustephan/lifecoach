@@ -9,8 +9,15 @@
  *  - lifecoach-insights         daily insight pass at 07:30 local
  *                               (runs AFTER the daily reflection so the
  *                                insighter has the morning summary in context)
+ *  - lifecoach-goal-review      weekly goal-review pass Sundays at 18:00 local
+ *                               (counts evidence + milestones + linked-task
+ *                                completions per active goal, marks stalled
+ *                                ones, stamps last_reviewed_at — runs BEFORE
+ *                                the 19:00 weekly reflect so its output
+ *                                feeds the reflector's gatherPeriodData)
  *  - lifecoach-weekly-reflect   weekly reflection Sundays at 19:00 local
- *                               (includes financial section from Monarch data)
+ *                               (includes financial section from Monarch data
+ *                                + the goal-review's just-written evidence)
  *  - lifecoach-monthly-reflect  monthly reflection on 1st of month at 10:00 local
  *                               (includes financial section from Monarch data)
  *  - lifecoach-artifacts        daily artifact extraction at 08:00 local
@@ -154,12 +161,25 @@ module.exports = {
       cron_restart: "30 7 * * *",
     },
     {
+      // Pre-flight sweep before the weekly reflection: counts each active
+      // goal's evidence / completed milestones / completed linked tasks in
+      // the past 7 days, emits a cron-origin evidence row for progressing +
+      // stalled goals, and stamps last_reviewed_at. The reflector at 19:00
+      // then sees this enriched state via gatherPeriodData.
+      name: "lifecoach-goal-review",
+      script: "/bin/sh",
+      args: ["-c", "pnpm -w run lifecoach goal-review"],
+      ...base("goal-review"),
+      autorestart: false,
+      cron_restart: "0 18 * * 0",  // Sundays 18:00 — feeds the 19:00 weekly reflect
+    },
+    {
       name: "lifecoach-weekly-reflect",
       script: "/bin/sh",
       args: ["-c", "pnpm -w run lifecoach reflect weekly"],
       ...base("weekly-reflect"),
       autorestart: false,
-      cron_restart: "0 19 * * 0",  // Sundays 19:00 — includes financial section
+      cron_restart: "0 19 * * 0",  // Sundays 19:00 — includes financial section + goal-review output
     },
     {
       name: "lifecoach-monthly-reflect",
