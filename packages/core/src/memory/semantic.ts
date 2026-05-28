@@ -1,5 +1,6 @@
 import type {
   Fact,
+  FactUpdate,
   Message,
   NewFact,
   RecallHit,
@@ -8,6 +9,7 @@ import type {
 } from "@lifecoach/schemas";
 import type { Storage, RefType } from "../storage/index.js";
 import type { Embedder } from "../embeddings/index.js";
+import { LifecoachError } from "../util/errors.js";
 
 export interface SemanticMemoryDeps {
   storage: Storage;
@@ -37,6 +39,40 @@ export class SemanticMemory {
   forget(id: string): void {
     this.storage.facts.softDelete(id);
     this.storage.embeddings.deleteForRef("fact", id);
+  }
+
+  /**
+   * Public alias for `forget` — the route layer reads more clearly as
+   * `forgetFact(id)` than `forget(id)`, and gives us a hook to add
+   * audit/event emission later without touching callers.
+   */
+  forgetFact(id: string): void {
+    this.forget(id);
+  }
+
+  /**
+   * In-place correction of a stored fact. After updating the row, the
+   * existing embedding is dropped and a fresh one is generated from the
+   * corrected text so semantic recall immediately reflects the change.
+   * If re-embedding fails we still return the updated row — the user's
+   * edit isn't lost, and recall simply won't hit this fact until the next
+   * re-index. Better that than a stale embedding pointing at the old text.
+   */
+  async updateFact(id: string, patch: FactUpdate): Promise<Fact> {
+    const updated = this.storage.facts.update(id, patch);
+    if (!updated) {
+      throw new LifecoachError(`Fact ${id} not found or already deleted`);
+    }
+    this.storage.embeddings.deleteForRef("fact", id);
+    try {
+      await this.indexFact(updated);
+    } catch (err) {
+      console.warn(
+        `[semantic] re-index after fact update failed for ${id} (non-fatal):`,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+    return updated;
   }
 
   getFact(id: string): Fact | undefined {

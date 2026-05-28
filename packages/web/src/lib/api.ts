@@ -132,6 +132,17 @@ const del = async <T>(path: string): Promise<T> => {
   return resp.json();
 };
 
+export interface FactRow {
+  id: string;
+  category: string;
+  subject: string;
+  body: string;
+  confidence: number;
+  validFrom: number | null;
+  validTo: number | null;
+  createdAt: number;
+}
+
 export interface DocumentRow {
   id: string;
   source: string;
@@ -320,6 +331,17 @@ export const api = {
   documents: () => get<{ documents: DocumentRow[] }>("/api/memory/documents"),
   forgetDocument: (id: string) =>
     del<{ result: ForgetDocumentResult }>(`/api/memory/documents/${encodeURIComponent(id)}`),
+  updateFact: (
+    id: string,
+    patch: Partial<{
+      subject: string;
+      body: string;
+      category: string;
+      confidence: number;
+    }>,
+  ) => patchJson<{ fact: FactRow }>(`/api/memory/facts/${encodeURIComponent(id)}`, patch),
+  forgetFact: (id: string) =>
+    del<{ ok: true }>(`/api/memory/facts/${encodeURIComponent(id)}`),
   reflections: () => get<{ reflections: ReflectionRow[] }>("/api/memory/reflections"),
   generateReflection: (kind: "daily" | "weekly" | "monthly") =>
     postJson<{ reflection: ReflectionRow | null }>("/api/memory/reflections/generate", { kind }),

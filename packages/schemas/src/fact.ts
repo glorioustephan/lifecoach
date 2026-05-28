@@ -36,6 +36,23 @@ export const newFactSchema = factSchema.omit({
 });
 export type NewFact = z.infer<typeof newFactSchema>;
 
+/**
+ * Editable surface of a fact — what the user (or coach) can change after the
+ * fact has been created. `id`, `createdAt`, `validFrom`, `validTo`, and
+ * `source` are intentionally excluded: those are temporal/provenance fields
+ * managed by the system, not user-editable copy.
+ */
+export const factUpdateSchema = factSchema
+  .pick({
+    subject: true,
+    body: true,
+    category: true,
+    confidence: true,
+    data: true,
+  })
+  .partial();
+export type FactUpdate = z.infer<typeof factUpdateSchema>;
+
 export const recallScope = z.enum([
   "facts",
   "documents",

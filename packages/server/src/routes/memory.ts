@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Lifecoach } from "@lifecoach/core";
 import { forgetDocument, kindWindow } from "@lifecoach/core";
+import { factUpdateSchema } from "@lifecoach/schemas";
 
 const reflectSchema = z.object({
   kind: z.enum(["daily", "weekly", "monthly"]),
@@ -53,6 +54,38 @@ export const memoryRoutes = (lc: Lifecoach) => {
 
     const facts = allFacts.slice(offset, offset + limit);
     return c.json({ facts, total: allFacts.length });
+  });
+
+  // Edit a single fact in place. Re-embeds the corrected text so semantic
+  // recall reflects the change immediately. Returns the updated row.
+  app.patch("/facts/:id", async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = factUpdateSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+    }
+    try {
+      const fact = await lc.memory.semantic.updateFact(c.req.param("id"), parsed.data);
+      return c.json({ fact });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = /not found/i.test(message) ? 404 : 500;
+      return c.json({ error: message }, status);
+    }
+  });
+
+  // Forget a single fact (soft-delete + drop its embedding). The row stays
+  // in the DB with valid_to set so historical context is preserved.
+  app.delete("/facts/:id", (c) => {
+    try {
+      const id = c.req.param("id");
+      const existing = lc.storage.facts.get(id);
+      if (!existing) return c.json({ error: "not_found" }, 404);
+      lc.memory.semantic.forgetFact(id);
+      return c.json({ ok: true });
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+    }
   });
 
   // Documents list with pagination
