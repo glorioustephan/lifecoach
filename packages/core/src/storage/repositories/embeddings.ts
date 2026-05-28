@@ -27,15 +27,15 @@ export interface EmbeddingInsert {
   chunkIndex: number;
   text: string;
   embedding: number[];
-  model?: string;
-  dimension?: number;
-  sourceUpdatedAt?: number;
+  model?: string | undefined;
+  dimension?: number | undefined;
+  sourceUpdatedAt?: number | undefined;
 }
 
 export interface EmbeddingSearchOptions {
-  limit?: number;
-  refType?: RefType;
-  maxCandidates?: number;
+  limit?: number | undefined;
+  refType?: RefType | undefined;
+  maxCandidates?: number | undefined;
 }
 
 const hashText = (text: string): string =>

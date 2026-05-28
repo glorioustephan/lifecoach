@@ -69,10 +69,10 @@ export const TRANSFER_CATEGORY_NAME_PATTERNS: readonly string[] = [
  */
 export const isTransferTxn = (
   t: {
-    isTransfer?: boolean | null;
-    categoryGroupType?: string | null;
-    category?: string | null;
-    accountId?: string | null;
+    isTransfer?: boolean | null | undefined;
+    categoryGroupType?: string | null | undefined;
+    category?: string | null | undefined;
+    accountId?: string | null | undefined;
   },
   internalAccountIds: ReadonlySet<string> = new Set<string>(),
 ): boolean => {

@@ -134,6 +134,39 @@ export class MeasurementRepository {
   }
 
   /**
+   * All measurements within `[from, to)` across all metrics, oldest first.
+   * Reflector uses this to assemble a window-bounded snapshot of every
+   * metric the user logged during the reflection period.
+   */
+  queryRange(fromMs: number, toMs: number): Measurement[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, metric, value, unit, recorded_at, source_document_id, created_at
+         FROM measurements
+         WHERE recorded_at >= ? AND recorded_at < ?
+         ORDER BY recorded_at ASC`,
+      )
+      .all(fromMs, toMs) as Array<{
+      id: string;
+      metric: string;
+      value: number;
+      unit: string | null;
+      recorded_at: number;
+      source_document_id: string | null;
+      created_at: number;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      metric: row.metric,
+      value: row.value,
+      ...(row.unit !== null ? { unit: row.unit } : {}),
+      recordedAt: row.recorded_at,
+      ...(row.source_document_id !== null ? { sourceDocumentId: row.source_document_id } : {}),
+      createdAt: row.created_at,
+    }));
+  }
+
+  /**
    * Distinct metric names with at least one observation since `fromMs`. Used
    * by the attention loop to enumerate recently-touched metrics without
    * pulling the full row set.

@@ -161,7 +161,7 @@ export class TodoistClient {
             "Content-Type": "application/json",
             "X-Request-Id": cryptoRandomId(),
           },
-          body: body !== undefined ? JSON.stringify(body) : undefined,
+          ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         });
         if (!resp.ok) {
           const text = await resp.text().catch(() => "");

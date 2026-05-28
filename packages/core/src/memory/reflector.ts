@@ -126,57 +126,35 @@ interface PeriodData {
 }
 
 const gatherPeriodData = (storage: Storage, from: number, to: number, includeFinancial = false): PeriodData => {
-  const db = storage.handle.db;
+  // Repository methods + projection map keeps the gather function out of raw
+  // SQL while preserving the original projected wire shapes the prompt
+  // renderer downstream expects.
+  const messages: PeriodData["messages"] = storage.messages
+    .queryRange(from, to)
+    .map((m) => ({ role: m.role, content: m.content, createdAt: m.createdAt }));
 
-  const messages = db
-    .prepare(
-      `SELECT role, content, created_at AS createdAt
-       FROM messages
-       WHERE created_at >= ? AND created_at < ?
-       ORDER BY created_at ASC`,
-    )
-    .all(from, to) as PeriodData["messages"];
+  const facts: PeriodData["facts"] = storage.facts
+    .queryActiveRange(from, to)
+    .map((f) => ({ category: f.category, subject: f.subject, body: f.body, createdAt: f.createdAt }));
 
-  const facts = db
-    .prepare(
-      `SELECT category, subject, body, created_at AS createdAt
-       FROM facts
-       WHERE created_at >= ? AND created_at < ? AND valid_to IS NULL
-       ORDER BY created_at ASC`,
-    )
-    .all(from, to) as PeriodData["facts"];
+  const completedTasks: PeriodData["completedTasks"] = storage.tasks
+    .completedRange(from, to)
+    .map((t) => ({
+      content: t.content,
+      completedAt: t.completedAt ?? null,
+      goalId: t.goalId ?? null,
+      milestoneId: t.milestoneId ?? null,
+    }));
 
-  const completedTasks = db
-    .prepare(
-      `SELECT content,
-              completed_at AS completedAt,
-              goal_id AS goalId,
-              milestone_id AS milestoneId
-       FROM tasks
-       WHERE completed_at IS NOT NULL AND completed_at >= ? AND completed_at < ?
-       ORDER BY completed_at ASC`,
-    )
-    .all(from, to) as PeriodData["completedTasks"];
-
-  const measurements = db
-    .prepare(
-      `SELECT metric, value, unit, recorded_at AS recordedAt
-       FROM measurements
-       WHERE recorded_at >= ? AND recorded_at < ?
-       ORDER BY recorded_at ASC`,
-    )
-    .all(from, to) as PeriodData["measurements"];
+  const measurements: PeriodData["measurements"] = storage.measurements
+    .queryRange(from, to)
+    .map((m) => ({ metric: m.metric, value: m.value, unit: m.unit ?? null, recordedAt: m.recordedAt }));
 
   // For a weekly reflection, include the daily reflections within the same window
   // (the agent should build on its own prior summaries rather than re-synthesize raw data).
-  const priorReflections = db
-    .prepare(
-      `SELECT kind, body, period_end AS periodEnd
-       FROM reflections
-       WHERE period_end >= ? AND period_end < ?
-       ORDER BY period_end ASC`,
-    )
-    .all(from, to) as PeriodData["priorReflections"];
+  const priorReflections: PeriodData["priorReflections"] = storage.reflections
+    .queryRange(from, to)
+    .map((r) => ({ kind: r.kind, body: r.body, periodEnd: r.periodEnd }));
 
   // ── Goal state for this period ──────────────────────────────────────────
   const activeGoals = storage.goals.list({ status: "active", limit: 200 });
@@ -185,51 +163,7 @@ const gatherPeriodData = (storage: Storage, from: number, to: number, includeFin
     recordedBefore: to,
     limit: 500,
   });
-  const completedMilestoneRows = db
-    .prepare(
-      `SELECT m.id AS id, m.goal_id AS goal_id, m.title AS title,
-              m.body AS body, m.status AS status, m.order_index AS order_index,
-              m.due_at AS due_at, m.completed_at AS completed_at,
-              m.origin AS origin, m.confidence AS confidence,
-              m.created_at AS created_at, m.updated_at AS updated_at,
-              g.title AS goal_title
-       FROM milestones m
-       JOIN goals g ON g.id = m.goal_id
-       WHERE m.status = 'done'
-         AND m.completed_at IS NOT NULL
-         AND m.completed_at >= ? AND m.completed_at < ?
-       ORDER BY m.completed_at ASC`,
-    )
-    .all(from, to) as Array<{
-    id: string;
-    goal_id: string;
-    title: string;
-    body: string | null;
-    status: string;
-    order_index: number;
-    due_at: number | null;
-    completed_at: number | null;
-    origin: string;
-    confidence: number | null;
-    created_at: number;
-    updated_at: number;
-    goal_title: string;
-  }>;
-  const completedMilestones = completedMilestoneRows.map((r) => ({
-    id: r.id,
-    goalId: r.goal_id,
-    title: r.title,
-    body: r.body,
-    status: r.status as Milestone["status"],
-    orderIndex: r.order_index,
-    dueAt: r.due_at,
-    completedAt: r.completed_at,
-    origin: r.origin as Milestone["origin"],
-    confidence: r.confidence,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-    goalTitle: r.goal_title,
-  }));
+  const completedMilestones = storage.milestones.completedRangeWithGoalTitle(from, to);
   // A goal is stalled per its own review_cadence, computed against its last
   // touch (review timestamp OR last evidence — whichever is more recent).
   const evidenceByGoal = storage.goalEvidence.latestByGoals(
@@ -253,24 +187,16 @@ const gatherPeriodData = (storage: Storage, from: number, to: number, includeFin
 
   // Include financial data for weekly/monthly reflections
   if (includeFinancial) {
-    const financialAccounts = db
-      .prepare(
-        `SELECT display_name AS displayName, type, balance
-         FROM accounts
-         WHERE status = 'active'
-         ORDER BY type ASC`,
-      )
-      .all() as Array<{ displayName: string; type: string; balance: number }>;
+    const financialAccounts: NonNullable<PeriodData["financialAccounts"]> =
+      storage.financial
+        .listAccounts({ status: "active" })
+        .sort((a, b) => a.type.localeCompare(b.type))
+        .map((a) => ({ displayName: a.displayName, type: a.type, balance: a.balance }));
 
-    const financialInsights = db
-      .prepare(
-        `SELECT topic, body, category, priority
-         FROM financial_insights
-         WHERE dismissed_at IS NULL
-         ORDER BY priority DESC, created_at DESC
-         LIMIT 5`,
-      )
-      .all() as Array<{ topic: string; body: string; category: string; priority: number }>;
+    const financialInsights: NonNullable<PeriodData["financialInsights"]> = storage.financial
+      .listInsights({ dismissedOnly: false })
+      .slice(0, 5)
+      .map((i) => ({ topic: i.topic, body: i.body, category: i.category, priority: i.priority }));
 
     // Route through the repository so effective categorization (overrides +
     // rules) applies, then exclude transfers and inflows. Mirrors the same

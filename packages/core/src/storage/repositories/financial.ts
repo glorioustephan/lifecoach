@@ -294,7 +294,7 @@ export class FinancialRepository {
     return row ? rowToAccount(row) : undefined;
   }
 
-  listAccounts(filter?: { status?: AccountStatus; type?: AccountType }): Account[] {
+  listAccounts(filter?: { status?: AccountStatus | undefined; type?: AccountType | undefined }): Account[] {
     let sql =
       `SELECT id, external_id, display_name, type, balance, currency, institution, status, synced_at, created_at, updated_at
        FROM accounts WHERE 1=1`;
@@ -419,11 +419,11 @@ export class FinancialRepository {
   }
 
   queryTransactions(filters?: {
-    accountId?: string;
-    from?: number;
-    to?: number;
-    category?: string;
-    minAmount?: number;
+    accountId?: string | undefined;
+    from?: number | undefined;
+    to?: number | undefined;
+    category?: string | undefined;
+    minAmount?: number | undefined;
   }): Transaction[] {
     // SQL filters never use the raw `category` column — a transaction's
     // EFFECTIVE category may differ (override > rule > raw). We fetch without
@@ -616,7 +616,7 @@ export class FinancialRepository {
     return { id, ...holding, createdAt: ts };
   }
 
-  queryHoldings(filters?: { accountId?: string; symbol?: string }): Holding[] {
+  queryHoldings(filters?: { accountId?: string | undefined; symbol?: string | undefined }): Holding[] {
     let sql = `SELECT id, account_id, symbol, quantity, current_price, market_value, cost_basis, asset_type, snapshot_date, synced_at, created_at FROM holdings WHERE 1=1`;
     const params: unknown[] = [];
 
@@ -728,7 +728,7 @@ export class FinancialRepository {
     return row ? rowToFinancialInsight(row) : undefined;
   }
 
-  listInsights(filters?: { category?: string; priority?: number; dismissedOnly?: boolean }): FinancialInsight[] {
+  listInsights(filters?: { category?: string | undefined; priority?: number | undefined; dismissedOnly?: boolean | undefined }): FinancialInsight[] {
     let sql = `SELECT id, topic, body, category, priority, recommendation, source_data_ids, dismissed_at, created_at, updated_at FROM financial_insights WHERE 1=1`;
     const params: unknown[] = [];
 

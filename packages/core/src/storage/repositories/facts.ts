@@ -109,6 +109,86 @@ export class FactRepository {
     return this.get(id) ?? null;
   }
 
+  /**
+   * Active (non-expired) facts created in `[from, to)`, oldest first. Used
+   * by the reflector to gather facts learned during a reflection window.
+   */
+  queryActiveRange(fromMs: number, toMs: number): Fact[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, category, subject, body, source, confidence, valid_from, valid_to, data, created_at
+         FROM facts
+         WHERE created_at >= ? AND created_at < ? AND valid_to IS NULL
+         ORDER BY created_at ASC`,
+      )
+      .all(fromMs, toMs) as Array<{
+      id: string;
+      category: string;
+      subject: string;
+      body: string;
+      source: string | null;
+      confidence: number;
+      valid_from: number | null;
+      valid_to: number | null;
+      data: string | null;
+      created_at: number;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      category: row.category as FactCategory,
+      subject: row.subject,
+      body: row.body,
+      source: row.source ?? undefined,
+      confidence: row.confidence,
+      validFrom: row.valid_from,
+      validTo: row.valid_to,
+      data: row.data ? (JSON.parse(row.data) as Record<string, unknown>) : undefined,
+      createdAt: row.created_at,
+    }));
+  }
+
+  /**
+   * Find the active (non-expired) fact for the given `source` and `category`.
+   * Used by the Capacities type-router to upsert a category-specific fact for
+   * a single Capacities object.
+   */
+  findActiveBySourceAndCategory(source: string, category: FactCategory): Fact | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id, category, subject, body, source, confidence, valid_from, valid_to, data, created_at
+         FROM facts
+         WHERE source = ? AND category = ? AND valid_to IS NULL
+         LIMIT 1`,
+      )
+      .get(source, category) as
+      | {
+          id: string;
+          category: string;
+          subject: string;
+          body: string;
+          source: string | null;
+          confidence: number;
+          valid_from: number | null;
+          valid_to: number | null;
+          data: string | null;
+          created_at: number;
+        }
+      | undefined;
+    if (!row) return undefined;
+    return {
+      id: row.id,
+      category: row.category as FactCategory,
+      subject: row.subject,
+      body: row.body,
+      source: row.source ?? undefined,
+      confidence: row.confidence,
+      validFrom: row.valid_from,
+      validTo: row.valid_to,
+      data: row.data ? (JSON.parse(row.data) as Record<string, unknown>) : undefined,
+      createdAt: row.created_at,
+    };
+  }
+
   byCategory(category: FactCategory, includeExpired = false): Fact[] {
     const where = includeExpired ? "category = ?" : "category = ? AND valid_to IS NULL";
     const rows = this.db

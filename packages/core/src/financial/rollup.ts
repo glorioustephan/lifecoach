@@ -47,13 +47,13 @@ export interface MonthWindow {
  * implementation of the YYYY-MM parse + local-timezone month bounds.
  */
 export const parseMonthWindow = (input: {
-  month?: string;
-  from?: number;
-  to?: number;
+  month?: string | undefined;
+  from?: number | undefined;
+  to?: number | undefined;
   /** Used when `month` is supplied — defaults to "calendar_month". */
-  windowTypeOverride?: WindowType;
+  windowTypeOverride?: WindowType | undefined;
   /** Used for current-time anchoring in tests; defaults to Date.now(). */
-  nowMs?: number;
+  nowMs?: number | undefined;
 }): MonthWindow => {
   const nowMs = input.nowMs ?? Date.now();
 
@@ -252,7 +252,7 @@ export interface BuildRollupInput {
    * excluded) for G3 outlier detection. If not provided, outlier detection
    * is skipped and outlierMonthDetected returns false.
    */
-  historicalMonthlyExpenses?: number[];
+  historicalMonthlyExpenses?: number[] | undefined;
 }
 
 /**

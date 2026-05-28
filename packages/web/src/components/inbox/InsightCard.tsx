@@ -19,6 +19,7 @@ import { Markdown } from "~/components/chat/Markdown";
 import { useChatActions } from "~/components/chat/chat-state";
 import { formatRelative } from "~/lib/time";
 import { cn } from "~/lib/cn";
+import { toast } from "~/lib/use-toast";
 
 export const PRIORITY_LABEL: Record<number, string> = {
   1: "Notice",
@@ -43,21 +44,50 @@ export function InsightCard({ insight }: { insight: InsightRow }): JSX.Element {
   const navigate = useNavigate();
   const { reset } = useChatActions();
 
+  // Both the Inbox (queryKey ["inbox", …]) and the Finances page
+  // (queryKey ["finances", "insights"]) render insights through this card.
+  // Invalidate both query trees so a dismiss/act/snooze on the Finances page
+  // actually disappears from the list — and surface a toast so the action
+  // has visible feedback.
+  const invalidateInsightQueries = (): void => {
+    void qc.invalidateQueries({ queryKey: ["inbox"] });
+    void qc.invalidateQueries({ queryKey: ["finances", "insights"] });
+  };
+  const onMutationError = (label: string) => (err: unknown): void => {
+    toast.error(label, err instanceof Error ? err.message : String(err));
+  };
+
   const act = useMutation({
     mutationFn: () => api.actInsight(insight.id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["inbox"] }),
+    onSuccess: () => {
+      invalidateInsightQueries();
+      toast.success("Marked as acted", insight.topic);
+    },
+    onError: onMutationError("Could not mark acted"),
   });
   const dismiss = useMutation({
     mutationFn: () => api.dismissInsight(insight.id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["inbox"] }),
+    onSuccess: () => {
+      invalidateInsightQueries();
+      toast.success("Insight dismissed", insight.topic);
+    },
+    onError: onMutationError("Could not dismiss"),
   });
   const snooze = useMutation({
     mutationFn: (until: number) => api.snoozeInsight(insight.id, until),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["inbox"] }),
+    onSuccess: (_data, until) => {
+      invalidateInsightQueries();
+      toast.success("Snoozed", `Until ${new Date(until).toLocaleString()}`);
+    },
+    onError: onMutationError("Could not snooze"),
   });
   const reactivate = useMutation({
     mutationFn: () => api.reactivateInsight(insight.id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["inbox"] }),
+    onSuccess: () => {
+      invalidateInsightQueries();
+      toast.success("Reactivated", insight.topic);
+    },
+    onError: onMutationError("Could not reactivate"),
   });
 
   const isClosed = !!(insight.actedOnAt || insight.dismissedAt);

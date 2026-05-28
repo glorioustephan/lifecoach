@@ -3,12 +3,12 @@ import { LifecoachError } from "../../util/errors.js";
 
 export interface AlpacaApiError extends Error {
   code: string;
-  statusCode?: number;
+  statusCode?: number | undefined;
 }
 
 export class AlpacaApiError extends Error implements AlpacaApiError {
   code: string;
-  statusCode?: number;
+  statusCode?: number | undefined;
 
   constructor(message: string, code: string, statusCode?: number) {
     super(message);

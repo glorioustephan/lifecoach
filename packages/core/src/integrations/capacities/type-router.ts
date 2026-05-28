@@ -58,22 +58,14 @@ const upsertCapacitiesFact = (
   fact: Omit<NewFact, "source" | "category">,
 ): void => {
   const source = factSource(objectId);
-  const db = storage.handle.db;
-  const existing = db
-    .prepare(
-      "SELECT id FROM facts WHERE source = ? AND category = ? AND valid_to IS NULL LIMIT 1",
-    )
-    .get(source, category) as { id: string } | undefined;
+  const existing = storage.facts.findActiveBySourceAndCategory(source, category);
 
   if (existing) {
-    db.prepare(
-      "UPDATE facts SET subject = ?, body = ?, data = ? WHERE id = ?",
-    ).run(
-      fact.subject,
-      fact.body,
-      fact.data ? JSON.stringify(fact.data) : null,
-      existing.id,
-    );
+    storage.facts.update(existing.id, {
+      subject: fact.subject,
+      body: fact.body,
+      ...(fact.data ? { data: fact.data } : {}),
+    });
     return;
   }
   storage.facts.create({ ...fact, category, source, confidence: fact.confidence ?? 1.0 });
@@ -95,18 +87,10 @@ const upsertCapacitiesProject = (
 ): void => {
   const sentinel = projectBodySentinel(objectId);
   const body = `${sentinel}\nMirrored from Capacities Project. Open in Capacities: ${CapacitiesClient.buildObjectUrl(spaceId, objectId)}`;
-  const db = storage.handle.db;
-  const existing = db
-    .prepare("SELECT id FROM projects WHERE body LIKE ? LIMIT 1")
-    .get(`%${sentinel}%`) as { id: string } | undefined;
+  const existing = storage.projects.findByBodyContains(sentinel);
 
   if (existing) {
-    db.prepare("UPDATE projects SET title = ?, body = ?, updated_at = ? WHERE id = ?").run(
-      title,
-      body,
-      Date.now(),
-      existing.id,
-    );
+    storage.projects.updateContent(existing.id, { title, body });
     return;
   }
   const newProject: NewProject = {

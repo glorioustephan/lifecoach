@@ -81,7 +81,7 @@ export class SemanticMemory {
 
   async recall(
     query: string,
-    opts: { scope?: RecallScope; limit?: number } = {},
+    opts: { scope?: RecallScope | undefined; limit?: number | undefined } = {},
   ): Promise<RecallHit[]> {
     const scope = opts.scope ?? "all";
     const limit = opts.limit ?? 8;

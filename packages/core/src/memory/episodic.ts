@@ -24,7 +24,7 @@ export class EpisodicMemory {
     const sinceMs = opts.days !== undefined
       ? Date.now() - opts.days * 24 * 60 * 60 * 1000
       : 0;
-    return this.storage.messages.recent({ sinceMs, limit: opts.limit });
+    return this.storage.messages.recent({ sinceMs, ...(opts.limit !== undefined ? { limit: opts.limit } : {}) });
   }
 
   recentSessions(limit = 10): Session[] {

@@ -154,7 +154,7 @@ export class JobRepository {
       generatedRefs?: (result: T) => JobGeneratedRef[];
     } = {},
   ): Promise<JobRunResult<T>> {
-    const run = this.start(name, { staleAfterMs: opts.staleAfterMs });
+    const run = this.start(name, { ...(opts.staleAfterMs !== undefined ? { staleAfterMs: opts.staleAfterMs } : {}) });
     if (!run) {
       const active = this.db
         .prepare("SELECT run_id FROM job_locks WHERE name = ?")

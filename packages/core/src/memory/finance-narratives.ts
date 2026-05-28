@@ -94,7 +94,7 @@ const buildMonthlyNarrative = (
       m.count += 1;
       merchantRollup.set(t.merchant, m);
       if (Math.abs(t.amount) >= 200) {
-        notable.push({ merchant: t.merchant, amount: t.amount, date: t.date, category: t.category });
+        notable.push({ merchant: t.merchant, amount: t.amount, date: t.date, ...(t.category !== undefined ? { category: t.category } : {}) });
       }
     }
     if (t.isRecurring && t.amount < 0) {
@@ -217,7 +217,7 @@ export const indexFinanceNarratives = async (
  */
 export const indexMoneyMomentFromInsight = async (
   semantic: SemanticMemory,
-  insight: { id: string; topic: string; body: string; rationale?: string; createdAt: number },
+  insight: { id: string; topic: string; body: string; rationale?: string | undefined; createdAt: number },
 ): Promise<void> => {
   const text = [
     `[finance/moment] ${new Date(insight.createdAt).toISOString().slice(0, 10)} — ${insight.topic}`,

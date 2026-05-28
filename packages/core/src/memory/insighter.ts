@@ -404,7 +404,7 @@ const gatherFinancial = (
       symbol: h.symbol,
       quantity: h.quantity,
       marketValue: h.marketValue,
-      costBasis: h.costBasis,
+      ...(h.costBasis !== undefined ? { costBasis: h.costBasis } : {}),
     }));
 
   // Recurring expense candidates ≥$50/mo (for the expense-research pattern in 1E).

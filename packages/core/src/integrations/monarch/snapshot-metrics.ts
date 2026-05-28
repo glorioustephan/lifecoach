@@ -55,9 +55,9 @@ const startOfTodayMs = (): number => {
 const accumulateTotals = (
   txns: ReadonlyArray<{
     amount: number;
-    categoryGroupType?: string | null;
-    category?: string | null;
-    accountId?: string | null;
+    categoryGroupType?: string | null | undefined;
+    category?: string | null | undefined;
+    accountId?: string | null | undefined;
   }>,
   internalAccountIds: ReadonlySet<string>,
 ): { income: number; expenses: number } => {

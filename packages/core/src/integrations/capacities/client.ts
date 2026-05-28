@@ -176,7 +176,7 @@ export class CapacitiesClient {
             "Content-Type": "application/json",
             Accept: "application/json",
           },
-          body: body !== undefined ? JSON.stringify(body) : undefined,
+          ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         });
         if (!resp.ok) {
           const text = await resp.text().catch(() => "");

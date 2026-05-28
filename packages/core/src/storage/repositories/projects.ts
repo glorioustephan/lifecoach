@@ -103,4 +103,36 @@ export class ProjectRepository {
   count(filter: ProjectListFilter = {}): number {
     return this.list({ ...filter, limit: 1_000_000 }).length;
   }
+
+  /**
+   * Find a project whose body contains the given substring. Used by the
+   * Capacities type-router as a low-impact keyless idempotency check (a
+   * `[capacities:<id>]` sentinel embedded in the body avoids a schema
+   * change just to thread an external_id column for the integration).
+   */
+  findByBodyContains(needle: string): Project | undefined {
+    const row = this.db
+      .prepare(`SELECT ${FULL} FROM projects WHERE body LIKE ? LIMIT 1`)
+      .get(`%${needle}%`) as ProjectRow | undefined;
+    return row ? rowToProject(row) : undefined;
+  }
+
+  /** Patch project title and body. Updates `updated_at` automatically. */
+  updateContent(id: string, patch: { title?: string; body?: string }): void {
+    const sets: string[] = [];
+    const args: unknown[] = [];
+    if (patch.title !== undefined) {
+      sets.push("title = ?");
+      args.push(patch.title);
+    }
+    if (patch.body !== undefined) {
+      sets.push("body = ?");
+      args.push(patch.body);
+    }
+    if (sets.length === 0) return;
+    sets.push("updated_at = ?");
+    args.push(now());
+    args.push(id);
+    this.db.prepare(`UPDATE projects SET ${sets.join(", ")} WHERE id = ?`).run(...args);
+  }
 }

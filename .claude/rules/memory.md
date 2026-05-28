@@ -38,6 +38,14 @@ All database access must go through repository classes under `packages/core/src/
 - **Transactional boundaries.** Operations that touch multiple tables must be wrapped in a single transaction (`db.transaction(fn)`). Never allow partial writes.
 - **No global db handle.** Inject the database instance via constructor or factory; never import a singleton from a side-effecting module.
 
+### Sanctioned exceptions to the raw-SQL rule
+
+Two narrow categories are permitted to access `storage.handle.db` directly. Both must be commented at the call site with the rationale.
+
+1. **Cross-table transactional cleanup.** `memory/forget.ts` and `ingest/pipeline.ts` use `db.transaction(fn)` to atomically touch 5+ tables (embeddings vec0, embedding_refs, facts, measurements, documents). Decomposing across repositories would either leak the transaction handle through every method signature or risk partial writes. Keep these as the only legitimate transaction boundaries.
+
+2. **Memory-layer internals with multi-table projections.** `memory/insighter.ts` `gather()` and `memory/semantic.ts` post-KNN hydration assemble bounded, prompt-shaped projections across multiple tables. They are not "services calling the storage layer" — they ARE the memory layer that the repository pattern serves. Where a single-table projection has a clean repository home, prefer that (and we've migrated those — `reflector.ts`, `attention.ts`, `agent/tools/reflections.ts`, server routes, scan, capacities are all repo-driven). Where the projection genuinely requires bespoke joins or GROUP BYs against multiple tables in one round-trip (Insighter's goal-state aggregation, Semantic's hydrate-by-refType), inline SQL is acceptable inside the memory module so long as it stays inside that module's file.
+
 ## Soft-delete patterns
 
 Entities that the user may want to recover must use soft-delete:

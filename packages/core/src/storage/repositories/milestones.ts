@@ -98,6 +98,31 @@ export class MilestoneRepository {
     return row ? rowToMilestone(row) : undefined;
   }
 
+  /**
+   * Milestones completed within `[fromMs, toMs)` with their parent goal
+   * title joined. Used by the reflector to enumerate "milestones we hit
+   * this week" with enough context for the prompt.
+   */
+  completedRangeWithGoalTitle(
+    fromMs: number,
+    toMs: number,
+  ): Array<Milestone & { goalTitle: string }> {
+    const rows = this.db
+      .prepare(
+        `SELECT m.id, m.goal_id, m.title, m.body, m.status, m.order_index,
+                m.due_at, m.completed_at, m.origin, m.confidence,
+                m.created_at, m.updated_at, g.title AS goal_title
+         FROM milestones m
+         JOIN goals g ON g.id = m.goal_id
+         WHERE m.status = 'done'
+           AND m.completed_at IS NOT NULL
+           AND m.completed_at >= ? AND m.completed_at < ?
+         ORDER BY m.completed_at ASC`,
+      )
+      .all(fromMs, toMs) as Array<MilestoneRow & { goal_title: string }>;
+    return rows.map((r) => ({ ...rowToMilestone(r), goalTitle: r.goal_title }));
+  }
+
   list(filter: MilestoneListFilter = {}): Milestone[] {
     const limit = filter.limit ?? 200;
     const conditions: string[] = [];

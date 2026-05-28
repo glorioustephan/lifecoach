@@ -122,6 +122,22 @@ export class TaskRepository {
     return rows.map(rowToTask);
   }
 
+  /**
+   * Tasks completed within `[fromMs, toMs)`, oldest first. Reflector uses
+   * this to enumerate "what got done" during a reflection window.
+   */
+  completedRange(fromMs: number, toMs: number): Task[] {
+    const rows = this.db
+      .prepare(
+        `SELECT ${FULL_COLUMNS} FROM tasks
+         WHERE completed_at IS NOT NULL
+           AND completed_at >= ? AND completed_at < ?
+         ORDER BY completed_at ASC`,
+      )
+      .all(fromMs, toMs) as TaskRow[];
+    return rows.map(rowToTask);
+  }
+
   count(filter: Omit<TaskListFilter, "limit" | "offset"> = {}): number {
     const conditions: string[] = [];
     const params: unknown[] = [];

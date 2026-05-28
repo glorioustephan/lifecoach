@@ -230,7 +230,7 @@ const mapPayload = (payload: ExtractionPayload): ExtractionResult => {
   }));
 
   const measurements: NewMeasurement[] = payload.measurements
-    .map((m) => {
+    .map((m): NewMeasurement | null => {
       const ts = parseDate(m.recordedAt);
       if (ts === null) return null;
       return {
@@ -238,7 +238,7 @@ const mapPayload = (payload: ExtractionPayload): ExtractionResult => {
         value: m.value,
         ...(m.unit ? { unit: m.unit } : {}),
         recordedAt: ts,
-      } satisfies NewMeasurement;
+      };
     })
     .filter((m): m is NewMeasurement => m !== null);
 

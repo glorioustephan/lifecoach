@@ -134,6 +134,24 @@ export class ReflectionRepository {
    * `period_end DESC` so the most recent window appears first regardless of
    * when the cron run produced it.
    */
+  /**
+   * Reflections whose `period_end` falls within `[from, to)`, oldest first.
+   * Used by the reflector to gather prior sub-reflections (e.g. include the
+   * week's daily reflections when generating the weekly one).
+   */
+  queryRange(fromMs: number, toMs: number): Reflection[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, period_start, period_end, kind, title, themes, wins,
+                concerns, open_threads, body, created_at
+         FROM reflections
+         WHERE period_end >= ? AND period_end < ?
+         ORDER BY period_end ASC`,
+      )
+      .all(fromMs, toMs) as ReflectionRow[];
+    return rows.map(rowToReflection);
+  }
+
   list(filter?: { kind?: ReflectionKind; limit?: number; offset?: number }): Reflection[] {
     const limit = filter?.limit ?? 10;
     const offset = filter?.offset ?? 0;

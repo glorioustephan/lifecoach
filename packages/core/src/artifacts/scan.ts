@@ -51,17 +51,7 @@ export const scanArtifacts = async (
   const origin = opts.origin ?? "cron";
   const sessionLimit = opts.sessionLimit ?? 50;
 
-  const db = storage.handle.db;
-  const sessionRows = db
-    .prepare(
-      `SELECT session_id AS sessionId, MAX(created_at) AS lastAt
-       FROM messages
-       WHERE created_at >= ? AND role = 'assistant'
-       GROUP BY session_id
-       ORDER BY lastAt DESC
-       LIMIT ?`,
-    )
-    .all(since, sessionLimit) as Array<{ sessionId: string; lastAt: number }>;
+  const sessionRows = storage.messages.recentAssistantSessions(since, sessionLimit);
 
   let scannedUntil = since;
   let candidateSessions = 0;

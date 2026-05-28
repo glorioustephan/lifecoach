@@ -8,10 +8,15 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
-    // exactOptionalPropertyTypes: scoped audit found 36 sites that would
-    // fail (mostly spread-pattern `{ field: maybeUndefined }`). Deferred
-    // to a focused refactor session — see .claude/plans/wave-4-structural.md
-    // W4.9. Re-enabling without a sweep would surface as failed typecheck.
+    // exactOptionalPropertyTypes: full sweep done across @lifecoach/* code,
+    // but the flag triggers 31 errors inside prompt-kit-installed components
+    // (loader, dropdown-menu, image, markdown) which AGENTS.md Rule 3
+    // forbids us from editing. Re-enable once prompt-kit upstream supports
+    // the stricter prop types, or once we wrap each prompt-kit component in
+    // a strictness-bridging wrapper. The widenings already applied to
+    // @lifecoach/* code (repository signatures + spread guards in callers)
+    // are kept as a no-op improvement — they tighten the type contract for
+    // future strict-mode sweeps without changing current behavior.
     "exactOptionalPropertyTypes": false,
     "esModuleInterop": true,
     "isolatedModules": true,

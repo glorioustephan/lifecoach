@@ -61,6 +61,38 @@ export class MessageRepository {
     return rows.map(rowToMessage);
   }
 
+  /** All messages within `[from, to)`, oldest first. Reflector context window. */
+  queryRange(fromMs: number, toMs: number): Message[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, session_id, role, content, tool_use, created_at
+         FROM messages
+         WHERE created_at >= ? AND created_at < ?
+         ORDER BY created_at ASC`,
+      )
+      .all(fromMs, toMs) as MessageRow[];
+    return rows.map(rowToMessage);
+  }
+
+  /**
+   * Session IDs with at least one assistant message since `sinceMs`, ordered
+   * by most recent assistant message. Used by the artifact scanner to
+   * enumerate sessions that may have produced a new artifact since the
+   * previous cron run.
+   */
+  recentAssistantSessions(sinceMs: number, limit: number): Array<{ sessionId: string; lastAt: number }> {
+    return this.db
+      .prepare(
+        `SELECT session_id AS sessionId, MAX(created_at) AS lastAt
+         FROM messages
+         WHERE created_at >= ? AND role = 'assistant'
+         GROUP BY session_id
+         ORDER BY lastAt DESC
+         LIMIT ?`,
+      )
+      .all(sinceMs, limit) as Array<{ sessionId: string; lastAt: number }>;
+  }
+
   count(): number {
     const row = this.db.prepare("SELECT COUNT(*) as c FROM messages").get() as {
       c: number;
