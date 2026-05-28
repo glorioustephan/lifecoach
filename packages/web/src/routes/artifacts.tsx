@@ -229,7 +229,7 @@ function ArtifactsRoute(): JSX.Element {
           )}
 
           {!isLoading && items.length > 0 && (
-            <ul className="divide-y divide-border-subtle rounded-md border border-border bg-surface">
+            <ul className="space-y-3">
               {items.map((a) => (
                 <ArtifactCard
                   key={a.id}
@@ -344,7 +344,7 @@ function ArtifactCard({
   const preview = a.body.length > 600 ? a.body.slice(0, 600) + "…" : a.body;
 
   return (
-    <li className="group/card px-4 py-3">
+    <li className="group/card rounded-md border border-border bg-surface px-4 py-3">
       {/* Header row */}
       <div className="flex items-baseline justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
