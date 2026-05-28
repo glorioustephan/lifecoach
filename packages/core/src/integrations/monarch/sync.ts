@@ -94,7 +94,7 @@ export async function syncMonarch(
         storage.financial.createAccount({
           externalId: monarchAcc.id,
           displayName: monarchAcc.displayName,
-          type: accountType as any,
+          type: accountType,
           balance: monarchAcc.currentBalance,
           currency: "USD",
           institution: monarchAcc.institution?.name,

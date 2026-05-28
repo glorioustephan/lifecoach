@@ -2,10 +2,12 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Lifecoach } from "@lifecoach/core";
 import { indexGoal, indexMilestone } from "@lifecoach/core";
+import { goalStatus, goalHorizon, goalKind as goalKindSchema, projectStatus } from "@lifecoach/schemas";
 
 const goalKind = z.enum(["outcome", "process", "identity"]);
 const goalCadence = z.enum(["daily", "weekly", "monthly"]);
 const reviewCadence = z.enum(["weekly", "monthly", "quarterly", "as-needed"]);
+const goalStatusQuery = z.enum(["active", "paused", "done", "abandoned", "all"]);
 
 // Create accepts the expanded WOOP / kind / cadence surface from the goal
 // edit Sheet. All new fields are optional; defaults match the schema layer.
@@ -105,15 +107,20 @@ export const goalRoutes = (lc: Lifecoach) => {
   const app = new Hono();
 
   app.get("/", (c) => {
-    const status = (c.req.query("status") ?? "active") as never;
-    const horizon = c.req.query("horizon");
-    const kind = c.req.query("kind");
+    // Validate every enum-shaped query param via its Zod validator so we
+    // never widen URL strings into typed enums with `as`. Bad input falls
+    // back to the documented default rather than corrupting the call.
+    const status = goalStatus.safeParse(c.req.query("status") ?? "active").data ?? "active";
+    const horizonRaw = c.req.query("horizon");
+    const horizon = horizonRaw ? goalHorizon.safeParse(horizonRaw).data : undefined;
+    const kindRaw = c.req.query("kind");
+    const kind = kindRaw ? goalKindSchema.safeParse(kindRaw).data : undefined;
     const projectId = c.req.query("projectId");
     return c.json({
       goals: lc.storage.goals.list({
         status,
-        ...(horizon ? { horizon: horizon as never } : {}),
-        ...(kind ? { kind: kind as never } : {}),
+        ...(horizon ? { horizon } : {}),
+        ...(kind ? { kind } : {}),
         ...(projectId ? { projectId } : {}),
         limit: 200,
       }),
@@ -334,7 +341,7 @@ export const goalRoutes = (lc: Lifecoach) => {
   // ── Projects, mounted under /projects (also accessible from /goals/projects)
   const projects = new Hono();
   projects.get("/", (c) => {
-    const status = (c.req.query("status") ?? "active") as never;
+    const status = projectStatus.safeParse(c.req.query("status") ?? "active").data ?? "active";
     return c.json({ projects: lc.storage.projects.list({ status, limit: 100 }) });
   });
   projects.post("/", async (c) => {

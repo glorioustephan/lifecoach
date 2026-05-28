@@ -18,7 +18,7 @@ export const buildFinancialTools = (storage: Storage) => [
       type: z.enum(["checking", "savings", "credit_card", "investment", "debt", "other"]).optional(),
     },
     async ({ status, type }) => {
-      const accounts = storage.financial.listAccounts({ status: status as any, type: type as any });
+      const accounts = storage.financial.listAccounts({ status, type });
       return {
         content: [
           {
@@ -347,7 +347,7 @@ export const buildFinancialTools = (storage: Storage) => [
     },
     async ({ category, priority }) => {
       const insights = storage.financial.listInsights({
-        category: category as any,
+        category,
         priority: priority ? Number(priority) : undefined,
       });
 

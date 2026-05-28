@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Lifecoach } from "@lifecoach/core";
 import { forgetDocument, kindWindow } from "@lifecoach/core";
-import { factUpdateSchema } from "@lifecoach/schemas";
+import { factUpdateSchema, factCategory } from "@lifecoach/schemas";
 
 const reflectSchema = z.object({
   kind: z.enum(["daily", "weekly", "monthly"]),
@@ -34,7 +34,11 @@ export const memoryRoutes = (lc: Lifecoach) => {
       : never;
 
     if (category) {
-      allFacts = lc.storage.facts.byCategory(category as never, includeExpired);
+      const parsedCategory = factCategory.safeParse(category);
+      if (!parsedCategory.success) {
+        return c.json({ error: "invalid_category" }, 400);
+      }
+      allFacts = lc.storage.facts.byCategory(parsedCategory.data, includeExpired);
     } else {
       // No category filter — return all categories
       const categories = [

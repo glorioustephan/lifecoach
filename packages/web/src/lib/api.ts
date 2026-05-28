@@ -1,4 +1,22 @@
 // Same-origin fetch helpers. In dev, Vite proxies /api → http://localhost:3717.
+//
+// Domain shapes are derived from `@lifecoach/schemas` so any rename or field
+// addition in the canonical schema surfaces here as a TypeScript error rather
+// than silently drifting between layers. Where the HTTP response is an
+// intentional projection of the full schema entity, we use `Pick<...>` rather
+// than redeclaring fields.
+import type {
+  Account,
+  Transaction,
+  Holding,
+  Budget,
+  GoalKind,
+  GoalCadence,
+  GoalReviewCadence,
+  InsightState as SchemaInsightState,
+} from "@lifecoach/schemas";
+
+export type { GoalKind, GoalCadence, GoalReviewCadence } from "@lifecoach/schemas";
 
 export interface StatusResponse {
   deployment?: {
@@ -54,42 +72,26 @@ export interface ArtifactSettingsRow {
 }
 
 // ─── Financial (Monarch Money) ───────────────────────────────────────────────
+// HTTP projections of the canonical `@lifecoach/schemas` entities. Using
+// `Pick<>` rather than redeclaring keeps these locked to the schema — a
+// rename of `displayName` → `name` upstream breaks the build here.
 
-export interface FinancialAccount {
-  id: string;
-  displayName: string;
-  type: string;
-  balance: number;
-  status: string;
-  institution?: string;
-  syncedAt: number;
-}
+export type FinancialAccount = Pick<
+  Account,
+  "id" | "displayName" | "type" | "balance" | "status" | "institution" | "syncedAt"
+>;
 
-export interface FinancialTransaction {
-  id: string;
-  date: number;
-  merchant: string;
-  amount: number;
-  category?: string;
-  isPending: boolean;
-}
+export type FinancialTransaction = Pick<
+  Transaction,
+  "id" | "date" | "merchant" | "amount" | "category" | "isPending"
+>;
 
-export interface FinancialHolding {
-  id: string;
-  symbol: string;
-  quantity: number;
-  currentPrice: number;
-  marketValue: number;
-  costBasis?: number;
-}
+export type FinancialHolding = Pick<
+  Holding,
+  "id" | "symbol" | "quantity" | "currentPrice" | "marketValue" | "costBasis"
+>;
 
-export interface FinancialBudget {
-  id: string;
-  category: string;
-  month: string;
-  limit: number;
-  spent: number;
-}
+export type FinancialBudget = Pick<Budget, "id" | "category" | "month" | "limit" | "spent">;
 
 /**
  * Financial insights are now the finance-tagged subset of unified inbox
@@ -183,11 +185,9 @@ export interface InsightRow {
   snoozedUntil?: number | null;
 }
 
-export type InsightState = "active" | "acted" | "dismissed" | "snoozed" | "all";
-
-export type GoalKind = "outcome" | "process" | "identity";
-export type GoalCadence = "daily" | "weekly" | "monthly";
-export type GoalReviewCadence = "weekly" | "monthly" | "quarterly" | "as-needed";
+// `"all"` is a query-filter sentinel, not a row state, so we widen the
+// canonical schema type rather than redeclare it.
+export type InsightState = SchemaInsightState | "all";
 
 export interface GoalRow {
   id: string;

@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import {
   evidenceRefSchema,
+  insightPriority,
   type EvidenceRef,
   type Insight,
   type InsightPriority,
@@ -24,7 +25,7 @@ const insightPayloadSchema = z.object({
         topic: z.string().min(1),
         body: z.string().min(1),
         rationale: z.string().optional(),
-        priority: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(1),
+        priority: insightPriority.default(1),
         sourceFactIds: z.array(z.string()).default([]),
         evidenceRefs: z.array(evidenceRefSchema).default([]),
       }),

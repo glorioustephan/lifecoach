@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { insightPriority, type InsightPriority } from "./insight.js";
 
 export const accountType = z.enum([
   "checking",
@@ -131,8 +132,11 @@ export const insightCategory = z.enum([
 ]);
 export type InsightCategory = z.infer<typeof insightCategory>;
 
-export const financialInsightPriority = z.union([z.literal(1), z.literal(2), z.literal(3)]);
-export type FinancialInsightPriority = z.infer<typeof financialInsightPriority>;
+// Financial insight priority is identical to the generic insight priority
+// (1 = normal, 2 = worth noticing, 3 = needs attention). Aliased here so the
+// financial schema reads self-contained, but anchored to a single source.
+export const financialInsightPriority = insightPriority;
+export type FinancialInsightPriority = InsightPriority;
 
 export const financialInsightSchema = z.object({
   id: z.string(),
@@ -155,3 +159,38 @@ export const newFinancialInsightSchema = financialInsightSchema.omit({
   dismissedAt: true,
 });
 export type NewFinancialInsight = z.infer<typeof newFinancialInsightSchema>;
+
+// ─── Categorization corrections ─────────────────────────────────────────────
+// Stored separately from `transactions` so re-syncs from Monarch never
+// overwrite user corrections. Effective category is computed at read time
+// (override > rule > raw) in the financial repository.
+
+/**
+ * A user correction to a single transaction's category. Highest precedence in
+ * the read-time merge.
+ */
+export const transactionOverrideSchema = z.object({
+  id: z.string(),
+  transactionExternalId: z.string(),
+  category: z.string().min(1),
+  notes: z.string().optional(),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int(),
+});
+export type TransactionOverride = z.infer<typeof transactionOverrideSchema>;
+
+/**
+ * A pattern-based rule applied at read time across all present and future
+ * transactions: merchant substring match (case-insensitive), optional account
+ * scope, highest `priority` wins.
+ */
+export const categorizationRuleSchema = z.object({
+  id: z.string(),
+  merchantPattern: z.string().min(1),
+  accountId: z.string().optional(),
+  category: z.string().min(1),
+  priority: z.number().int(),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int(),
+});
+export type CategorizationRule = z.infer<typeof categorizationRuleSchema>;

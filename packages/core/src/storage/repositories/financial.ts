@@ -1,17 +1,25 @@
 import type { Database } from "better-sqlite3";
-import type {
-  Account,
-  NewAccount,
-  Transaction,
-  NewTransaction,
-  Holding,
-  NewHolding,
-  Budget,
-  NewBudget,
-  FinancialInsight,
-  NewFinancialInsight,
-  AccountType,
-  AccountStatus,
+import {
+  accountType,
+  accountStatus,
+  assetType,
+  budgetStatus,
+  insightCategory,
+  financialInsightPriority,
+  type Account,
+  type NewAccount,
+  type Transaction,
+  type NewTransaction,
+  type Holding,
+  type NewHolding,
+  type Budget,
+  type NewBudget,
+  type FinancialInsight,
+  type NewFinancialInsight,
+  type TransactionOverride,
+  type CategorizationRule,
+  type AccountStatus,
+  type AccountType,
 } from "@lifecoach/schemas";
 import { newId, now } from "../../util/ids.js";
 
@@ -95,34 +103,6 @@ interface CategorizationRuleRow {
   updated_at: number;
 }
 
-/**
- * A user correction to Monarch's categorization. Stored separately so re-syncs
- * never overwrite the correction (effective category is computed at read time).
- */
-export interface TransactionOverride {
-  id: string;
-  transactionExternalId: string;
-  category: string;
-  notes?: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-/**
- * A pattern-based categorization rule. Effective at read time across all
- * present + future transactions: merchant substring match (case-insensitive),
- * optional account scope, highest priority wins.
- */
-export interface CategorizationRule {
-  id: string;
-  merchantPattern: string;
-  accountId?: string;
-  category: string;
-  priority: number;
-  createdAt: number;
-  updatedAt: number;
-}
-
 interface FinancialInsightRow {
   id: string;
   topic: string;
@@ -136,15 +116,19 @@ interface FinancialInsightRow {
   updated_at: number;
 }
 
+// Row → domain mappers parse enum columns through their Zod validators rather
+// than asserting via `as`. That gives us a runtime guard against corrupt rows
+// (forces an early, named error) and erases the structural-cast risk if the
+// enum is ever widened in schemas.
 const rowToAccount = (row: AccountRow): Account => ({
   id: row.id,
   externalId: row.external_id,
   displayName: row.display_name,
-  type: row.type as AccountType,
+  type: accountType.parse(row.type),
   balance: row.balance,
   currency: row.currency,
   institution: row.institution ?? undefined,
-  status: row.status as AccountStatus,
+  status: accountStatus.parse(row.status),
   syncedAt: row.synced_at,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -179,7 +163,7 @@ const rowToHolding = (row: HoldingRow): Holding => ({
   currentPrice: row.current_price,
   marketValue: row.market_value,
   costBasis: row.cost_basis ?? undefined,
-  assetType: row.asset_type as any,
+  assetType: assetType.parse(row.asset_type),
   snapshotDate: row.snapshot_date,
   syncedAt: row.synced_at,
   createdAt: row.created_at,
@@ -191,7 +175,7 @@ const rowToBudget = (row: BudgetRow): Budget => ({
   month: row.month,
   limit: row.limit,
   spent: row.spent,
-  status: row.status as any,
+  status: budgetStatus.parse(row.status),
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -246,8 +230,8 @@ const rowToFinancialInsight = (row: FinancialInsightRow): FinancialInsight => ({
   id: row.id,
   topic: row.topic,
   body: row.body,
-  category: row.category as any,
-  priority: row.priority as any,
+  category: insightCategory.parse(row.category),
+  priority: financialInsightPriority.parse(row.priority),
   recommendation: row.recommendation ?? undefined,
   sourceDataIds: JSON.parse(row.source_data_ids) as string[],
   dismissedAt: row.dismissed_at ?? undefined,
