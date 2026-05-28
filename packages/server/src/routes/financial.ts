@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Lifecoach } from "@lifecoach/core";
+import { backfillFromCsv, parseMonarchCsv } from "@lifecoach/core";
 
 // Credit cards and debt accounts are liabilities; everything else is an asset.
 const LIABILITY_TYPES = new Set(["debt", "credit_card"]);
@@ -67,6 +68,37 @@ export const financialRoutes = (lc: Lifecoach) => {
       i.evidenceRefs.some((ref) => FINANCE_REF_TYPES.has(ref.refType)),
     );
     return c.json({ insights });
+  });
+
+  /**
+   * One-time historical backfill from a Monarch CSV export. Multipart upload
+   * with field "file". Only seeds rows OLDER than the live 90-day sync window;
+   * deterministic synthetic external IDs mean re-uploading the same export
+   * upserts zero new rows.
+   */
+  app.post("/backfill", async (c) => {
+    const form = await c.req.formData();
+    const file = form.get("file");
+    if (!file || typeof file === "string") {
+      return c.json({ error: "no_file" }, 400);
+    }
+    const text = await (file as File).text();
+    const parsed = parseMonarchCsv(text);
+    if (parsed.rows.length === 0) {
+      return c.json(
+        {
+          error: "no_rows_parsed",
+          totalRows: parsed.totalRows,
+          skipped: parsed.skipped,
+          hint: "Expected Monarch transaction-export CSV with at least Date and Amount columns.",
+        },
+        400,
+      );
+    }
+    const result = backfillFromCsv(lc.storage, parsed.rows);
+    return c.json({
+      result: { ...result, skippedRows: parsed.skipped },
+    });
   });
 
   return app;

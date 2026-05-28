@@ -511,4 +511,35 @@ export const api = {
     }>("/api/financial/holdings"),
   financialInsights: () =>
     get<{ insights: FinancialInsightRow[] }>("/api/financial/insights"),
+
+  /**
+   * One-time historical backfill from a Monarch CSV export. Only rows older
+   * than the live 90-day sync window are upserted (synthetic external IDs make
+   * re-uploads idempotent). Returns counts so the UI can show what happened.
+   */
+  backfillMonarchCsv: async (file: File): Promise<MonarchBackfillResponse> => {
+    const form = new FormData();
+    form.append("file", file);
+    const resp = await fetch("/api/financial/backfill", { method: "POST", body: form });
+    const data = (await resp.json().catch(() => ({}))) as
+      | { error?: string; hint?: string }
+      | MonarchBackfillResponse;
+    if (!resp.ok) {
+      const err = data as { error?: string; hint?: string };
+      throw new Error(err.error ? `${err.error}${err.hint ? ` — ${err.hint}` : ""}` : `${resp.status} ${resp.statusText}`);
+    }
+    return data as MonarchBackfillResponse;
+  },
 };
+
+export interface MonarchBackfillResponse {
+  result: {
+    totalRows: number;
+    transactionsUpserted: number;
+    inLiveWindowSkipped: number;
+    accountsCreated: number;
+    measurementsSeeded: number;
+    measurementsAlreadyPresent: number;
+    skippedRows: number;
+  };
+}

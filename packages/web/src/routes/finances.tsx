@@ -1,6 +1,7 @@
+import { useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { DollarSign, RefreshCw } from "lucide-react";
+import { DollarSign, RefreshCw, Upload } from "lucide-react";
 import { ViewHeader } from "~/components/ui/ViewHeader";
 import { Button } from "~/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/Card";
@@ -53,6 +54,37 @@ function FinancesRoute(): JSX.Element {
   const syncLoading = syncMutation.isPending;
   const handleSync = () => syncMutation.mutate();
 
+  // One-time historical backfill from a Monarch CSV export. Idempotent on
+  // re-upload; only seeds rows older than the live 90-day sync window.
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+  const backfillMutation = useMutation({
+    mutationFn: (file: File) => api.backfillMonarchCsv(file),
+    onMutate: () => setBackfillMsg("Importing…"),
+    onSuccess: ({ result }) => {
+      const parts = [
+        `${result.transactionsUpserted} transactions imported`,
+        `${result.accountsCreated} new account${result.accountsCreated === 1 ? "" : "s"}`,
+        `${result.measurementsSeeded} monthly metrics seeded`,
+      ];
+      if (result.inLiveWindowSkipped > 0) parts.push(`${result.inLiveWindowSkipped} skipped (within 90-day live window)`);
+      if (result.measurementsAlreadyPresent > 0) parts.push(`${result.measurementsAlreadyPresent} metric rows already present`);
+      setBackfillMsg(parts.join(" · "));
+      void queryClient.invalidateQueries({ queryKey: ["finances"] });
+      void queryClient.invalidateQueries({ queryKey: ["status"] });
+      setTimeout(() => setBackfillMsg(null), 15_000);
+    },
+    onError: (err: unknown) => {
+      setBackfillMsg(err instanceof Error ? `Import failed: ${err.message}` : "Import failed.");
+      setTimeout(() => setBackfillMsg(null), 10_000);
+    },
+  });
+  const onPickCsv = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (file) backfillMutation.mutate(file);
+  };
+
   const accounts = accountsData?.accounts ?? [];
   const budgets = budgetsData?.budgets ?? [];
   const transactions = transactionsData?.transactions ?? [];
@@ -70,21 +102,48 @@ function FinancesRoute(): JSX.Element {
         title="Financial Overview"
         subtitle="360° view of your finances"
         actions={
-          <Button
-            onClick={handleSync}
-            disabled={syncLoading}
-            variant="secondary"
-            size="sm"
-            className="gap-2"
-          >
-            <RefreshCw className={cn("size-3.5", syncLoading && "animate-spin")} strokeWidth={1.75} />
-            {syncLoading ? "Syncing…" : "Sync"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={onPickCsv}
+              disabled={backfillMutation.isPending}
+            />
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={backfillMutation.isPending}
+              variant="secondary"
+              size="sm"
+              className="gap-2"
+              title="Import a Monarch CSV export to seed history older than the live 90-day window. Idempotent on re-upload."
+            >
+              <Upload className="size-3.5" strokeWidth={1.75} />
+              {backfillMutation.isPending ? "Importing…" : "Import history"}
+            </Button>
+            <Button
+              onClick={handleSync}
+              disabled={syncLoading}
+              variant="secondary"
+              size="sm"
+              className="gap-2"
+            >
+              <RefreshCw className={cn("size-3.5", syncLoading && "animate-spin")} strokeWidth={1.75} />
+              {syncLoading ? "Syncing…" : "Sync"}
+            </Button>
+          </div>
         }
       />
 
       <div className="flex-1 overflow-y-auto mobile-safe-bottom">
         <div className="mx-auto max-w-2xl space-y-6 px-4 pb-6 pt-8 md:px-6">
+
+          {backfillMsg && (
+            <p className="rounded-md border border-border-subtle bg-surface px-3 py-2 text-xs text-fg-muted">
+              {backfillMsg}
+            </p>
+          )}
 
           {/* Account Overview Cards */}
           {accounts.length > 0 && (

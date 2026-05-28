@@ -19,3 +19,7 @@ export {
   recordMonarchError,
 } from "./credentials.js";
 export type { MonarchCredentials, MonarchSettings } from "./credentials.js";
+export { backfillFromCsv } from "./backfill.js";
+export type { BackfillResult, BackfillOptions } from "./backfill.js";
+export { parseMonarchCsv } from "../../ingest/parsers/monarch-csv.js";
+export type { ParsedMonarchCsvRow, ParseMonarchCsvResult } from "../../ingest/parsers/monarch-csv.js";

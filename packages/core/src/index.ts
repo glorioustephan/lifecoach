@@ -130,6 +130,12 @@ export {
   MONARCH_PROFILE_KEYS,
   type MonarchCredentials,
   type MonarchSettings,
+  backfillFromCsv,
+  parseMonarchCsv,
+  type BackfillResult,
+  type BackfillOptions,
+  type ParsedMonarchCsvRow,
+  type ParseMonarchCsvResult,
 } from "./integrations/index.js";
 export { forgetDocument, type ForgetDocumentResult } from "./memory/forget.js";
 export { refreshAttentionSignals } from "./memory/attention.js";
