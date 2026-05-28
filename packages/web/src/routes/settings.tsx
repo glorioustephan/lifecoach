@@ -8,6 +8,7 @@ import { TabNav } from "~/components/ui/TabNav";
 import { cn } from "~/lib/cn";
 import { formatRelative } from "~/lib/time";
 import { useTheme } from "~/lib/theme";
+import { toast } from "~/lib/use-toast";
 
 type Tab = "profile" | "sources" | "system" | "archived";
 
@@ -226,26 +227,29 @@ type Source = NonNullable<Awaited<ReturnType<typeof api.sources>>["sources"]>[nu
 
 function ImportExportSection(): JSX.Element {
   const qc = useQueryClient();
-  const [result, setResult] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   const importMut = useMutation({
     mutationFn: (files: File[]) => api.importMarkdown(files, (p) => setProgress(p)),
     onMutate: () => {
-      setResult(null);
       setProgress({ done: 0, total: 0 });
     },
     onSuccess: (r) => {
       setProgress(null);
       const parts = [`Imported ${r.imported}`, `skipped ${r.skipped} (dupes)`];
       if (r.failed > 0) parts.push(`failed ${r.failed}`);
-      setResult(parts.join(" · ") + (r.errors.length > 0 ? ` — ${r.errors[0]}` : ""));
+      const detail = parts.join(" · ") + (r.errors.length > 0 ? ` — ${r.errors[0]}` : "");
+      if (r.failed > 0) {
+        toast.warning("Import finished with errors", detail);
+      } else {
+        toast.success("Import complete", detail);
+      }
       void qc.invalidateQueries({ queryKey: ["sources"] });
       void qc.invalidateQueries({ queryKey: ["status"] });
     },
     onError: (err: unknown) => {
       setProgress(null);
-      setResult(err instanceof Error ? `error: ${err.message}` : "import failed");
+      toast.error("Import failed", err instanceof Error ? err.message : String(err));
     },
   });
 
@@ -307,7 +311,6 @@ function ImportExportSection(): JSX.Element {
               : "Reading upload…"}
           </p>
         )}
-        {result && <p className="font-mono text-[11px] text-fg-faint">{result}</p>}
       </div>
     </section>
   );
@@ -325,7 +328,6 @@ function MonarchConnectionSection(): JSX.Element {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mfaSecret, setMfaSecret] = useState("");
-  const [feedback, setFeedback] = useState<string | null>(null);
 
   const save = useMutation({
     mutationFn: () =>
@@ -335,34 +337,37 @@ function MonarchConnectionSection(): JSX.Element {
         ...(mfaSecret.trim() ? { mfaSecret: mfaSecret.trim() } : {}),
       }),
     onSuccess: () => {
-      setFeedback("Connected — credentials verified and stored.");
+      toast.success("Monarch connected", "Credentials verified and stored.");
       setPassword("");
       setMfaSecret("");
       void qc.invalidateQueries({ queryKey: ["monarch-settings"] });
       void qc.invalidateQueries({ queryKey: ["sources"] });
     },
     onError: (err: unknown) => {
-      setFeedback(err instanceof Error ? `Error: ${err.message}` : "Failed to connect.");
+      toast.error("Could not connect Monarch", err instanceof Error ? err.message : String(err));
     },
   });
 
   const sync = useMutation({
     mutationFn: api.syncMonarch,
     onSuccess: (r) => {
-      setFeedback(
-        r.skipped
-          ? "A sync is already running."
-          : r.result
-            ? `Synced — ${r.result.accountsUpserted} accounts · ${r.result.transactionsUpserted} transactions${r.result.transactionsUnlinked > 0 ? ` (${r.result.transactionsUnlinked} unlinked)` : ""} · ${r.result.holdingsSnapshotted} holdings.`
-            : "Sync complete.",
-      );
+      if (r.skipped) {
+        toast.info("Already syncing", "A sync is already running.");
+      } else if (r.result) {
+        toast.success(
+          "Monarch synced",
+          `${r.result.accountsUpserted} accounts · ${r.result.transactionsUpserted} transactions${r.result.transactionsUnlinked > 0 ? ` (${r.result.transactionsUnlinked} unlinked)` : ""} · ${r.result.holdingsSnapshotted} holdings`,
+        );
+      } else {
+        toast.success("Sync complete");
+      }
       void qc.invalidateQueries({ queryKey: ["monarch-settings"] });
       void qc.invalidateQueries({ queryKey: ["finances"] });
       void qc.invalidateQueries({ queryKey: ["sources"] });
       void qc.invalidateQueries({ queryKey: ["status"] });
     },
     onError: (err: unknown) => {
-      setFeedback(err instanceof Error ? `Sync failed: ${err.message}` : "Sync failed.");
+      toast.error("Sync failed", err instanceof Error ? err.message : String(err));
     },
   });
 
@@ -448,7 +453,6 @@ function MonarchConnectionSection(): JSX.Element {
             re-enter anything. The fields above are only for updating them.
           </p>
         )}
-        {feedback && <p className="font-mono text-[11px] text-fg-faint">{feedback}</p>}
       </div>
     </section>
   );
@@ -456,7 +460,6 @@ function MonarchConnectionSection(): JSX.Element {
 
 function SourceRow({ source }: { source: Source }): JSX.Element {
   const qc = useQueryClient();
-  const [lastResult, setLastResult] = useState<string | null>(null);
 
   const sync = useMutation({
     mutationFn: async () => {
@@ -467,12 +470,12 @@ function SourceRow({ source }: { source: Source }): JSX.Element {
       throw new Error(`No sync for source ${source.id}`);
     },
     onSuccess: (msg) => {
-      setLastResult(msg);
+      toast.success(`${source.name} synced`, msg);
       void qc.invalidateQueries({ queryKey: ["sources"] });
       void qc.invalidateQueries({ queryKey: ["status"] });
     },
     onError: (err: unknown) => {
-      setLastResult(err instanceof Error ? `error: ${err.message}` : "sync failed");
+      toast.error(`${source.name} sync failed`, err instanceof Error ? err.message : String(err));
     },
   });
 
@@ -513,9 +516,6 @@ function SourceRow({ source }: { source: Source }): JSX.Element {
           </button>
         )}
       </div>
-      {lastResult && (
-        <p className="mt-1 font-mono text-[10px] text-fg-faint">{lastResult}</p>
-      )}
       {source.id === "capacities" && source.connected && !source.defaultSpaceId && (
         <p className="mt-1 text-[10px] text-fg-faint">
           Set <code>CAPACITIES_DEFAULT_SPACE_ID</code> to enable reflection write-back and
@@ -540,9 +540,13 @@ function ArtifactExtractionSection(): JSX.Element {
 
   const toggle = useMutation({
     mutationFn: (next: boolean) => api.setArtifactAutoExtract(next),
-    onSuccess: () => {
+    onSuccess: (_data, next) => {
       void qc.invalidateQueries({ queryKey: ["artifact-settings"] });
       void qc.invalidateQueries({ queryKey: ["status"] });
+      toast.success(next ? "Auto-extraction enabled" : "Auto-extraction disabled");
+    },
+    onError: (err: unknown) => {
+      toast.error("Could not update setting", err instanceof Error ? err.message : String(err));
     },
   });
 
@@ -615,6 +619,10 @@ function ArchivedSessionRow({
     mutationFn: () => api.unarchiveSession(session.id),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["sessions"] });
+      toast.success("Session restored");
+    },
+    onError: (err: unknown) => {
+      toast.error("Restore failed", err instanceof Error ? err.message : String(err));
     },
   });
 

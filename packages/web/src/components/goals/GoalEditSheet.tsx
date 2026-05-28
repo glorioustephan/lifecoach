@@ -13,6 +13,7 @@ import {
   type MilestoneRow,
 } from "~/lib/api";
 import { cn } from "~/lib/cn";
+import { toast } from "~/lib/use-toast";
 
 interface GoalEditSheetProps {
   goal: GoalRow | null;
@@ -139,6 +140,10 @@ function OverviewTab({
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["goals"] });
+      toast.success("Goal saved", title.trim());
+    },
+    onError: (err: unknown) => {
+      toast.error("Save failed", err instanceof Error ? err.message : String(err));
     },
   });
 
@@ -146,7 +151,11 @@ function OverviewTab({
     mutationFn: () => api.archiveGoal(goal.id),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["goals"] });
+      toast.success("Goal archived", goal.title);
       onClose();
+    },
+    onError: (err: unknown) => {
+      toast.error("Archive failed", err instanceof Error ? err.message : String(err));
     },
   });
 
@@ -154,7 +163,11 @@ function OverviewTab({
     mutationFn: () => api.updateGoal(goal.id, { status: "done" }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["goals"] });
+      toast.success("Goal completed", goal.title);
       onClose();
+    },
+    onError: (err: unknown) => {
+      toast.error("Could not complete goal", err instanceof Error ? err.message : String(err));
     },
   });
 

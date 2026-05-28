@@ -9,6 +9,7 @@ import { api, type InsightRow, type InsightState } from "~/lib/api";
 import { cn } from "~/lib/cn";
 import { BriefingPanel } from "~/components/inbox/BriefingPanel";
 import { InsightCard } from "~/components/inbox/InsightCard";
+import { toast } from "~/lib/use-toast";
 
 export const Route = createFileRoute("/inbox")({
   component: InboxRoute,
@@ -48,6 +49,10 @@ function InboxRoute(): JSX.Element {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["inbox"] });
       void qc.invalidateQueries({ queryKey: ["status"] });
+      toast.success("Insights refreshed");
+    },
+    onError: (err: unknown) => {
+      toast.error("Could not generate insights", err instanceof Error ? err.message : String(err));
     },
   });
 
@@ -95,14 +100,6 @@ function InboxRoute(): JSX.Element {
           onChange={handleFilterChange}
           variant="underline"
         />
-
-        {generate.isError && (
-          <div className="mx-auto mt-3 w-full max-w-2xl px-4 md:px-6">
-            <div className="rounded-md border border-destructive-500/40 bg-destructive-500/5 px-3 py-2 text-xs text-destructive-300">
-              {generate.error instanceof Error ? generate.error.message : "Generation failed"}
-            </div>
-          </div>
-        )}
 
         <div className="mx-auto max-w-2xl space-y-4 px-4 py-4 md:px-6">
           {filter === "active" && <BriefingPanel />}

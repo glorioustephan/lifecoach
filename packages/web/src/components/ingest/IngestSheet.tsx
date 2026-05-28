@@ -5,6 +5,7 @@ import { CheckCircle2, FileText, AlertCircle } from "lucide-react";
 import { useIngest } from "./IngestProvider";
 import { Sheet, SheetBody, SheetHeader } from "~/components/ui/Sheet";
 import { cn } from "~/lib/cn";
+import { toast } from "~/lib/use-toast";
 
 interface IngestResponse {
   result: {
@@ -62,10 +63,26 @@ export const IngestSheet = (): JSX.Element => {
       }
       return body as IngestResponse;
     },
-    onSuccess: () => {
+    onSuccess: ({ result }) => {
       void qc.invalidateQueries({ queryKey: ["memory"] });
       void qc.invalidateQueries({ queryKey: ["status"] });
       void qc.invalidateQueries({ queryKey: ["sources"] });
+      if (result.skipped) {
+        toast.info("Already ingested", result.document.title ?? undefined);
+      } else {
+        const parts: string[] = [];
+        if (result.factsExtracted > 0) parts.push(`${result.factsExtracted} facts`);
+        if (result.measurementsExtracted > 0)
+          parts.push(`${result.measurementsExtracted} measurements`);
+        if (result.chunkCount > 0) parts.push(`${result.chunkCount} chunks`);
+        toast.success(
+          `Ingested ${result.document.title ?? "file"}`,
+          parts.length > 0 ? parts.join(" · ") : undefined,
+        );
+      }
+    },
+    onError: (err: unknown) => {
+      toast.error("Ingest failed", err instanceof Error ? err.message : String(err));
     },
   });
 

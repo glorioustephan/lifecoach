@@ -5,6 +5,7 @@ import { Circle, CheckCircle2, Loader2 } from "lucide-react";
 import { ViewHeader } from "~/components/ui/ViewHeader";
 import { PaginationNav } from "~/components/ui/PaginationNav";
 import { cn } from "~/lib/cn";
+import { toast } from "~/lib/use-toast";
 
 export const Route = createFileRoute("/tasks")({
   component: TasksRoute,
@@ -62,8 +63,9 @@ function TasksRoute(): JSX.Element {
       );
       return { prev };
     },
-    onError: (_err, _id, ctx) => {
+    onError: (err: unknown, _id, ctx) => {
       if (ctx?.prev) qc.setQueryData(["tasks", "active", page], ctx.prev);
+      toast.error("Could not complete task", err instanceof Error ? err.message : String(err));
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["tasks"] });

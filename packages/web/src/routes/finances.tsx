@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DollarSign, RefreshCw, Upload } from "lucide-react";
@@ -10,6 +10,7 @@ import { api } from "~/lib/api";
 import { cn } from "~/lib/cn";
 import { formatCurrency, formatPercent } from "~/lib/money";
 import { InsightCard } from "~/components/inbox/InsightCard";
+import { toast } from "~/lib/use-toast";
 
 export const Route = createFileRoute("/finances")({
   component: FinancesRoute,
@@ -45,6 +46,17 @@ function FinancesRoute(): JSX.Element {
 
   const syncMutation = useMutation({
     mutationFn: api.syncMonarch,
+    onSuccess: (data) => {
+      const r = (data as { result?: { transactionsUpserted?: number; accountsUpserted?: number } })
+        ?.result;
+      const parts: string[] = [];
+      if (r?.transactionsUpserted !== undefined) parts.push(`${r.transactionsUpserted} transactions`);
+      if (r?.accountsUpserted !== undefined) parts.push(`${r.accountsUpserted} accounts`);
+      toast.success("Monarch synced", parts.length > 0 ? parts.join(" · ") : undefined);
+    },
+    onError: (err: unknown) => {
+      toast.error("Sync failed", err instanceof Error ? err.message : String(err));
+    },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["finances"] });
       void queryClient.invalidateQueries({ queryKey: ["status"] });
@@ -57,10 +69,8 @@ function FinancesRoute(): JSX.Element {
   // One-time historical backfill from a Monarch CSV export. Idempotent on
   // re-upload; only seeds rows older than the live 90-day sync window.
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
   const backfillMutation = useMutation({
     mutationFn: (file: File) => api.backfillMonarchCsv(file),
-    onMutate: () => setBackfillMsg("Importing…"),
     onSuccess: ({ result }) => {
       const parts = [
         `${result.transactionsUpserted} transactions imported`,
@@ -69,14 +79,12 @@ function FinancesRoute(): JSX.Element {
       ];
       if (result.inLiveWindowSkipped > 0) parts.push(`${result.inLiveWindowSkipped} skipped (within 90-day live window)`);
       if (result.measurementsAlreadyPresent > 0) parts.push(`${result.measurementsAlreadyPresent} metric rows already present`);
-      setBackfillMsg(parts.join(" · "));
+      toast.success("Monarch history imported", parts.join(" · "));
       void queryClient.invalidateQueries({ queryKey: ["finances"] });
       void queryClient.invalidateQueries({ queryKey: ["status"] });
-      setTimeout(() => setBackfillMsg(null), 15_000);
     },
     onError: (err: unknown) => {
-      setBackfillMsg(err instanceof Error ? `Import failed: ${err.message}` : "Import failed.");
-      setTimeout(() => setBackfillMsg(null), 10_000);
+      toast.error("Import failed", err instanceof Error ? err.message : String(err));
     },
   });
   const onPickCsv = (e: React.ChangeEvent<HTMLInputElement>): void => {
@@ -138,12 +146,6 @@ function FinancesRoute(): JSX.Element {
 
       <div className="flex-1 overflow-y-auto mobile-safe-bottom">
         <div className="mx-auto max-w-2xl space-y-6 px-4 pb-6 pt-8 md:px-6">
-
-          {backfillMsg && (
-            <p className="rounded-md border border-border-subtle bg-surface px-3 py-2 text-xs text-fg-muted">
-              {backfillMsg}
-            </p>
-          )}
 
           {/* Account Overview Cards */}
           {accounts.length > 0 && (

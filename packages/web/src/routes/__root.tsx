@@ -5,6 +5,7 @@ import { ChatStateProvider } from "~/components/chat/chat-state";
 import { IngestProvider } from "~/components/ingest/IngestProvider";
 import { DropZone } from "~/components/ingest/DropZone";
 import { IngestSheet } from "~/components/ingest/IngestSheet";
+import { Toaster } from "~/components/ui/Toast";
 
 export const Route = createRootRoute({
   component: () => (
@@ -14,6 +15,7 @@ export const Route = createRootRoute({
           <Shell />
           <DropZone />
           <IngestSheet />
+          <Toaster />
         </IngestProvider>
       </ChatStateProvider>
     </AgentStateProvider>

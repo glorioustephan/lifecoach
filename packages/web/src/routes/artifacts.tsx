@@ -31,6 +31,7 @@ import { Markdown } from "~/components/chat/Markdown";
 import { api, type ArtifactRow } from "~/lib/api";
 import { formatRelative } from "~/lib/time";
 import { cn } from "~/lib/cn";
+import { toast } from "~/lib/use-toast";
 
 export const Route = createFileRoute("/artifacts")({
   component: ArtifactsRoute,
@@ -62,7 +63,6 @@ const writeToClipboard = async (text: string): Promise<void> => {
 
 function GenerateButton(): JSX.Element {
   const qc = useQueryClient();
-  const [banner, setBanner] = useState<string | null>(null);
 
   const generate = useMutation({
     mutationFn: api.generateArtifacts,
@@ -75,31 +75,24 @@ function GenerateButton(): JSX.Element {
           : `${created.length} new artifact${created.length === 1 ? "" : "s"}`;
       // Surface the scan funnel so a low yield is explainable: how many documents
       // were swept vs. how many tripped a type heuristic (and cost a model call).
-      setBanner(`${made} · scanned ${documentsScanned} docs, ${candidateDocuments} candidates`);
-      setTimeout(() => setBanner(null), 8000);
+      toast.success(made, `Scanned ${documentsScanned} docs, ${candidateDocuments} candidates`);
     },
     onError: (err: unknown) => {
-      setBanner(err instanceof Error ? `Scan failed: ${err.message}` : "Scan failed.");
-      setTimeout(() => setBanner(null), 6000);
+      toast.error("Scan failed", err instanceof Error ? err.message : String(err));
     },
   });
 
   return (
-    <div className="flex items-center gap-2">
-      {banner && (
-        <span className="text-xs text-fg-muted">{banner}</span>
-      )}
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => generate.mutate()}
-        disabled={generate.isPending}
-        loading={generate.isPending}
-      >
-        <Sparkles className="size-3.5" strokeWidth={1.75} />
-        {generate.isPending ? "extracting…" : "Extract Artifacts"}
-      </Button>
-    </div>
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={() => generate.mutate()}
+      disabled={generate.isPending}
+      loading={generate.isPending}
+    >
+      <Sparkles className="size-3.5" strokeWidth={1.75} />
+      {generate.isPending ? "extracting…" : "Extract Artifacts"}
+    </Button>
   );
 }
 
@@ -512,7 +505,11 @@ function EditArtifactSheet({
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["artifacts"] });
+      toast.success("Artifact saved", title);
       onClose();
+    },
+    onError: (err: unknown) => {
+      toast.error("Save failed", err instanceof Error ? err.message : String(err));
     },
   });
 
@@ -770,7 +767,11 @@ function ConfirmDeleteDialog({
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["artifacts"] });
       void qc.invalidateQueries({ queryKey: ["status"] });
+      toast.success("Artifact deleted", artifact?.title);
       onCancel();
+    },
+    onError: (err: unknown) => {
+      toast.error("Delete failed", err instanceof Error ? err.message : String(err));
     },
   });
 

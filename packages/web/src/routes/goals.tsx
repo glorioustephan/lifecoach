@@ -14,6 +14,7 @@ import {
 import { cn } from "~/lib/cn";
 import { GoalCard } from "~/components/goals/GoalCard";
 import { GoalEditSheet } from "~/components/goals/GoalEditSheet";
+import { toast } from "~/lib/use-toast";
 
 export const Route = createFileRoute("/goals")({
   component: GoalsRoute,
@@ -55,9 +56,13 @@ function GoalsRoute(): JSX.Element {
 
   const createMut = useMutation({
     mutationFn: api.createGoal,
-    onSuccess: () => {
+    onSuccess: (_data, input) => {
       void qc.invalidateQueries({ queryKey: ["goals"] });
+      toast.success("Goal created", input.title);
       setShowNew(false);
+    },
+    onError: (err: unknown) => {
+      toast.error("Could not create goal", err instanceof Error ? err.message : String(err));
     },
   });
 

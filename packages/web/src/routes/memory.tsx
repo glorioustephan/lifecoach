@@ -16,6 +16,7 @@ import {
   type ReflectionRow,
 } from "~/lib/api";
 import { formatRelative } from "~/lib/time";
+import { toast } from "~/lib/use-toast";
 import { Markdown } from "~/components/chat/Markdown";
 
 export const Route = createFileRoute("/memory")({
@@ -209,7 +210,11 @@ function EditFactSheet({
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["memory", "facts"] });
+      toast.success("Memory updated", subject);
       onClose();
+    },
+    onError: (err: unknown) => {
+      toast.error("Save failed", err instanceof Error ? err.message : String(err));
     },
   });
 
@@ -320,7 +325,11 @@ function ConfirmForgetFactDialog({
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["memory", "facts"] });
       void qc.invalidateQueries({ queryKey: ["status"] });
+      toast.success("Memory forgotten", fact?.subject);
       onCancel();
+    },
+    onError: (err: unknown) => {
+      toast.error("Could not forget memory", err instanceof Error ? err.message : String(err));
     },
   });
 
@@ -381,7 +390,6 @@ function DocumentsTab({ page, onPageChange }: { page: number; onPageChange: (p: 
     },
   });
   const [pendingForget, setPendingForget] = useState<DocumentRow | null>(null);
-  const [lastResult, setLastResult] = useState<string | null>(null);
 
   const totalPages = Math.ceil((data?.total ?? 0) / DOCS_PAGE_SIZE);
   const itemsShown = data?.documents.length ?? 0;
@@ -390,15 +398,16 @@ function DocumentsTab({ page, onPageChange }: { page: number; onPageChange: (p: 
   const forgetMut = useMutation({
     mutationFn: (id: string) => api.forgetDocument(id),
     onSuccess: ({ result }) => {
-      setLastResult(
-        `Forgot ${result.documentId.slice(0, 8)}… — removed ${result.factsRemoved} facts, ${result.measurementsRemoved} measurements, ${result.embeddingVectorsRemoved} vectors.`,
+      toast.success(
+        "Document forgotten",
+        `Removed ${result.factsRemoved} facts, ${result.measurementsRemoved} measurements, ${result.embeddingVectorsRemoved} vectors.`,
       );
       void qc.invalidateQueries({ queryKey: ["memory"] });
       void qc.invalidateQueries({ queryKey: ["status"] });
       setPendingForget(null);
     },
     onError: (err: unknown) => {
-      setLastResult(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error("Could not forget document", err instanceof Error ? err.message : String(err));
       setPendingForget(null);
     },
   });
@@ -430,11 +439,6 @@ function DocumentsTab({ page, onPageChange }: { page: number; onPageChange: (p: 
   }
   return (
     <>
-      {lastResult && (
-        <div className="mb-3 rounded-md border border-border-subtle bg-surface/50 px-3 py-2 text-xs text-fg-muted">
-          {lastResult}
-        </div>
-      )}
       <ul className="divide-y divide-border-subtle rounded-md border border-border bg-surface">
         {data.documents.map((d) => (
           <li key={d.id} className="flex items-start gap-3 px-4 py-3">
@@ -565,9 +569,13 @@ function ReflectionsTab({ page, onPageChange }: { page: number; onPageChange: (p
 
   const generate = useMutation({
     mutationFn: (kind: "daily" | "weekly" | "monthly") => api.generateReflection(kind),
-    onSuccess: () => {
+    onSuccess: (_data, kind) => {
       void qc.invalidateQueries({ queryKey: ["memory", "reflections"] });
       void qc.invalidateQueries({ queryKey: ["status"] });
+      toast.success(`${KIND_LABEL[kind]} reflection ready`);
+    },
+    onError: (err: unknown) => {
+      toast.error("Reflection failed", err instanceof Error ? err.message : String(err));
     },
   });
 
@@ -589,12 +597,6 @@ function ReflectionsTab({ page, onPageChange }: { page: number; onPageChange: (p
           </Button>
         ))}
       </div>
-
-      {generate.isError && (
-        <div className="rounded-md border border-destructive-500/40 bg-destructive-500/5 px-4 py-2.5 text-xs text-destructive-300">
-          {generate.error instanceof Error ? generate.error.message : "Generation failed"}
-        </div>
-      )}
 
       {isLoading && (
         <div className="space-y-3">
