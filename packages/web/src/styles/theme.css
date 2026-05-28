@@ -122,6 +122,14 @@
   --color-input:                  var(--color-border);
   --color-ring:                   var(--color-accent);
 
+  /* Raw (un-prefixed) shadcn vars. A few prompt-kit components reference these
+     directly in inline `style` strings rather than via Tailwind utilities — e.g.
+     TextShimmer's gradient uses `var(--foreground)` / `var(--muted-foreground)`.
+     Tailwind only emits the `--color-*` forms above for utility classes, so these
+     raw aliases must exist too or those inline references resolve to nothing. */
+  --foreground:                   var(--color-fg);
+  --muted-foreground:             var(--color-fg-muted);
+
   /* ─── prompt-kit animation tokens ─── */
   /* These animate-* utilities are consumed by Loader and TextShimmer components.
      Tailwind v4 has no tailwind.config.js, so keyframes must live here.

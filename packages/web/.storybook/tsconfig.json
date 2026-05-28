@@ -1,0 +1,20 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    // Stories are never emitted as a library, so disable declaration generation.
+    // The root base sets declaration:true, which otherwise makes tsc check that
+    // each exported `meta` const's inferred type is portably nameable — and
+    // Storybook's CSF types resolve through non-portable pnpm paths (TS2742/4023).
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true
+  },
+  "include": [
+    "../src/stories/**/*",
+    "../src/**/*",
+    "./**/*"
+  ],
+  "exclude": []
+}
