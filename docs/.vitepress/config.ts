@@ -89,6 +89,7 @@ for (const s of activeSections) {
 export default defineConfig({
   title: 'lifecoach docs',
   description: 'Dual-audience corpus for humans and agents.',
+  base: process.env.DOCS_BASE ?? '/lifecoach/',
   srcDir: '.',
   cleanUrls: true,
   lastUpdated: true,
