@@ -5,9 +5,12 @@ import type { Embedder } from "../../embeddings/index.js";
 import type {
   Goal,
   GoalCadence,
+  GoalEvidenceOrigin,
+  GoalEvidenceSourceRefType,
   GoalHorizon,
   GoalKind,
   GoalReviewCadence,
+  GoalSignalKind,
   GoalStatus,
 } from "@lifecoach/schemas";
 import { indexGoal } from "../../memory/goal-indexer.js";
@@ -295,6 +298,130 @@ export const buildGoalTools = (deps: GoalToolDeps) => [
         throw new LifecoachError(`No goal with id ${id}`, "GOAL_NOT_FOUND");
       }
       return { content: [{ type: "text", text: `Archived: ${updated.title}` }] };
+    },
+  ),
+
+  tool(
+    "record_goal_evidence",
+    "Capture a specific moment of progress (or regression) for a goal. ONLY " +
+      "call when the user has just explicitly mentioned an action / outcome " +
+      "that bears on a known goal — never speculatively. Body should be the " +
+      "user-facing observation in plain language ('Walked 35 min after lunch — " +
+      "anchor held'). Use `delta` only when the goal has a numeric signal and " +
+      "you're moving its current_value.",
+    {
+      goalId: z.string().min(1),
+      body: z.string().min(1),
+      milestoneId: z.string().optional(),
+      signalId: z.string().optional(),
+      delta: z
+        .number()
+        .optional()
+        .describe("Optional signed numeric delta toward a signal's target."),
+      sourceMessageId: z
+        .string()
+        .optional()
+        .describe(
+          "If you're attributing this to a specific message in the current " +
+            "conversation, pass its id so the Evidence feed can link back.",
+        ),
+    },
+    async (args) => {
+      if (!deps.storage.goals.get(args.goalId)) {
+        throw new LifecoachError(`No goal with id ${args.goalId}`, "GOAL_NOT_FOUND");
+      }
+      const evidence = deps.storage.goalEvidence.create({
+        goalId: args.goalId,
+        body: args.body,
+        milestoneId: args.milestoneId ?? null,
+        signalId: args.signalId ?? null,
+        delta: args.delta ?? null,
+        sourceRefType: (args.sourceMessageId
+          ? "message"
+          : "manual") as GoalEvidenceSourceRefType,
+        sourceRefId: args.sourceMessageId ?? null,
+        recordedAt: Date.now(),
+        origin: "conversation" as GoalEvidenceOrigin,
+        confidence: 0.8,
+      });
+      // Bonus: stamp last_reviewed_at so the goal stops looking stalled.
+      deps.storage.goals.markReviewed(args.goalId);
+      // Move signal currentValue when delta provided.
+      if (args.signalId && args.delta !== undefined) {
+        const sig = deps.storage.goalSignals.get(args.signalId);
+        if (sig) {
+          deps.storage.goalSignals.update(args.signalId, {
+            currentValue: (sig.currentValue ?? 0) + args.delta,
+          });
+        }
+      }
+      return {
+        content: [{ type: "text", text: `Recorded evidence for goal ${args.goalId.slice(0, 8)} (${evidence.id})` }],
+      };
+    },
+  ),
+
+  tool(
+    "add_goal_signal",
+    "Define a measurable or qualitative 'signal of progress' for a goal. " +
+      "Multiple signals per goal are encouraged — they replace the rigid " +
+      "single success-criteria string. Quantitative signals tie to a " +
+      "measurements metric and carry a numeric target. Qualitative signals " +
+      "are sentence-shaped ('I sleep before midnight on most weeknights').",
+    {
+      goalId: z.string().min(1),
+      label: z.string().min(1),
+      kind: z.enum(["quantitative", "qualitative"]).optional(),
+      metric: z
+        .string()
+        .optional()
+        .describe("Snake-case measurements metric (e.g. weight_kg). Quantitative only."),
+      targetValue: z.number().optional(),
+      unit: z.string().optional(),
+    },
+    async (args) => {
+      if (!deps.storage.goals.get(args.goalId)) {
+        throw new LifecoachError(`No goal with id ${args.goalId}`, "GOAL_NOT_FOUND");
+      }
+      const signal = deps.storage.goalSignals.create({
+        goalId: args.goalId,
+        label: args.label,
+        kind: (args.kind ?? "qualitative") as GoalSignalKind,
+        metric: args.metric ?? null,
+        targetValue: args.targetValue ?? null,
+        currentValue: null,
+        unit: args.unit ?? null,
+      });
+      return {
+        content: [
+          { type: "text", text: `Added signal ${signal.id.slice(0, 8)}: ${signal.label}` },
+        ],
+      };
+    },
+  ),
+
+  tool(
+    "update_goal_signal",
+    "Update a goal signal's target or current value. Use when the user " +
+      "explicitly shifts what 'success' looks like for that signal.",
+    {
+      id: z.string().min(1),
+      label: z.string().optional(),
+      targetValue: z.number().optional(),
+      currentValue: z.number().optional(),
+      unit: z.string().optional(),
+    },
+    async (args) => {
+      const patch: Parameters<typeof deps.storage.goalSignals.update>[1] = {};
+      if (args.label !== undefined) patch.label = args.label;
+      if (args.targetValue !== undefined) patch.targetValue = args.targetValue;
+      if (args.currentValue !== undefined) patch.currentValue = args.currentValue;
+      if (args.unit !== undefined) patch.unit = args.unit;
+      const updated = deps.storage.goalSignals.update(args.id, patch);
+      if (!updated) {
+        throw new LifecoachError(`No signal with id ${args.id}`, "SIGNAL_NOT_FOUND");
+      }
+      return { content: [{ type: "text", text: `Updated signal: ${updated.label}` }] };
     },
   ),
 

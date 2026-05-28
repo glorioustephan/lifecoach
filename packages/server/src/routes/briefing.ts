@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import type { Lifecoach } from "@lifecoach/core";
+import { isGoalStalled } from "@lifecoach/core";
+import type { Goal, Milestone, Task } from "@lifecoach/schemas";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
@@ -102,8 +104,12 @@ export const briefingRoutes = (lc: Lifecoach) => {
         t.dueAt < tomorrowStart,
     );
 
-    // Goals — active, sorted by horizon priority + due_at
+    // Goals — active, sorted by horizon priority + due_at. For each goal we
+    // also surface the next action (next active linked task) and a stalled
+    // signal so the briefing reads as "here's what to do" rather than "here's
+    // a list of names."
     const activeGoals = lc.storage.goals.list({ status: "active", limit: 50 });
+    const goalsAugmented = augmentGoalsForBriefing(lc, activeGoals.slice(0, 8), nowMs);
 
     // Insights — fresh top-priority active ones (last 7d)
     const insights = lc.storage.insights
@@ -138,7 +144,7 @@ export const briefingRoutes = (lc: Lifecoach) => {
         totalActive: allActive.length,
       },
       goals: {
-        active: activeGoals.slice(0, 8),
+        active: goalsAugmented,
         totalActive: activeGoals.length,
       },
       insights,
@@ -148,4 +154,66 @@ export const briefingRoutes = (lc: Lifecoach) => {
   });
 
   return app;
+};
+
+/**
+ * Payload shape returned for each goal in the briefing — the goal itself plus
+ * the derived fields the panel renders next to it: next linked task, next
+ * pending milestone, last evidence timestamp, and a stalled flag.
+ */
+export interface BriefingGoal {
+  goal: Goal;
+  nextTask: Task | null;
+  nextMilestone: Milestone | null;
+  lastEvidenceAt: number | null;
+  stalled: boolean;
+}
+
+const augmentGoalsForBriefing = (
+  lc: Lifecoach,
+  goals: Goal[],
+  nowMs: number,
+): BriefingGoal[] => {
+  if (goals.length === 0) return [];
+  // Bulk-fetch the last evidence per goal so we only query once.
+  const lastEvidence = lc.storage.goalEvidence.latestByGoals(goals.map((g) => g.id));
+  // Linked active tasks — gather once, group by goal.
+  const linkedTasks = new Map<string, Task[]>();
+  for (const t of lc.storage.tasks.list({ status: "active", limit: 1_000_000 })) {
+    if (!t.goalId) continue;
+    const bucket = linkedTasks.get(t.goalId) ?? [];
+    bucket.push(t);
+    linkedTasks.set(t.goalId, bucket);
+  }
+
+  return goals.map((goal) => {
+    // Next action = soonest-due linked active task, falling back to newest.
+    const linked = linkedTasks.get(goal.id) ?? [];
+    const nextTask =
+      linked
+        .slice()
+        .sort((a, b) => {
+          const aDue = a.dueAt ?? Number.POSITIVE_INFINITY;
+          const bDue = b.dueAt ?? Number.POSITIVE_INFINITY;
+          if (aDue !== bDue) return aDue - bDue;
+          return b.createdAt - a.createdAt;
+        })[0] ?? null;
+
+    // Next milestone = lowest order_index that's still pending or active.
+    const nextMilestone =
+      lc.storage.milestones
+        .list({ goalId: goal.id, status: "all", limit: 50 })
+        .find((m) => m.status === "pending" || m.status === "active") ?? null;
+
+    const lastEv = lastEvidence.get(goal.id);
+    const lastEvidenceAt = lastEv?.recordedAt ?? null;
+
+    return {
+      goal,
+      nextTask,
+      nextMilestone,
+      lastEvidenceAt,
+      stalled: isGoalStalled(goal, lastEvidenceAt, nowMs),
+    };
+  });
 };

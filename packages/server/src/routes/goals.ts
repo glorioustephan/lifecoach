@@ -70,6 +70,31 @@ const milestoneReorderSchema = z.object({
   ids: z.array(z.string()).min(1),
 });
 
+const goalSignalCreateSchema = z.object({
+  label: z.string().min(1),
+  kind: z.enum(["quantitative", "qualitative"]).optional(),
+  metric: z.string().optional(),
+  targetValue: z.number().optional(),
+  unit: z.string().optional(),
+});
+
+const goalSignalUpdateSchema = z.object({
+  label: z.string().min(1).optional(),
+  kind: z.enum(["quantitative", "qualitative"]).optional(),
+  metric: z.string().nullable().optional(),
+  targetValue: z.number().nullable().optional(),
+  currentValue: z.number().nullable().optional(),
+  unit: z.string().nullable().optional(),
+});
+
+const goalEvidenceCreateSchema = z.object({
+  body: z.string().min(1),
+  milestoneId: z.string().optional(),
+  signalId: z.string().optional(),
+  delta: z.number().optional(),
+  recordedAt: z.number().int().optional(),
+});
+
 const projectCreateSchema = z.object({
   title: z.string().min(1),
   body: z.string().optional(),
@@ -221,6 +246,88 @@ export const goalRoutes = (lc: Lifecoach) => {
     if (!ex) return c.json({ error: "not_found" }, 404);
     lc.storage.milestones.delete(id);
     lc.storage.embeddings.deleteForRef("milestone", id);
+    return c.json({ ok: true });
+  });
+
+  // ── Signals nested under /goals/:goalId/signals ─────────────────────────────
+  app.get("/:goalId/signals", (c) => {
+    const goalId = c.req.param("goalId");
+    if (!lc.storage.goals.get(goalId)) return c.json({ error: "not_found" }, 404);
+    return c.json({ signals: lc.storage.goalSignals.list({ goalId }) });
+  });
+
+  app.post("/:goalId/signals", async (c) => {
+    const goalId = c.req.param("goalId");
+    if (!lc.storage.goals.get(goalId)) return c.json({ error: "not_found" }, 404);
+    const body = await c.req.json().catch(() => null);
+    const parsed = goalSignalCreateSchema.safeParse(body);
+    if (!parsed.success) return c.json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+    const signal = lc.storage.goalSignals.create({
+      goalId,
+      label: parsed.data.label,
+      kind: parsed.data.kind ?? "qualitative",
+      metric: parsed.data.metric ?? null,
+      targetValue: parsed.data.targetValue ?? null,
+      currentValue: null,
+      unit: parsed.data.unit ?? null,
+    });
+    return c.json({ signal });
+  });
+
+  app.patch("/:goalId/signals/:id", async (c) => {
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => null);
+    const parsed = goalSignalUpdateSchema.safeParse(body);
+    if (!parsed.success) return c.json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+    const updated = lc.storage.goalSignals.update(id, parsed.data);
+    if (!updated) return c.json({ error: "not_found" }, 404);
+    return c.json({ signal: updated });
+  });
+
+  app.delete("/:goalId/signals/:id", (c) => {
+    const id = c.req.param("id");
+    const ex = lc.storage.goalSignals.get(id);
+    if (!ex) return c.json({ error: "not_found" }, 404);
+    lc.storage.goalSignals.delete(id);
+    return c.json({ ok: true });
+  });
+
+  // ── Evidence nested under /goals/:goalId/evidence ───────────────────────────
+  app.get("/:goalId/evidence", (c) => {
+    const goalId = c.req.param("goalId");
+    if (!lc.storage.goals.get(goalId)) return c.json({ error: "not_found" }, 404);
+    const limit = Number(c.req.query("limit") ?? "100");
+    return c.json({ evidence: lc.storage.goalEvidence.list({ goalId, limit }) });
+  });
+
+  app.post("/:goalId/evidence", async (c) => {
+    const goalId = c.req.param("goalId");
+    if (!lc.storage.goals.get(goalId)) return c.json({ error: "not_found" }, 404);
+    const body = await c.req.json().catch(() => null);
+    const parsed = goalEvidenceCreateSchema.safeParse(body);
+    if (!parsed.success) return c.json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+    const evidence = lc.storage.goalEvidence.create({
+      goalId,
+      body: parsed.data.body,
+      milestoneId: parsed.data.milestoneId ?? null,
+      signalId: parsed.data.signalId ?? null,
+      delta: parsed.data.delta ?? null,
+      sourceRefType: "manual",
+      sourceRefId: null,
+      recordedAt: parsed.data.recordedAt ?? Date.now(),
+      origin: "manual",
+      confidence: null,
+    });
+    // Manual log = explicit user touch; refresh review timestamp too.
+    lc.storage.goals.markReviewed(goalId);
+    return c.json({ evidence });
+  });
+
+  app.delete("/:goalId/evidence/:id", (c) => {
+    const id = c.req.param("id");
+    const ex = lc.storage.goalEvidence.get(id);
+    if (!ex) return c.json({ error: "not_found" }, 404);
+    lc.storage.goalEvidence.delete(id);
     return c.json({ ok: true });
   });
 

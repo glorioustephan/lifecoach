@@ -28,6 +28,14 @@ export {
   MilestoneRepository,
   type MilestoneListFilter,
 } from "./milestones.js";
+export {
+  GoalSignalRepository,
+  type GoalSignalListFilter,
+} from "./goal-signals.js";
+export {
+  GoalEvidenceRepository,
+  type GoalEvidenceListFilter,
+} from "./goal-evidence.js";
 export { ProjectRepository, type ProjectListFilter } from "./projects.js";
 export {
   ArtifactRepository,

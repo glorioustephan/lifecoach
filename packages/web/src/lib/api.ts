@@ -205,6 +205,45 @@ export interface GoalRow {
   updatedAt: number;
 }
 
+export type GoalSignalKind = "quantitative" | "qualitative";
+
+export interface GoalSignalRow {
+  id: string;
+  goalId: string;
+  label: string;
+  kind: GoalSignalKind;
+  metric: string | null;
+  targetValue: number | null;
+  currentValue: number | null;
+  unit: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type GoalEvidenceOrigin = "manual" | "conversation" | "cron";
+
+export interface GoalEvidenceRow {
+  id: string;
+  goalId: string;
+  milestoneId: string | null;
+  signalId: string | null;
+  body: string;
+  sourceRefType:
+    | "message"
+    | "task"
+    | "milestone"
+    | "measurement"
+    | "reflection"
+    | "manual"
+    | null;
+  sourceRefId: string | null;
+  delta: number | null;
+  recordedAt: number;
+  origin: GoalEvidenceOrigin;
+  confidence: number | null;
+  createdAt: number;
+}
+
 export interface TaskRow {
   id: string;
   content: string;
@@ -378,6 +417,68 @@ export const api = {
       `/api/goals/${encodeURIComponent(goalId)}/milestones/reorder`,
       { ids },
     ),
+  // Signals
+  goalSignals: (goalId: string) =>
+    get<{ signals: GoalSignalRow[] }>(
+      `/api/goals/${encodeURIComponent(goalId)}/signals`,
+    ),
+  createGoalSignal: (
+    goalId: string,
+    body: {
+      label: string;
+      kind?: GoalSignalKind;
+      metric?: string;
+      targetValue?: number;
+      unit?: string;
+    },
+  ) =>
+    postJson<{ signal: GoalSignalRow }>(
+      `/api/goals/${encodeURIComponent(goalId)}/signals`,
+      body,
+    ),
+  updateGoalSignal: (
+    goalId: string,
+    id: string,
+    patch: Partial<{
+      label: string;
+      kind: GoalSignalKind;
+      metric: string | null;
+      targetValue: number | null;
+      currentValue: number | null;
+      unit: string | null;
+    }>,
+  ) =>
+    patchJson<{ signal: GoalSignalRow }>(
+      `/api/goals/${encodeURIComponent(goalId)}/signals/${encodeURIComponent(id)}`,
+      patch,
+    ),
+  deleteGoalSignal: (goalId: string, id: string) =>
+    del<{ ok: true }>(
+      `/api/goals/${encodeURIComponent(goalId)}/signals/${encodeURIComponent(id)}`,
+    ),
+  // Evidence
+  goalEvidence: (goalId: string, limit = 100) =>
+    get<{ evidence: GoalEvidenceRow[] }>(
+      `/api/goals/${encodeURIComponent(goalId)}/evidence?limit=${limit}`,
+    ),
+  createGoalEvidence: (
+    goalId: string,
+    body: {
+      body: string;
+      milestoneId?: string;
+      signalId?: string;
+      delta?: number;
+      recordedAt?: number;
+    },
+  ) =>
+    postJson<{ evidence: GoalEvidenceRow }>(
+      `/api/goals/${encodeURIComponent(goalId)}/evidence`,
+      body,
+    ),
+  deleteGoalEvidence: (goalId: string, id: string) =>
+    del<{ ok: true }>(
+      `/api/goals/${encodeURIComponent(goalId)}/evidence/${encodeURIComponent(id)}`,
+    ),
   linkTaskToGoal: (
     taskId: string,
     body: { goalId: string | null; milestoneId?: string | null },
@@ -421,7 +522,16 @@ export const api = {
         }>;
         totalActive: number;
       };
-      goals: { active: GoalRow[]; totalActive: number };
+      goals: {
+        active: Array<{
+          goal: GoalRow;
+          nextTask: TaskRow | null;
+          nextMilestone: MilestoneRow | null;
+          lastEvidenceAt: number | null;
+          stalled: boolean;
+        }>;
+        totalActive: number;
+      };
       insights: InsightRow[];
       reflection: {
         id: string;

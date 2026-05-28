@@ -10,7 +10,13 @@ import {
   TrendingDown,
   Wallet,
 } from "lucide-react";
-import { api, type BriefingFinanceTile, type GoalRow } from "~/lib/api";
+import {
+  api,
+  type BriefingFinanceTile,
+  type GoalRow,
+  type MilestoneRow,
+  type TaskRow,
+} from "~/lib/api";
 import { cn } from "~/lib/cn";
 import { formatCurrency, formatPercent } from "~/lib/money";
 import { useProfileName } from "~/lib/use-profile";
@@ -108,8 +114,13 @@ export const BriefingPanel = (): JSX.Element | null => {
         >
           <ul className="space-y-1.5">
             {goals.slice(0, 3).map((g) => (
-              <li key={g.id}>
-                <GoalLine goal={g} />
+              <li key={g.goal.id}>
+                <GoalLine
+                  goal={g.goal}
+                  nextTask={g.nextTask}
+                  nextMilestone={g.nextMilestone}
+                  stalled={g.stalled}
+                />
               </li>
             ))}
           </ul>
@@ -217,34 +228,38 @@ const BriefingTile = ({ icon, title, children, empty, emptyText, href }: TilePro
   </Link>
 );
 
-const GoalLine = ({ goal }: { goal: GoalRow }): JSX.Element => {
-  const hasTarget =
-    goal.targetValue !== null && goal.targetValue !== undefined && goal.targetMetric;
-  const progressPercent =
-    hasTarget && goal.currentProgress !== null && goal.targetValue
-      ? Math.min(100, Math.round((goal.currentProgress! / goal.targetValue) * 100))
-      : null;
+const GoalLine = ({
+  goal,
+  nextTask,
+  nextMilestone,
+  stalled,
+}: {
+  goal: GoalRow;
+  nextTask: TaskRow | null;
+  nextMilestone: MilestoneRow | null;
+  stalled: boolean;
+}): JSX.Element => {
+  // Prefer the next linked active task as the line's "do this" affordance.
+  // Fall back to next pending milestone. Stalled badge appears either way.
+  const next = nextTask?.content ?? nextMilestone?.title ?? null;
 
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2">
         <span className="truncate text-xs text-fg">{goal.title}</span>
-        {hasTarget && (
-          <span className="shrink-0 font-mono text-[10px] text-fg-faint">
-            {goal.currentProgress ?? 0}/{goal.targetValue}
+        {stalled && (
+          <span
+            className="shrink-0 rounded-sm bg-warning-500/15 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide text-warning-500"
+            title="No recent touch within this goal's review cadence"
+          >
+            stalled
           </span>
         )}
       </div>
-      {hasTarget && (
-        <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface-elevated">
-          <div
-            className={cn(
-              "h-full rounded-full transition-all",
-              progressPercent === 100 ? "bg-success-500" : "bg-accent",
-            )}
-            style={{ width: `${progressPercent ?? 0}%` }}
-          />
-        </div>
+      {next && (
+        <p className="mt-0.5 truncate text-[11px] text-fg-muted">
+          <span className="text-fg-faint">next:</span> {next}
+        </p>
       )}
     </div>
   );

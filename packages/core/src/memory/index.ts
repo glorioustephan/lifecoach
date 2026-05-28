@@ -22,7 +22,7 @@ export const createMemory = (storage: Storage, embedder: Embedder): Memory => {
     episodic: new EpisodicMemory(storage),
     semantic: new SemanticMemory({ storage, embedder }),
     reflections,
-    context: new ContextBuilder({ identity, reflections }),
+    context: new ContextBuilder({ identity, reflections, storage }),
   };
 };
 

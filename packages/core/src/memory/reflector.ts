@@ -1,10 +1,17 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import type { Reflection, ReflectionKind } from "@lifecoach/schemas";
+import type {
+  Goal,
+  GoalEvidence,
+  Milestone,
+  Reflection,
+  ReflectionKind,
+} from "@lifecoach/schemas";
 import type { Storage } from "../storage/index.js";
 import type { IdentityMemory } from "./identity.js";
 import { withRetry } from "../util/retry.js";
 import { LifecoachError } from "../util/errors.js";
+import { isGoalStalled } from "../util/goal-cadence.js";
 
 // ─── Structured payload the LLM emits via tool use ───────────────────────────
 
@@ -19,6 +26,11 @@ const reflectionPayloadSchema = z.object({
   wins: z.array(z.string()).default([]),
   /** Anything that warrants attention. */
   concerns: z.array(z.string()).default([]),
+  /** Goal IDs the user clearly engaged with in this period. We persist a
+   *  cron-origin evidence row per id so the loop closes. */
+  goalsTouched: z.array(z.string()).default([]),
+  /** Goal IDs that are active but went untouched. Surfaced (not auto-archived). */
+  goalsStalled: z.array(z.string()).default([]),
   /** Optional short title shown in lists ("Week of May 12"). */
   title: z.string().optional(),
 });
@@ -61,6 +73,18 @@ const TOOL_INPUT_SCHEMA = {
       description:
         "Patterns or signals worth attention: missed routines, repeated friction, anomalous measurements. 1 sentence each. Be honest but not alarmist.",
     },
+    goalsTouched: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "Goal IDs (from the 'Goals state' section in the prompt) the user clearly engaged with this period — through linked task completion, conversation, measurements, or any evidence of behaviour. Empty if no goal was meaningfully touched.",
+    },
+    goalsStalled: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "Goal IDs that were active but went untouched this period. Lifted directly from the 'Stalled goals' subsection of the prompt — do not invent. Used to surface 'this one needs your attention.'",
+    },
   },
   required: ["body"],
 };
@@ -76,9 +100,24 @@ const KIND_LABEL: Record<ReflectionKind, string> = {
 interface PeriodData {
   messages: Array<{ role: string; content: string; createdAt: number }>;
   facts: Array<{ category: string; subject: string; body: string; createdAt: number }>;
-  completedTasks: Array<{ content: string; completedAt: number | null }>;
+  completedTasks: Array<{
+    content: string;
+    completedAt: number | null;
+    goalId: string | null;
+    milestoneId: string | null;
+  }>;
   measurements: Array<{ metric: string; value: number; unit: string | null; recordedAt: number }>;
   priorReflections: Array<{ kind: string; body: string; periodEnd: number }>;
+  /** Active, non-archived goals — surfaced so the reflector can name them
+   *  in `goalsTouched` / `goalsStalled`. */
+  activeGoals: Goal[];
+  /** Evidence rows created in the period. Most useful signal that a goal
+   *  was *actually* engaged with. */
+  goalEvidence: GoalEvidence[];
+  /** Milestones completed in the period — concrete wins. */
+  completedMilestones: Array<Milestone & { goalTitle: string }>;
+  /** Subset of activeGoals that meet the stalled criterion (see goal-cadence.ts). */
+  stalledGoals: Goal[];
   financialAccounts?: Array<{ displayName: string; type: string; balance: number }>;
   financialInsights?: Array<{ topic: string; body: string; category: string; priority: number }>;
   financialTransactionSummary?: { totalSpent: number; topCategories: Array<{ category: string; amount: number }> };
@@ -107,7 +146,10 @@ const gatherPeriodData = (storage: Storage, from: number, to: number, includeFin
 
   const completedTasks = db
     .prepare(
-      `SELECT content, completed_at AS completedAt
+      `SELECT content,
+              completed_at AS completedAt,
+              goal_id AS goalId,
+              milestone_id AS milestoneId
        FROM tasks
        WHERE completed_at IS NOT NULL AND completed_at >= ? AND completed_at < ?
        ORDER BY completed_at ASC`,
@@ -134,7 +176,78 @@ const gatherPeriodData = (storage: Storage, from: number, to: number, includeFin
     )
     .all(from, to) as PeriodData["priorReflections"];
 
-  const data: PeriodData = { messages, facts, completedTasks, measurements, priorReflections };
+  // ── Goal state for this period ──────────────────────────────────────────
+  const activeGoals = storage.goals.list({ status: "active", limit: 200 });
+  const goalEvidence = storage.goalEvidence.list({
+    recordedAfter: from,
+    recordedBefore: to,
+    limit: 500,
+  });
+  const completedMilestoneRows = db
+    .prepare(
+      `SELECT m.id AS id, m.goal_id AS goal_id, m.title AS title,
+              m.body AS body, m.status AS status, m.order_index AS order_index,
+              m.due_at AS due_at, m.completed_at AS completed_at,
+              m.origin AS origin, m.confidence AS confidence,
+              m.created_at AS created_at, m.updated_at AS updated_at,
+              g.title AS goal_title
+       FROM milestones m
+       JOIN goals g ON g.id = m.goal_id
+       WHERE m.status = 'done'
+         AND m.completed_at IS NOT NULL
+         AND m.completed_at >= ? AND m.completed_at < ?
+       ORDER BY m.completed_at ASC`,
+    )
+    .all(from, to) as Array<{
+    id: string;
+    goal_id: string;
+    title: string;
+    body: string | null;
+    status: string;
+    order_index: number;
+    due_at: number | null;
+    completed_at: number | null;
+    origin: string;
+    confidence: number | null;
+    created_at: number;
+    updated_at: number;
+    goal_title: string;
+  }>;
+  const completedMilestones = completedMilestoneRows.map((r) => ({
+    id: r.id,
+    goalId: r.goal_id,
+    title: r.title,
+    body: r.body,
+    status: r.status as Milestone["status"],
+    orderIndex: r.order_index,
+    dueAt: r.due_at,
+    completedAt: r.completed_at,
+    origin: r.origin as Milestone["origin"],
+    confidence: r.confidence,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    goalTitle: r.goal_title,
+  }));
+  // A goal is stalled per its own review_cadence, computed against its last
+  // touch (review timestamp OR last evidence — whichever is more recent).
+  const evidenceByGoal = storage.goalEvidence.latestByGoals(
+    activeGoals.map((g) => g.id),
+  );
+  const stalledGoals = activeGoals.filter((g) =>
+    isGoalStalled(g, evidenceByGoal.get(g.id)?.recordedAt ?? null, to),
+  );
+
+  const data: PeriodData = {
+    messages,
+    facts,
+    completedTasks,
+    measurements,
+    priorReflections,
+    activeGoals,
+    goalEvidence,
+    completedMilestones,
+    stalledGoals,
+  };
 
   // Include financial data for weekly/monthly reflections
   if (includeFinancial) {
@@ -211,7 +324,47 @@ const renderData = (data: PeriodData): string => {
   if (data.completedTasks.length > 0) {
     parts.push("\n## Tasks completed");
     for (const t of data.completedTasks) {
-      parts.push(`- ${t.content}`);
+      // Annotate goal-linked tasks so the model can spot decisive progress.
+      const tag = t.goalId ? ` (→ goal ${t.goalId})` : "";
+      parts.push(`- ${t.content}${tag}`);
+    }
+  }
+
+  if (data.activeGoals.length > 0) {
+    parts.push("\n## Goals state");
+    parts.push("Active goals (id — title [kind/cadence], horizon):");
+    for (const g of data.activeGoals) {
+      const cad = g.kind === "process" && g.cadence ? `/${g.cadence}` : "";
+      const due = g.dueAt
+        ? `, due ${new Date(g.dueAt).toISOString().slice(0, 10)}`
+        : "";
+      parts.push(`- ${g.id} — ${g.title} [${g.kind}${cad}], ${g.horizon}${due}`);
+    }
+    if (data.completedMilestones.length > 0) {
+      parts.push("\nMilestones completed this period:");
+      for (const m of data.completedMilestones) {
+        parts.push(`- ${m.goalTitle}: ${m.title}`);
+      }
+    }
+    if (data.goalEvidence.length > 0) {
+      parts.push("\nGoal evidence recorded this period:");
+      // Cap rendered evidence so the prompt stays bounded on a busy week.
+      const ev = data.goalEvidence.slice(0, 40);
+      for (const e of ev) {
+        const goalTitle =
+          data.activeGoals.find((g) => g.id === e.goalId)?.title ?? e.goalId;
+        const delta = e.delta !== null && e.delta !== undefined ? ` (${e.delta > 0 ? "+" : ""}${e.delta})` : "";
+        parts.push(`- [${e.origin}] ${goalTitle}: ${e.body}${delta}`);
+      }
+      if (data.goalEvidence.length > ev.length) {
+        parts.push(`  …and ${data.goalEvidence.length - ev.length} more.`);
+      }
+    }
+    if (data.stalledGoals.length > 0) {
+      parts.push("\nStalled goals (no recent touch within their review cadence):");
+      for (const g of data.stalledGoals) {
+        parts.push(`- ${g.id} — ${g.title} (${g.reviewCadence})`);
+      }
     }
   }
 
@@ -342,6 +495,8 @@ export class Reflector {
       data.completedTasks.length > 0 ||
       data.measurements.length > 0 ||
       data.priorReflections.length > 0 ||
+      data.goalEvidence.length > 0 ||
+      data.completedMilestones.length > 0 ||
       (data.financialTransactionSummary?.totalSpent ?? 0) > 0;
     if (!hasActivity) return null;
 
@@ -393,6 +548,36 @@ export class Reflector {
       openThreads: parsed.data.openThreads,
       body,
     });
+
+    // Close the loop: persist a cron-origin evidence row for every goal the
+    // model said was touched, and one for every goal it flagged stalled.
+    // We only consider ids the model returned that actually exist (model can
+    // hallucinate); we silently drop the rest.
+    const knownIds = new Set(data.activeGoals.map((g) => g.id));
+    const touchedSummary = parsed.data.goalsTouched.filter((id) => knownIds.has(id));
+    const stalledSummary = parsed.data.goalsStalled.filter((id) => knownIds.has(id));
+    for (const id of touchedSummary) {
+      storage.goalEvidence.create({
+        goalId: id,
+        body: `Touched during the ${kind} reflection — ${reflection.title ?? new Date(to).toISOString().slice(0, 10)}`,
+        sourceRefType: "reflection",
+        sourceRefId: reflection.id,
+        recordedAt: to,
+        origin: "cron",
+        confidence: 0.6,
+      });
+    }
+    for (const id of stalledSummary) {
+      storage.goalEvidence.create({
+        goalId: id,
+        body: `Flagged stalled by the ${kind} reflection — no recent touch within review cadence.`,
+        sourceRefType: "reflection",
+        sourceRefId: reflection.id,
+        recordedAt: to,
+        origin: "cron",
+        confidence: 0.7,
+      });
+    }
     return reflection;
   }
 }

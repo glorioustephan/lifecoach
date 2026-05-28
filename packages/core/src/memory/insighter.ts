@@ -13,6 +13,7 @@ import { refreshAttentionSignals } from "./attention.js";
 import { indexMoneyMomentFromInsight } from "./finance-narratives.js";
 import { withRetry } from "../util/retry.js";
 import { LifecoachError } from "../util/errors.js";
+import { isGoalStalled } from "../util/goal-cadence.js";
 
 const FINANCE_EVIDENCE_REF_TYPES = new Set(["account", "transaction", "budget", "holding"]);
 
@@ -143,6 +144,35 @@ interface ContextData {
     /** Recurring expense candidates ≥$50/mo, grounding for the expense-research insight pattern. */
     recurringCandidates: Array<{ merchant: string; monthlyEstimate: number; sampleCount: number }>;
   };
+  /** Compact goal-state block. Drives the three goal-specific insight shapes
+   *  (stalled / no-next-action / obstacle-untouched). Sized for the prompt. */
+  goalState: {
+    goals: Array<{
+      id: string;
+      title: string;
+      kind: string;
+      cadence: string | null;
+      reviewCadence: string;
+      obstacle: string | null;
+      implementationIntention: string | null;
+      lastReviewedAt: number | null;
+      dueAt: number | null;
+      stalled: boolean;
+      milestonesDone: number;
+      milestonesTotal: number;
+      linkedActiveTaskCount: number;
+      lastEvidenceAt: number | null;
+    }>;
+    /** Evidence rows from the last 14d, newest first. The model uses these
+     *  to spot patterns the user mentioned in chat. */
+    recentEvidence: Array<{
+      id: string;
+      goalId: string;
+      body: string;
+      recordedAt: number;
+      origin: string;
+    }>;
+  };
 }
 
 const FINANCIAL_LIABILITY_TYPES = new Set<string>(["debt", "credit_card"]);
@@ -263,6 +293,69 @@ const gather = (storage: Storage): ContextData => {
 
   const financial = gatherFinancial(storage, nowMs);
 
+  // ── Goal state for the three goal-specific framings ─────────────────────
+  const allActiveGoals = storage.goals.list({ status: "active", limit: 200 });
+  const evidenceByGoal = storage.goalEvidence.latestByGoals(
+    allActiveGoals.map((g) => g.id),
+  );
+  // Count linked active tasks per goal in one query rather than N.
+  const linkedTaskCounts = new Map<string, number>();
+  const linkedRows = db
+    .prepare(
+      `SELECT goal_id AS goalId, COUNT(*) AS cnt
+       FROM tasks
+       WHERE goal_id IS NOT NULL AND completed_at IS NULL
+       GROUP BY goal_id`,
+    )
+    .all() as Array<{ goalId: string; cnt: number }>;
+  for (const r of linkedRows) linkedTaskCounts.set(r.goalId, r.cnt);
+  // Milestone progress per goal, also in one query.
+  const milestoneCounts = new Map<string, { done: number; total: number }>();
+  const milestoneRows = db
+    .prepare(
+      `SELECT goal_id AS goalId,
+              COUNT(*) AS total,
+              SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done
+       FROM milestones GROUP BY goal_id`,
+    )
+    .all() as Array<{ goalId: string; total: number; done: number | null }>;
+  for (const r of milestoneRows) {
+    milestoneCounts.set(r.goalId, { done: r.done ?? 0, total: r.total });
+  }
+
+  const goalStateGoals = allActiveGoals.map((g) => {
+    const lastEv = evidenceByGoal.get(g.id);
+    const ms = milestoneCounts.get(g.id) ?? { done: 0, total: 0 };
+    return {
+      id: g.id,
+      title: g.title,
+      kind: g.kind as string,
+      cadence: g.cadence ?? null,
+      reviewCadence: g.reviewCadence as string,
+      obstacle: g.obstacle ?? null,
+      implementationIntention: g.implementationIntention ?? null,
+      lastReviewedAt: g.lastReviewedAt ?? null,
+      dueAt: g.dueAt ?? null,
+      stalled: isGoalStalled(g, lastEv?.recordedAt ?? null, nowMs),
+      milestonesDone: ms.done,
+      milestonesTotal: ms.total,
+      linkedActiveTaskCount: linkedTaskCounts.get(g.id) ?? 0,
+      lastEvidenceAt: lastEv?.recordedAt ?? null,
+    };
+  });
+  const recentEvidence = storage.goalEvidence
+    .list({
+      recordedAfter: nowMs - 14 * ONE_DAY,
+      limit: 60,
+    })
+    .map((e) => ({
+      id: e.id,
+      goalId: e.goalId,
+      body: e.body,
+      recordedAt: e.recordedAt,
+      origin: e.origin,
+    }));
+
   return {
     facts,
     attentionSignals,
@@ -273,6 +366,7 @@ const gather = (storage: Storage): ContextData => {
     latestReflections,
     recentInsights,
     financial,
+    goalState: { goals: goalStateGoals, recentEvidence },
   };
 };
 
@@ -444,6 +538,36 @@ const renderContext = (data: ContextData): string => {
     }
   }
 
+  if (data.goalState.goals.length > 0) {
+    parts.push("\n## Goal state (cite via evidenceRefs refType=goal)");
+    parts.push(
+      "Columns: id, title, kind/cadence, review cadence, last touch (days), stalled?, milestones done/total, linked active tasks. " +
+        "A goal with 0 linked active tasks + 0 recent evidence is a strong candidate for the 'no next action' framing.",
+    );
+    for (const g of data.goalState.goals) {
+      const lastTouchMs = g.lastEvidenceAt ?? g.lastReviewedAt;
+      const lastTouchDays =
+        lastTouchMs !== null
+          ? Math.floor((Date.now() - lastTouchMs) / ONE_DAY) + "d"
+          : "never";
+      const cadenceTag =
+        g.kind === "process" && g.cadence ? `${g.kind}/${g.cadence}` : g.kind;
+      parts.push(
+        `- [goal=${g.id}] ${g.title} (${cadenceTag}, review=${g.reviewCadence}, last touch ${lastTouchDays}, stalled=${g.stalled}, milestones ${g.milestonesDone}/${g.milestonesTotal}, ${g.linkedActiveTaskCount} active task${g.linkedActiveTaskCount === 1 ? "" : "s"})`,
+      );
+      if (g.obstacle) parts.push(`    obstacle: ${g.obstacle}`);
+      if (g.implementationIntention) parts.push(`    plan: ${g.implementationIntention}`);
+    }
+    if (data.goalState.recentEvidence.length > 0) {
+      parts.push("\nRecent goal evidence (last 14d, newest first):");
+      for (const e of data.goalState.recentEvidence) {
+        parts.push(
+          `- [goal=${e.goalId} evidence=${e.id}] (${e.origin}) ${new Date(e.recordedAt).toISOString().slice(0, 10)}: ${e.body}`,
+        );
+      }
+    }
+  }
+
   if (data.recentMeasurements.length > 0) {
     parts.push("\n## Measurements (last 90d, grouped by metric)");
     const byMetric = new Map<string, ContextData["recentMeasurements"]>();
@@ -565,6 +689,14 @@ Call \`record_insights\` with **0–3 high-quality insights**. Quality bar:
 3. **Evidence-backed.** Prefer the SQLite attention signals, and include concrete \`evidenceRefs\` with refType/refId/quote so the user can see why this surfaced.
 4. **Non-redundant.** Check the "Prior insights" section. No nagging: don't repeat an old insight unless the evidence changed materially.
 5. **Honest but not alarmist.** Health-related observations should cite the measurements and avoid medical authority. A 12% HRV dip is worth flagging; a 2% one isn't.
+
+**Goal-specific framings** (use sparingly — these aren't required every pass, but they're the right *shape* when the data points to them):
+
+- **"Goal has gone quiet."** Use when the goal-state row shows \`stalled=true\` AND there's no plausible reason in recent messages — the goal hasn't been mentioned and no linked task moved. Topic format: \`Quiet: <goal title>\`. Be specific about the last-touch age. Cite the goal via \`refType=goal\`.
+- **"No next action on <goal title>."** Use when a goal has \`linkedActiveTaskCount=0\` AND \`milestonesTotal\` is also 0 or stale (no done in 14d). The user committed to something but never decomposed it. Topic format: \`No next action: <goal title>\`. Suggest decomposition in the body.
+- **"Untouched obstacle on <goal title>."** Use when the goal has a non-null \`obstacle\` AND none of the recent goal evidence rows or messages mention handling it. This is the WOOP mental-contrasting cue going stale. Topic format: \`Obstacle untouched: <goal title>\`. Quote the obstacle text.
+
+These are *framings*, not enum values — keep the existing topic-as-free-text contract. Skip them when nothing fits; never invent one to fill a slot.
 
 **Financial observations.** Financial state appears as "Financial state (rollups)" above with citable IDs (\`account=…\`, \`budget=…\`, \`holding=…\`). Treat money like any other life signal — when a financial pattern coincides with a life pattern (sleep, stress, a goal, a recurring theme in messages), that coincidence IS the insight; that's the thing only this coach can see. No financial advice, just observations and simple math. Be especially honest about uncertainty: category rollups depend on Monarch's categorization which can be wrong. When you cite a category number, **invite the user to challenge it** (e.g. "If 'Dining $1,036' looks high, tell me which transactions don't belong and I'll recategorize them so the picture stays accurate"). For recurring-expense downgrade suggestions (from the "Recurring expenses ≥$50/mo" list), use the **exact topic format \`Recurring: <Merchant>\`** (so the system can suppress the same suggestion for ~9 months after a dismissal) and surface **at most one** such item per pass with a clear monthly dollar figure. Don't do the alternative research in this pass — the chat agent does it lazily when the user clicks Discuss.
 

@@ -9,6 +9,26 @@ const HORIZON_LABEL: Record<GoalRow["horizon"], string> = {
   open: "open",
 };
 
+// Mirrors packages/core/src/util/goal-cadence.ts. Duplicated rather than
+// imported to keep the web bundle free of core deps; the values here must stay
+// in lockstep with that file.
+const DAY = 24 * 60 * 60 * 1000;
+const STALLED_WINDOW_MS: Record<GoalRow["reviewCadence"], number | null> = {
+  weekly: 9 * DAY,
+  monthly: 38 * DAY,
+  quarterly: 110 * DAY,
+  "as-needed": null,
+};
+
+const computeStaleAgeDays = (goal: GoalRow): number | null => {
+  if (goal.status !== "active" || goal.archivedAt !== null) return null;
+  const window = STALLED_WINDOW_MS[goal.reviewCadence];
+  if (window === null) return null;
+  const lastTouch = Math.max(goal.lastReviewedAt ?? 0, goal.createdAt);
+  const age = Date.now() - lastTouch;
+  return age > window ? Math.floor(age / DAY) : null;
+};
+
 interface GoalCardProps {
   goal: GoalRow;
   /** Pass an empty array when milestones haven't loaded yet — the progress
@@ -41,6 +61,8 @@ export function GoalCard({ goal, milestones, onOpen }: GoalCardProps): JSX.Eleme
     goal.successCriteria ??
     null;
 
+  const staleAgeDays = computeStaleAgeDays(goal);
+
   return (
     <li>
       <button
@@ -50,7 +72,17 @@ export function GoalCard({ goal, milestones, onOpen }: GoalCardProps): JSX.Eleme
       >
         <div className="flex items-start justify-between gap-3">
           <h3 className="min-w-0 flex-1 text-sm font-medium text-fg">{goal.title}</h3>
-          <GoalChips goal={goal} />
+          <div className="flex shrink-0 flex-wrap items-center gap-1">
+            {staleAgeDays !== null && (
+              <span
+                className="rounded-sm bg-warning-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-warning-500"
+                title="No touch within this goal's review cadence"
+              >
+                stalled · {staleAgeDays}d
+              </span>
+            )}
+            <GoalChips goal={goal} />
+          </div>
         </div>
 
         {detail && <p className="mt-1 line-clamp-2 text-xs text-fg-muted">{detail}</p>}
