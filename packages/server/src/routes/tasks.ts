@@ -1,5 +1,11 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import type { Lifecoach } from "@lifecoach/core";
+
+const taskLinkSchema = z.object({
+  goalId: z.string().nullable(),
+  milestoneId: z.string().nullable().optional(),
+});
 
 export const taskRoutes = (lc: Lifecoach) => {
   const app = new Hono();
@@ -55,6 +61,25 @@ export const taskRoutes = (lc: Lifecoach) => {
     lc.storage.tasks.completeTask(id);
 
     return c.json({ ok: true });
+  });
+
+  // Link / un-link a task to a goal (and optionally a milestone). Sending
+  // `goalId: null` clears the association; sending a goalId without a
+  // milestoneId leaves the link at the goal level.
+  app.post("/:id/link", async (c) => {
+    const id = c.req.param("id");
+    if (!lc.storage.tasks.get(id)) return c.json({ error: "not_found" }, 404);
+    const body = await c.req.json().catch(() => null);
+    const parsed = taskLinkSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "invalid_input", issues: parsed.error.issues }, 400);
+    }
+    const updated = lc.storage.tasks.linkToGoal(
+      id,
+      parsed.data.goalId,
+      parsed.data.milestoneId ?? null,
+    );
+    return c.json({ task: updated });
   });
 
   return app;

@@ -32,6 +32,12 @@ export const taskSchema = z.object({
   updatedAt: z.number().int(),
   /** Last time we synced this row from the upstream. */
   syncedAt: z.number().int(),
+  /** Goal this task contributes to. Null for un-linked tasks (the bulk of
+   *  Todoist-synced ones). Set by the agent's link_task_to_goal tool or via
+   *  the Goal edit Sheet "Tasks" tab. */
+  goalId: z.string().nullable().optional(),
+  /** Specific milestone within the goal. Requires goalId to be set. */
+  milestoneId: z.string().nullable().optional(),
 });
 export type Task = z.infer<typeof taskSchema>;
 

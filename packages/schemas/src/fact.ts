@@ -43,12 +43,23 @@ export const recallScope = z.enum([
   "reflections",
   "tasks",
   "finance",
+  "goals",
+  "milestones",
   "all",
 ]);
 export type RecallScope = z.infer<typeof recallScope>;
 
 export const recallHitSchema = z.object({
-  refType: z.enum(["fact", "document", "message", "reflection", "task", "finance"]),
+  refType: z.enum([
+    "fact",
+    "document",
+    "message",
+    "reflection",
+    "task",
+    "finance",
+    "goal",
+    "milestone",
+  ]),
   refId: z.string(),
   text: z.string(),
   score: z.number(),

@@ -11,7 +11,15 @@ export type RefType =
   | "task"
   // "finance" carries indexed financial NARRATIVES (monthly rollups, "money
   // moments" — significant decisions/insights). Never raw transaction rows.
-  | "finance";
+  | "finance"
+  // Aspirational anchor + WOOP fields chunked per goal. One row per goal;
+  // chunk 0 contains title + outcome + obstacle + plan + identity statement
+  // packed together so semantic recall hits any facet. See
+  // memory/goal-indexer.ts.
+  | "goal"
+  // One row per milestone, prefixed with parent goal title so recall returns
+  // the right context even when the milestone title is terse.
+  | "milestone";
 
 export interface EmbeddingInsert {
   refType: RefType;

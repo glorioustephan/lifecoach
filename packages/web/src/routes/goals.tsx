@@ -1,36 +1,48 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Target, Plus, CheckCircle2 } from "lucide-react";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Target, Plus } from "lucide-react";
 import { ViewHeader } from "~/components/ui/ViewHeader";
 import { Button } from "~/components/ui/Button";
-import { IconButton } from "~/components/ui/IconButton";
-import { api, type GoalRow, type ProjectRow } from "~/lib/api";
+import {
+  api,
+  type GoalKind,
+  type GoalRow,
+  type MilestoneRow,
+  type ProjectRow,
+} from "~/lib/api";
 import { cn } from "~/lib/cn";
+import { GoalCard } from "~/components/goals/GoalCard";
+import { GoalEditSheet } from "~/components/goals/GoalEditSheet";
 
 export const Route = createFileRoute("/goals")({
   component: GoalsRoute,
 });
 
-const HORIZON_LABEL: Record<GoalRow["horizon"], string> = {
-  "this-week": "This week",
-  "this-month": "This month",
-  "this-quarter": "This quarter",
-  "this-year": "This year",
-  open: "Open",
+const KIND_ORDER: GoalKind[] = ["outcome", "process", "identity"];
+const KIND_LABEL: Record<GoalKind, string> = {
+  outcome: "Outcomes",
+  process: "Processes",
+  identity: "Identity",
+};
+const KIND_BLURB: Record<GoalKind, string> = {
+  outcome: "Finite achievements with a definable end.",
+  process: "Recurring practices on a cadence.",
+  identity: "Who you are becoming.",
 };
 
-const HORIZON_ORDER: GoalRow["horizon"][] = [
-  "this-week",
-  "this-month",
-  "this-quarter",
-  "this-year",
-  "open",
-];
+const HORIZON_LABEL: Record<GoalRow["horizon"], string> = {
+  "this-week": "this week",
+  "this-month": "this month",
+  "this-quarter": "this quarter",
+  "this-year": "this year",
+  open: "open",
+};
 
 function GoalsRoute(): JSX.Element {
   const qc = useQueryClient();
   const [showNew, setShowNew] = useState(false);
+  const [editing, setEditing] = useState<GoalRow | null>(null);
 
   const { data: goalsData, isLoading } = useQuery({
     queryKey: ["goals", "active"],
@@ -49,17 +61,28 @@ function GoalsRoute(): JSX.Element {
     },
   });
 
-  const completeMut = useMutation({
-    mutationFn: (id: string) => api.updateGoal(id, { status: "done" }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["goals"] }),
-  });
-
-  // Group goals by horizon
-  const grouped = new Map<GoalRow["horizon"], GoalRow[]>();
-  for (const h of HORIZON_ORDER) grouped.set(h, []);
+  // Group goals by kind. Within a group, list order matches what the server
+  // returned (last_reviewed_at ASC then horizon priority).
+  const grouped = new Map<GoalKind, GoalRow[]>();
+  for (const k of KIND_ORDER) grouped.set(k, []);
   for (const g of goalsData?.goals ?? []) {
-    grouped.get(g.horizon)?.push(g);
+    grouped.get(g.kind)?.push(g);
   }
+
+  // Fetch milestones for every visible goal in parallel. React Query dedupes
+  // and caches, so opening/closing the edit sheet doesn't re-fetch.
+  const milestoneQueries = useQueries({
+    queries: (goalsData?.goals ?? []).map((g) => ({
+      queryKey: ["goals", g.id, "milestones"] as const,
+      queryFn: () => api.goalMilestones(g.id),
+      staleTime: 30_000,
+    })),
+  });
+  const milestonesById = new Map<string, MilestoneRow[]>();
+  (goalsData?.goals ?? []).forEach((g, idx) => {
+    const data = milestoneQueries[idx]?.data;
+    if (data) milestonesById.set(g.id, data.milestones);
+  });
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -67,11 +90,7 @@ function GoalsRoute(): JSX.Element {
         title="Goals"
         subtitle="What you're working toward"
         actions={
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setShowNew(true)}
-          >
+          <Button variant="secondary" size="sm" onClick={() => setShowNew(true)}>
             <Plus className="size-3.5" strokeWidth={1.75} />
             New goal
           </Button>
@@ -88,7 +107,6 @@ function GoalsRoute(): JSX.Element {
               onSubmit={(input) => createMut.mutate(input)}
               onCancel={() => setShowNew(false)}
               pending={createMut.isPending}
-              projects={projectsData?.projects ?? []}
             />
           )}
 
@@ -97,7 +115,7 @@ function GoalsRoute(): JSX.Element {
               {Array.from({ length: 3 }).map((_, i) => (
                 <li
                   key={i}
-                  className="h-16 animate-pulse rounded-md border border-border-subtle bg-surface/50"
+                  className="h-20 animate-pulse rounded-md border border-border-subtle bg-surface/50"
                 />
               ))}
             </ul>
@@ -108,8 +126,8 @@ function GoalsRoute(): JSX.Element {
               <Target className="size-8 text-fg-faint" strokeWidth={1.5} />
               <p className="text-sm text-fg-muted">No active goals.</p>
               <p className="max-w-sm text-xs text-fg-faint">
-                Goals are durable intentions with a horizon. Add one to give the
-                coach something to anchor recommendations against.
+                Pick one thing you're moving toward this season. We'll help you
+                turn it into milestones and a first action.
               </p>
               <Button
                 variant="primary"
@@ -124,20 +142,24 @@ function GoalsRoute(): JSX.Element {
           )}
 
           {!isLoading &&
-            HORIZON_ORDER.map((horizon) => {
-              const goals = grouped.get(horizon) ?? [];
+            KIND_ORDER.map((kind) => {
+              const goals = grouped.get(kind) ?? [];
               if (goals.length === 0) return null;
               return (
-                <section key={horizon}>
-                  <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-fg-faint">
-                    {HORIZON_LABEL[horizon]}
-                  </h2>
+                <section key={kind}>
+                  <header className="mb-2 flex items-baseline justify-between gap-3">
+                    <h2 className="text-[11px] font-semibold uppercase tracking-wide text-fg-faint">
+                      {KIND_LABEL[kind]}
+                    </h2>
+                    <span className="text-[11px] text-fg-faint">{KIND_BLURB[kind]}</span>
+                  </header>
                   <ul className="space-y-2">
                     {goals.map((g) => (
                       <GoalCard
                         key={g.id}
                         goal={g}
-                        onComplete={() => completeMut.mutate(g.id)}
+                        milestones={milestonesById.get(g.id) ?? []}
+                        onOpen={() => setEditing(g)}
                       />
                     ))}
                   </ul>
@@ -146,6 +168,7 @@ function GoalsRoute(): JSX.Element {
             })}
         </div>
       </div>
+      <GoalEditSheet goal={editing} onClose={() => setEditing(null)} />
     </div>
   );
 }
@@ -170,87 +193,18 @@ function ProjectsSummary({ projects }: { projects: ProjectRow[] }): JSX.Element 
   );
 }
 
-function GoalCard({
-  goal,
-  onComplete,
-}: {
-  goal: GoalRow;
-  onComplete: () => void;
-}): JSX.Element {
-  const hasTarget =
-    goal.targetValue !== null && goal.targetValue !== undefined && goal.targetMetric;
-  const progressPercent =
-    hasTarget && goal.currentProgress !== null && goal.targetValue
-      ? Math.min(100, Math.round((goal.currentProgress! / goal.targetValue) * 100))
-      : null;
-
-  return (
-    <li className="rounded-md border border-border bg-surface px-4 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium text-fg">{goal.title}</h3>
-          {goal.body && (
-            <p className="mt-1 text-xs text-fg-muted">{goal.body}</p>
-          )}
-          {goal.successCriteria && (
-            <p className="mt-1 text-xs text-fg-faint">
-              <span className="text-fg-muted">success:</span> {goal.successCriteria}
-            </p>
-          )}
-          {hasTarget && (
-            <div className="mt-2">
-              <div className="flex justify-between text-[10px] font-mono text-fg-faint">
-                <span>{goal.targetMetric}</span>
-                <span>
-                  {goal.currentProgress ?? 0} / {goal.targetValue}
-                </span>
-              </div>
-              <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface-elevated">
-                <div
-                  className={cn(
-                    "h-full rounded-full bg-accent transition-all",
-                    progressPercent === 100 && "bg-success-500",
-                  )}
-                  style={{ width: `${progressPercent ?? 0}%` }}
-                />
-              </div>
-            </div>
-          )}
-          {goal.dueAt && (
-            <p className="mt-2 text-[10px] font-mono text-fg-faint">
-              due {new Date(goal.dueAt).toISOString().slice(0, 10)}
-            </p>
-          )}
-        </div>
-        <IconButton
-          variant="success"
-          size="sm"
-          onClick={onComplete}
-          aria-label={`Complete ${goal.title}`}
-        >
-          <CheckCircle2 className="size-4" strokeWidth={1.75} />
-        </IconButton>
-      </div>
-    </li>
-  );
-}
-
 function NewGoalForm({
   onSubmit,
   onCancel,
   pending,
-  projects,
 }: {
   onSubmit: (input: Parameters<typeof api.createGoal>[0]) => void;
   onCancel: () => void;
   pending: boolean;
-  projects: ProjectRow[];
 }): JSX.Element {
   const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [horizon, setHorizon] = useState<GoalRow["horizon"]>("this-week");
-  const [successCriteria, setSuccessCriteria] = useState("");
-  const [projectId, setProjectId] = useState<string>("");
+  const [outcome, setOutcome] = useState("");
+  const [kind, setKind] = useState<GoalKind>("outcome");
   const canSubmit = title.trim().length > 0 && !pending;
 
   return (
@@ -260,10 +214,8 @@ function NewGoalForm({
         if (!canSubmit) return;
         onSubmit({
           title: title.trim(),
-          ...(body.trim() ? { body: body.trim() } : {}),
-          horizon,
-          ...(successCriteria.trim() ? { successCriteria: successCriteria.trim() } : {}),
-          ...(projectId ? { projectId } : {}),
+          kind,
+          ...(outcome.trim() ? { outcome: outcome.trim() } : {}),
         });
       }}
       className="space-y-3 rounded-md border border-border bg-surface px-4 py-4"
@@ -272,49 +224,34 @@ function NewGoalForm({
         autoFocus
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="What do you want to achieve?"
+        placeholder="What do you want to do, become, or build?"
         className="w-full bg-transparent text-sm text-fg placeholder:text-fg-faint focus:outline-none"
       />
       <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
+        value={outcome}
+        onChange={(e) => setOutcome(e.target.value)}
         rows={2}
-        placeholder="Why does this matter? (optional)"
-        className="w-full resize-none bg-transparent text-xs text-fg-muted placeholder:text-fg-faint focus:outline-none"
-      />
-      <textarea
-        value={successCriteria}
-        onChange={(e) => setSuccessCriteria(e.target.value)}
-        rows={1}
-        placeholder="How will you know it's done? (optional)"
+        placeholder="What does success feel like? (optional, you can fill this in later)"
         className="w-full resize-none bg-transparent text-xs text-fg-muted placeholder:text-fg-faint focus:outline-none"
       />
       <div className="flex flex-wrap items-center gap-2">
-        <select
-          value={horizon}
-          onChange={(e) => setHorizon(e.target.value as GoalRow["horizon"])}
-          className="rounded-md border border-border-subtle bg-surface-elevated px-2 py-1 text-xs text-fg"
-        >
-          {HORIZON_ORDER.map((h) => (
-            <option key={h} value={h}>
-              {HORIZON_LABEL[h]}
-            </option>
+        <div className="flex items-center gap-1">
+          {KIND_ORDER.map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKind(k)}
+              className={cn(
+                "rounded-md border px-2.5 py-1 text-[11px] transition-colors",
+                kind === k
+                  ? "border-accent/60 bg-accent/15 text-fg"
+                  : "border-border-subtle bg-surface text-fg-muted hover:border-accent/30",
+              )}
+            >
+              {KIND_LABEL[k].replace(/s$/, "")}
+            </button>
           ))}
-        </select>
-        {projects.length > 0 && (
-          <select
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-            className="rounded-md border border-border-subtle bg-surface-elevated px-2 py-1 text-xs text-fg"
-          >
-            <option value="">No project</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.title}
-              </option>
-            ))}
-          </select>
-        )}
+        </div>
         <div className="ml-auto flex items-center gap-2">
           <Button
             variant="secondary"
@@ -336,6 +273,11 @@ function NewGoalForm({
           </Button>
         </div>
       </div>
+      <p className="text-[11px] text-fg-faint">
+        Tip: this is the bare minimum. Add the obstacle, if-then plan, and
+        milestones once you've created it — click the goal card to open the
+        full editor.
+      </p>
     </form>
   );
 }

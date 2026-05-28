@@ -15,6 +15,7 @@ import {
   IngestedFileRepository,
   TaskRepository,
   GoalRepository,
+  MilestoneRepository,
   ProjectRepository,
   ArtifactRepository,
   FinancialRepository,
@@ -36,6 +37,7 @@ export interface Storage {
   ingestedFiles: IngestedFileRepository;
   tasks: TaskRepository;
   goals: GoalRepository;
+  milestones: MilestoneRepository;
   projects: ProjectRepository;
   artifacts: ArtifactRepository;
   financial: FinancialRepository;
@@ -61,6 +63,7 @@ export const createStorage = (config: LifecoachConfig): Storage => {
     ingestedFiles: new IngestedFileRepository(db),
     tasks: new TaskRepository(db),
     goals: new GoalRepository(db),
+    milestones: new MilestoneRepository(db),
     projects: new ProjectRepository(db),
     artifacts: new ArtifactRepository(db),
     financial: new FinancialRepository(db),

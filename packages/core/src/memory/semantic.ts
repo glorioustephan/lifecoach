@@ -170,6 +170,10 @@ export class SemanticMemory {
         return "task";
       case "finance":
         return "finance";
+      case "goals":
+        return "goal";
+      case "milestones":
+        return "milestone";
       case "all":
       default:
         return undefined;
@@ -303,6 +307,83 @@ export class SemanticMemory {
           refType: "task",
           refId: t.id,
           text: `[task] ${t.content}${t.description ? ": " + t.description.slice(0, 200) : ""}`,
+          score: 0.4,
+        });
+      }
+    }
+
+    // Goals: substring across every aspirational facet so the keyword path
+    // mirrors what the embedder sees in goal-indexer.ts.
+    if (scope === "goals" || scope === "all") {
+      const db = this.storage.handle.db;
+      const pattern = `%${lower}%`;
+      const rows = db
+        .prepare(
+          `SELECT id, kind, title,
+                  COALESCE(outcome,'') AS outcome,
+                  COALESCE(obstacle,'') AS obstacle,
+                  COALESCE(implementation_intention,'') AS plan,
+                  COALESCE(identity_statement,'') AS identity,
+                  COALESCE(body,'') AS body
+           FROM goals
+           WHERE archived_at IS NULL
+             AND (LOWER(title) LIKE ?
+                  OR LOWER(COALESCE(outcome,'')) LIKE ?
+                  OR LOWER(COALESCE(obstacle,'')) LIKE ?
+                  OR LOWER(COALESCE(implementation_intention,'')) LIKE ?
+                  OR LOWER(COALESCE(identity_statement,'')) LIKE ?
+                  OR LOWER(COALESCE(body,'')) LIKE ?)
+           ORDER BY (status = 'active') DESC, updated_at DESC
+           LIMIT ?`,
+        )
+        .all(pattern, pattern, pattern, pattern, pattern, pattern, limit) as {
+        id: string;
+        kind: string;
+        title: string;
+        outcome: string;
+        obstacle: string;
+        plan: string;
+        identity: string;
+        body: string;
+      }[];
+      for (const g of rows) {
+        const detail = g.outcome || g.plan || g.identity || g.body || g.obstacle;
+        hits.push({
+          refType: "goal",
+          refId: g.id,
+          text: `[goal:${g.kind}] ${g.title}${detail ? " — " + detail.slice(0, 200) : ""}`,
+          score: 0.4,
+        });
+      }
+    }
+
+    // Milestones: substring on title + body. Prefixed with parent goal title
+    // to match the embedder's text shape.
+    if (scope === "milestones" || scope === "all") {
+      const db = this.storage.handle.db;
+      const pattern = `%${lower}%`;
+      const rows = db
+        .prepare(
+          `SELECT m.id AS id, m.title AS title, COALESCE(m.body,'') AS body,
+                  g.title AS goal_title
+           FROM milestones m
+           JOIN goals g ON g.id = m.goal_id
+           WHERE g.archived_at IS NULL
+             AND (LOWER(m.title) LIKE ? OR LOWER(COALESCE(m.body,'')) LIKE ?)
+           ORDER BY m.updated_at DESC
+           LIMIT ?`,
+        )
+        .all(pattern, pattern, limit) as {
+        id: string;
+        title: string;
+        body: string;
+        goal_title: string;
+      }[];
+      for (const m of rows) {
+        hits.push({
+          refType: "milestone",
+          refId: m.id,
+          text: `[milestone] ${m.goal_title}: ${m.title}${m.body ? " — " + m.body.slice(0, 200) : ""}`,
           score: 0.4,
         });
       }

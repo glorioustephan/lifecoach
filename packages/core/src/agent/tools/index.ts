@@ -16,6 +16,7 @@ import { buildTaskTools } from "./tasks.js";
 import { buildForgetDocumentTools } from "./forget-document.js";
 import { buildInsightTools } from "./insights.js";
 import { buildGoalTools } from "./goals.js";
+import { buildMilestoneTools } from "./milestones.js";
 import { buildCapacitiesTools } from "./capacities.js";
 import { buildFinancialTools } from "./financial.js";
 import { buildCategorizationTools } from "./categorization.js";
@@ -65,7 +66,8 @@ export const buildAllTools = (deps: ToolDeps) => [
     memory: deps.memory,
     insighter: deps.insighter,
   }),
-  ...buildGoalTools({ storage: deps.storage }),
+  ...buildGoalTools({ storage: deps.storage, embedder: deps.embedder }),
+  ...buildMilestoneTools({ storage: deps.storage, embedder: deps.embedder }),
   ...buildCapacitiesTools({
     capacities: deps.capacities,
     storage: deps.storage,

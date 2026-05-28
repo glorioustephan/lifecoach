@@ -174,20 +174,64 @@ export interface InsightRow {
 
 export type InsightState = "active" | "acted" | "dismissed" | "snoozed" | "all";
 
+export type GoalKind = "outcome" | "process" | "identity";
+export type GoalCadence = "daily" | "weekly" | "monthly";
+export type GoalReviewCadence = "weekly" | "monthly" | "quarterly" | "as-needed";
+
 export interface GoalRow {
   id: string;
   title: string;
   body: string | null;
   horizon: "this-week" | "this-month" | "this-quarter" | "this-year" | "open";
   status: "active" | "paused" | "done" | "abandoned";
+  kind: GoalKind;
+  cadence: GoalCadence | null;
+  outcome: string | null;
+  obstacle: string | null;
+  implementationIntention: string | null;
+  identityStatement: string | null;
   successCriteria: string | null;
   parentGoalId: string | null;
   projectId: string | null;
   targetMetric: string | null;
   targetValue: number | null;
   currentProgress: number | null;
+  reviewCadence: GoalReviewCadence;
+  lastReviewedAt: number | null;
+  archivedAt: number | null;
   dueAt: number | null;
   completedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface TaskRow {
+  id: string;
+  content: string;
+  description: string | null;
+  projectName: string | null;
+  labels: string[];
+  priority: number | null;
+  dueAt: number | null;
+  dueString: string | null;
+  completedAt: number | null;
+  goalId: string | null;
+  milestoneId: string | null;
+}
+
+export type MilestoneStatus = "pending" | "active" | "done" | "abandoned";
+
+export interface MilestoneRow {
+  id: string;
+  goalId: string;
+  title: string;
+  body: string | null;
+  status: MilestoneStatus;
+  orderIndex: number;
+  dueAt: number | null;
+  completedAt: number | null;
+  origin: "manual" | "conversation" | "cron";
+  confidence: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -258,6 +302,13 @@ export const api = {
   createGoal: (body: {
     title: string;
     body?: string;
+    kind?: GoalKind;
+    cadence?: GoalCadence;
+    outcome?: string;
+    obstacle?: string;
+    implementationIntention?: string;
+    identityStatement?: string;
+    reviewCadence?: GoalReviewCadence;
     horizon?: GoalRow["horizon"];
     successCriteria?: string;
     targetMetric?: string;
@@ -265,10 +316,89 @@ export const api = {
     dueAt?: number;
     projectId?: string;
   }) => postJson<{ goal: GoalRow }>("/api/goals", body),
-  updateGoal: (id: string, patch: Partial<{ status: GoalRow["status"]; currentProgress: number; body: string; successCriteria: string; targetValue: number }>) =>
-    patchJson<{ goal: GoalRow }>(`/api/goals/${encodeURIComponent(id)}`, patch),
+  updateGoal: (
+    id: string,
+    patch: Partial<{
+      title: string;
+      status: GoalRow["status"];
+      currentProgress: number | null;
+      body: string | null;
+      horizon: GoalRow["horizon"];
+      kind: GoalKind;
+      cadence: GoalCadence | null;
+      outcome: string | null;
+      obstacle: string | null;
+      implementationIntention: string | null;
+      identityStatement: string | null;
+      successCriteria: string | null;
+      reviewCadence: GoalReviewCadence;
+      targetMetric: string | null;
+      targetValue: number | null;
+      dueAt: number | null;
+    }>,
+  ) => patchJson<{ goal: GoalRow }>(`/api/goals/${encodeURIComponent(id)}`, patch),
+  archiveGoal: (id: string) =>
+    postJson<{ goal: GoalRow }>(`/api/goals/${encodeURIComponent(id)}/archive`, {}),
+  unarchiveGoal: (id: string) =>
+    postJson<{ goal: GoalRow }>(`/api/goals/${encodeURIComponent(id)}/unarchive`, {}),
+  // Milestones nested under goals
+  goalMilestones: (goalId: string) =>
+    get<{ milestones: MilestoneRow[] }>(
+      `/api/goals/${encodeURIComponent(goalId)}/milestones`,
+    ),
+  createMilestone: (
+    goalId: string,
+    body: { title: string; body?: string; dueAt?: number; orderIndex?: number },
+  ) =>
+    postJson<{ milestone: MilestoneRow }>(
+      `/api/goals/${encodeURIComponent(goalId)}/milestones`,
+      body,
+    ),
+  updateMilestone: (
+    goalId: string,
+    id: string,
+    patch: Partial<{
+      title: string;
+      body: string | null;
+      status: MilestoneStatus;
+      orderIndex: number;
+      dueAt: number | null;
+    }>,
+  ) =>
+    patchJson<{ milestone: MilestoneRow }>(
+      `/api/goals/${encodeURIComponent(goalId)}/milestones/${encodeURIComponent(id)}`,
+      patch,
+    ),
+  deleteMilestone: (goalId: string, id: string) =>
+    del<{ ok: true }>(
+      `/api/goals/${encodeURIComponent(goalId)}/milestones/${encodeURIComponent(id)}`,
+    ),
+  reorderMilestones: (goalId: string, ids: string[]) =>
+    postJson<{ milestones: MilestoneRow[] }>(
+      `/api/goals/${encodeURIComponent(goalId)}/milestones/reorder`,
+      { ids },
+    ),
+  linkTaskToGoal: (
+    taskId: string,
+    body: { goalId: string | null; milestoneId?: string | null },
+  ) =>
+    postJson<{ task: { id: string; goalId: string | null; milestoneId: string | null } }>(
+      `/api/tasks/${encodeURIComponent(taskId)}/link`,
+      body,
+    ),
   createProject: (body: { title: string; body?: string; targetDate?: number }) =>
     postJson<{ project: ProjectRow }>("/api/goals/projects", body),
+  tasks: (
+    opts: { status?: "active" | "completed" | "overdue" | "all"; limit?: number } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (opts.status) params.set("status", opts.status);
+    if (opts.limit) params.set("limit", String(opts.limit));
+    const qs = params.toString();
+    return get<{ tasks: TaskRow[]; total: number }>(
+      `/api/tasks${qs ? `?${qs}` : ""}`,
+    );
+  },
   briefing: () =>
     get<{
       generatedAt: number;

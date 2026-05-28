@@ -8,6 +8,7 @@ export * from "./insight.js";
 export * from "./session.js";
 export * from "./task.js";
 export * from "./goal.js";
+export * from "./milestone.js";
 export * from "./project.js";
 export * from "./artifact.js";
 export * from "./financial.js";

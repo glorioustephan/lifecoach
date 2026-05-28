@@ -19,6 +19,8 @@ interface TaskRow {
   created_at: number;
   updated_at: number;
   synced_at: number;
+  goal_id: string | null;
+  milestone_id: string | null;
 }
 
 const rowToTask = (row: TaskRow): Task => ({
@@ -38,10 +40,12 @@ const rowToTask = (row: TaskRow): Task => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at,
   syncedAt: row.synced_at,
+  goalId: row.goal_id,
+  milestoneId: row.milestone_id,
 });
 
 const FULL_COLUMNS =
-  "id, external_id, external_source, content, description, project_id, project_name, labels, priority, due_at, due_string, completed_at, url, created_at, updated_at, synced_at";
+  "id, external_id, external_source, content, description, project_id, project_name, labels, priority, due_at, due_string, completed_at, url, created_at, updated_at, synced_at, goal_id, milestone_id";
 
 export interface TaskListFilter {
   status?: "active" | "completed" | "overdue" | "all";
@@ -201,7 +205,7 @@ export class TaskRepository {
     const id = newId();
     this.db
       .prepare(
-        `INSERT INTO tasks(${FULL_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tasks(${FULL_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -220,6 +224,8 @@ export class TaskRepository {
         ts,
         ts,
         ts,
+        task.goalId ?? null,
+        task.milestoneId ?? null,
       );
     return {
       id,
@@ -238,7 +244,29 @@ export class TaskRepository {
       createdAt: ts,
       updatedAt: ts,
       syncedAt: ts,
+      goalId: task.goalId ?? null,
+      milestoneId: task.milestoneId ?? null,
     };
+  }
+
+  /**
+   * Link (or un-link) a task to a goal and optionally a milestone. Both
+   * arguments accept `null` to clear. Returns the updated row.
+   */
+  linkToGoal(
+    id: string,
+    goalId: string | null,
+    milestoneId: string | null = null,
+  ): Task | undefined {
+    const existing = this.get(id);
+    if (!existing) return undefined;
+    const ts = now();
+    this.db
+      .prepare(
+        "UPDATE tasks SET goal_id = ?, milestone_id = ?, updated_at = ? WHERE id = ?",
+      )
+      .run(goalId, milestoneId, ts, id);
+    return this.get(id);
   }
 
   /**

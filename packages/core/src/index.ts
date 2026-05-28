@@ -147,6 +147,7 @@ export { forgetDocument, type ForgetDocumentResult } from "./memory/forget.js";
 export { refreshAttentionSignals } from "./memory/attention.js";
 export { Reflector, kindWindow, type ReflectionPayload } from "./memory/reflector.js";
 export { Insighter } from "./memory/insighter.js";
+export { indexGoal, indexGoals, indexMilestone } from "./memory/goal-indexer.js";
 export {
   AlpacaClient,
   AlpacaApiError,
