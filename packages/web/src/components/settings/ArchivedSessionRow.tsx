@@ -11,13 +11,8 @@ type ArchivedSession = NonNullable<
  * Single row in the Archived Conversations list. Restore button calls
  * api.unarchiveSession and invalidates the sessions query.
  */
-export function ArchivedSessionRow({
-  session,
-  qc,
-}: {
-  session: ArchivedSession;
-  qc: ReturnType<typeof useQueryClient>;
-}): JSX.Element {
+export function ArchivedSessionRow({ session }: { session: ArchivedSession }): JSX.Element {
+  const qc = useQueryClient();
   const unarchive = useMutation({
     mutationFn: () => api.unarchiveSession(session.id),
     onSuccess: () => {

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Lifecoach } from "@lifecoach/core";
-import { backfillFromCsv, parseMonarchCsv, computeNetWorth } from "@lifecoach/core";
+import { backfillFromCsv, parseMonarchCsv, computeNetWorth, buildMtdRollup } from "@lifecoach/core";
 import { FINANCE_EVIDENCE_REF_TYPES } from "@lifecoach/schemas";
 
 const accountsWithNetWorth = (lc: Lifecoach) => {
@@ -59,6 +59,35 @@ export const financialRoutes = (lc: Lifecoach) => {
       i.evidenceRefs.some((ref) => FINANCE_EVIDENCE_REF_TYPES.has(ref.refType)),
     );
     return c.json({ insights });
+  });
+
+  /**
+   * Month-to-date savings rate: (income − expenses) / income × 100.
+   *
+   * Transfer transactions are excluded via the same `isTransferTxn` cascade
+   * used by the agent's `financial_monthly_rollup` tool — ensuring the UI and
+   * agent always agree on the number.
+   *
+   * Returns `savingsRate: null` when income ≤ 0 (not enough income data yet)
+   * so the UI can show "—" rather than a misleading 0 %.
+   */
+  app.get("/savings-rate-mtd", (c) => {
+    const now = Date.now();
+    const startOfMonth = (() => {
+      const d = new Date(now);
+      return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0).getTime();
+    })();
+    const transactions = lc.storage.financial.queryTransactions({
+      from: startOfMonth,
+      to: now,
+    });
+    const rollup = buildMtdRollup(transactions, now);
+    return c.json({
+      income: rollup.income,
+      expenses: rollup.expenses,
+      savingsRate: rollup.income > 0 ? rollup.savingsRate : null,
+      daysInWindow: rollup.daysInWindow,
+    });
   });
 
   /**

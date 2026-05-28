@@ -39,6 +39,11 @@ function FinancesRoute(): JSX.Element {
     queryFn: api.financialHoldings,
   });
 
+  const { data: savingsRateData } = useQuery({
+    queryKey: ["finances", "savings-rate-mtd"],
+    queryFn: api.financialSavingsRateMtd,
+  });
+
   const { data: insightsData } = useQuery({
     queryKey: ["finances", "insights"],
     queryFn: api.financialInsights,
@@ -101,11 +106,11 @@ function FinancesRoute(): JSX.Element {
   const totalAssets = accountsData?.totalAssets ?? 0;
   const totalLiabilities = accountsData?.totalLiabilities ?? 0;
   const netWorth = accountsData?.netWorth ?? 0;
-  // Ratio of assets to total balance sheet (assets / (assets + liabilities)).
-  // NOTE: this is NOT a real savings rate (income - expenses) / income — see
-  // .claude/plans/wave-1-correctness-safety.md W1.3 for the proper fix.
-  const assetRatio =
-    totalAssets > 0 ? (totalAssets / (totalAssets + totalLiabilities)) * 100 : 0;
+  const savingsRate = savingsRateData?.savingsRate ?? null;
+  const savingsRateDays = savingsRateData?.daysInWindow ?? 0;
+  // Show "—" with tooltip when income is zero or we don't have at least 7 days
+  // of data yet — avoids surfacing a misleading 0 %.
+  const savingsRateInsufficient = savingsRate === null || savingsRateDays < 7;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -196,18 +201,33 @@ function FinancesRoute(): JSX.Element {
                 </CardContent>
               </Card>
 
-              {/* Asset Ratio */}
+              {/* Savings Rate MTD */}
               <Card>
                 <CardHeader className="pb-1">
-                  <CardTitle className="text-xs font-medium text-fg-muted" title="Assets ÷ (Assets + Liabilities). Not a true savings rate.">
-                    Asset Ratio
+                  <CardTitle
+                    className="text-xs font-medium text-fg-muted"
+                    title="(Income − Expenses) ÷ Income × 100, month-to-date. Transfers excluded."
+                  >
+                    Savings Rate (MTD)
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-baseline gap-1 text-xl font-semibold text-fg">
-                    {assetRatio.toFixed(1)}
-                    <span className="text-sm font-normal text-fg-muted">%</span>
-                  </div>
+                  {savingsRateInsufficient ? (
+                    <div
+                      className="text-xl font-semibold text-fg-faint"
+                      title="Not enough income this month yet"
+                    >
+                      —
+                    </div>
+                  ) : (
+                    <div className={cn(
+                      "flex items-baseline gap-1 text-xl font-semibold",
+                      (savingsRate ?? 0) >= 0 ? "text-success-500" : "text-destructive-300",
+                    )}>
+                      {(savingsRate ?? 0).toFixed(1)}
+                      <span className="text-sm font-normal text-fg-muted">%</span>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>

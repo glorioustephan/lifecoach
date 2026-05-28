@@ -204,3 +204,14 @@ export {
   computeNetWorth,
   type NetWorthSummary,
 } from "./financial/portfolio.js";
+export { isTransferTxn } from "./financial/transfer.js";
+export {
+  buildMtdRollup,
+  buildMonthlyRollup,
+  buildCalendarMonthRollup,
+  parseMonthWindow,
+  type MonthlyRollup,
+  type MonthWindow,
+  type WindowType,
+  type GuardResult,
+} from "./financial/rollup.js";

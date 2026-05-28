@@ -783,6 +783,10 @@ export const api = {
     }>("/api/financial/holdings"),
   financialInsights: () =>
     get<{ insights: FinancialInsightRow[] }>("/api/financial/insights"),
+  financialSavingsRateMtd: () =>
+    get<{ income: number; expenses: number; savingsRate: number | null; daysInWindow: number }>(
+      "/api/financial/savings-rate-mtd",
+    ),
 
   /**
    * One-time historical backfill from a Monarch CSV export. Only rows older

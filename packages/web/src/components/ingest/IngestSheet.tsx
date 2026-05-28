@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { CheckCircle2, FileText, AlertCircle } from "lucide-react";
@@ -86,10 +86,14 @@ export const IngestSheet = (): JSX.Element => {
     },
   });
 
+  // Stable ref so the effect dep array can be honest — upload.reset identity
+  // changes on every render but we only ever want to call the current version.
+  const uploadResetRef = useRef(upload.reset);
+  uploadResetRef.current = upload.reset;
+
   // Clear result when we open with a new file
   useEffect(() => {
-    if (pendingFile) upload.reset();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (pendingFile) uploadResetRef.current();
   }, [pendingFile]);
 
   const status = useMemo<"idle" | "pending" | "success" | "error">(() => {

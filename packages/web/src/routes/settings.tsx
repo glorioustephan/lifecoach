@@ -1,5 +1,5 @@
 import { createFileRoute, useSearch } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { api } from "~/lib/api";
@@ -31,7 +31,6 @@ export const Route = createFileRoute("/settings")({
 function SettingsRoute(): JSX.Element {
   const search = useSearch({ from: "/settings" });
   const [tab, setTab] = useState<Tab>(search.tab ?? "profile");
-  const qc = useQueryClient();
   const { theme, setTheme } = useTheme();
 
   const { data: status } = useQuery({ queryKey: ["status"], queryFn: api.status });
@@ -214,7 +213,7 @@ function SettingsRoute(): JSX.Element {
               ) : (
                 <div className="divide-y divide-border-subtle">
                   {archived?.sessions.map((s) => (
-                    <ArchivedSessionRow key={s.id} session={s} qc={qc} />
+                    <ArchivedSessionRow key={s.id} session={s} />
                   ))}
                 </div>
               )}
