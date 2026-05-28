@@ -18,6 +18,7 @@ import { buildInsightTools } from "./insights.js";
 import { buildGoalTools } from "./goals.js";
 import { buildCapacitiesTools } from "./capacities.js";
 import { buildFinancialTools } from "./financial.js";
+import { buildCategorizationTools } from "./categorization.js";
 import { buildWebResearchTools } from "./web-research.js";
 
 export interface ToolDeps {
@@ -71,6 +72,7 @@ export const buildAllTools = (deps: ToolDeps) => [
     defaultSpaceId: deps.capacitiesDefaultSpaceId,
   }),
   ...buildFinancialTools(deps.storage),
+  ...buildCategorizationTools(deps.storage),
   ...buildWebResearchTools({ apiKey: deps.anthropicApiKey, model: deps.model }),
 ];
 

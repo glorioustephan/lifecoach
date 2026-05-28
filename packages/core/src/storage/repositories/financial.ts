@@ -73,6 +73,53 @@ interface BudgetRow {
   updated_at: number;
 }
 
+interface TransactionOverrideRow {
+  id: string;
+  transaction_external_id: string;
+  category: string;
+  notes: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+interface CategorizationRuleRow {
+  id: string;
+  merchant_pattern: string;
+  account_id: string | null;
+  category: string;
+  priority: number;
+  created_at: number;
+  updated_at: number;
+}
+
+/**
+ * A user correction to Monarch's categorization. Stored separately so re-syncs
+ * never overwrite the correction (effective category is computed at read time).
+ */
+export interface TransactionOverride {
+  id: string;
+  transactionExternalId: string;
+  category: string;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * A pattern-based categorization rule. Effective at read time across all
+ * present + future transactions: merchant substring match (case-insensitive),
+ * optional account scope, highest priority wins.
+ */
+export interface CategorizationRule {
+  id: string;
+  merchantPattern: string;
+  accountId?: string;
+  category: string;
+  priority: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 interface FinancialInsightRow {
   id: string;
   topic: string;
@@ -143,6 +190,52 @@ const rowToBudget = (row: BudgetRow): Budget => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
+
+const rowToOverride = (row: TransactionOverrideRow): TransactionOverride => ({
+  id: row.id,
+  transactionExternalId: row.transaction_external_id,
+  category: row.category,
+  notes: row.notes ?? undefined,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+const rowToRule = (row: CategorizationRuleRow): CategorizationRule => ({
+  id: row.id,
+  merchantPattern: row.merchant_pattern,
+  accountId: row.account_id ?? undefined,
+  category: row.category,
+  priority: row.priority,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+/**
+ * In-memory snapshot of all user corrections for one query. Built once per
+ * `queryTransactions` / `getTransaction` call and applied to each returned row
+ * via {@link applyEffectiveCategory}. Centralizing here means every consumer
+ * (Insighter financial rollup, finances route, agent tools, snapshot-metrics)
+ * sees consistent corrected categories without sprinkled SQL joins.
+ */
+interface CategorizationContext {
+  overrides: Map<string, TransactionOverride>;
+  /** Rules pre-sorted by priority DESC, then created_at DESC (deterministic). */
+  rules: CategorizationRule[];
+}
+
+const applyEffectiveCategory = (t: Transaction, ctx: CategorizationContext): Transaction => {
+  const override = ctx.overrides.get(t.externalId);
+  if (override) return { ...t, category: override.category };
+  if (ctx.rules.length === 0) return t;
+  const merchantLower = t.merchant.toLowerCase();
+  for (const r of ctx.rules) {
+    if (r.accountId && r.accountId !== t.accountId) continue;
+    if (merchantLower.includes(r.merchantPattern.toLowerCase())) {
+      return { ...t, category: r.category };
+    }
+  }
+  return t;
+};
 
 const rowToFinancialInsight = (row: FinancialInsightRow): FinancialInsight => ({
   id: row.id,
@@ -311,7 +404,9 @@ export class FinancialRepository {
          FROM transactions WHERE id = ?`,
       )
       .get(id) as TransactionRow | undefined;
-    return row ? rowToTransaction(row) : undefined;
+    if (!row) return undefined;
+    const ctx = this.resolveCategorization();
+    return applyEffectiveCategory(rowToTransaction(row), ctx);
   }
 
   queryTransactions(filters?: {
@@ -321,6 +416,10 @@ export class FinancialRepository {
     category?: string;
     minAmount?: number;
   }): Transaction[] {
+    // SQL filters never use the raw `category` column — a transaction's
+    // EFFECTIVE category may differ (override > rule > raw). We fetch without
+    // a category filter and apply both the corrections and any category filter
+    // in JS, so every consumer sees one consistent corrected view.
     let sql = `SELECT id, external_id, account_id, date, amount, currency, merchant, category, description, is_pending, notes, is_recurring, recurring_frequency, synced_at, created_at, updated_at FROM transactions WHERE 1=1`;
     const params: unknown[] = [];
 
@@ -336,10 +435,6 @@ export class FinancialRepository {
       sql += ` AND date <= ?`;
       params.push(filters.to);
     }
-    if (filters?.category) {
-      sql += ` AND category = ?`;
-      params.push(filters.category);
-    }
     if (filters?.minAmount !== undefined) {
       sql += ` AND ABS(amount) >= ?`;
       params.push(filters.minAmount);
@@ -347,7 +442,143 @@ export class FinancialRepository {
 
     sql += ` ORDER BY date DESC`;
     const rows = this.db.prepare(sql).all(...params) as TransactionRow[];
-    return rows.map(rowToTransaction);
+    const ctx = this.resolveCategorization();
+    const corrected = rows.map((r) => applyEffectiveCategory(rowToTransaction(r), ctx));
+    if (filters?.category) {
+      const cat = filters.category;
+      return corrected.filter((t) => t.category === cat);
+    }
+    return corrected;
+  }
+
+  // ─── Categorization overrides + rules ─────────────────────────────────────
+  // User corrections to Monarch's categorization. Applied at READ time so
+  // re-syncs never overwrite them. Effective category is computed via
+  // {@link applyEffectiveCategory} as: per-txn override > merchant rule > raw.
+
+  private resolveCategorization(): CategorizationContext {
+    const overrideRows = this.db
+      .prepare(
+        `SELECT id, transaction_external_id, category, notes, created_at, updated_at
+         FROM transaction_overrides`,
+      )
+      .all() as TransactionOverrideRow[];
+    const overrides = new Map<string, TransactionOverride>();
+    for (const r of overrideRows) overrides.set(r.transaction_external_id, rowToOverride(r));
+    const ruleRows = this.db
+      .prepare(
+        `SELECT id, merchant_pattern, account_id, category, priority, created_at, updated_at
+         FROM categorization_rules
+         ORDER BY priority DESC, created_at DESC`,
+      )
+      .all() as CategorizationRuleRow[];
+    const rules = ruleRows.map(rowToRule);
+    return { overrides, rules };
+  }
+
+  upsertTransactionOverride(input: {
+    transactionExternalId: string;
+    category: string;
+    notes?: string;
+  }): TransactionOverride {
+    const ts = now();
+    const existing = this.db
+      .prepare(`SELECT id FROM transaction_overrides WHERE transaction_external_id = ?`)
+      .get(input.transactionExternalId) as { id: string } | undefined;
+    if (existing) {
+      this.db
+        .prepare(
+          `UPDATE transaction_overrides SET category = ?, notes = ?, updated_at = ? WHERE id = ?`,
+        )
+        .run(input.category, input.notes ?? null, ts, existing.id);
+      return this.getOverrideById(existing.id)!;
+    }
+    const id = newId();
+    this.db
+      .prepare(
+        `INSERT INTO transaction_overrides(id, transaction_external_id, category, notes, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(id, input.transactionExternalId, input.category, input.notes ?? null, ts, ts);
+    return this.getOverrideById(id)!;
+  }
+
+  private getOverrideById(id: string): TransactionOverride | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id, transaction_external_id, category, notes, created_at, updated_at
+         FROM transaction_overrides WHERE id = ?`,
+      )
+      .get(id) as TransactionOverrideRow | undefined;
+    return row ? rowToOverride(row) : undefined;
+  }
+
+  listTransactionOverrides(): TransactionOverride[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, transaction_external_id, category, notes, created_at, updated_at
+         FROM transaction_overrides ORDER BY updated_at DESC`,
+      )
+      .all() as TransactionOverrideRow[];
+    return rows.map(rowToOverride);
+  }
+
+  deleteTransactionOverride(transactionExternalId: string): boolean {
+    const r = this.db
+      .prepare(`DELETE FROM transaction_overrides WHERE transaction_external_id = ?`)
+      .run(transactionExternalId);
+    return r.changes > 0;
+  }
+
+  createCategorizationRule(input: {
+    merchantPattern: string;
+    accountId?: string;
+    category: string;
+    priority?: number;
+  }): CategorizationRule {
+    const id = newId();
+    const ts = now();
+    this.db
+      .prepare(
+        `INSERT INTO categorization_rules(id, merchant_pattern, account_id, category, priority, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        input.merchantPattern,
+        input.accountId ?? null,
+        input.category,
+        input.priority ?? 100,
+        ts,
+        ts,
+      );
+    return this.getCategorizationRule(id)!;
+  }
+
+  getCategorizationRule(id: string): CategorizationRule | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id, merchant_pattern, account_id, category, priority, created_at, updated_at
+         FROM categorization_rules WHERE id = ?`,
+      )
+      .get(id) as CategorizationRuleRow | undefined;
+    return row ? rowToRule(row) : undefined;
+  }
+
+  listCategorizationRules(): CategorizationRule[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, merchant_pattern, account_id, category, priority, created_at, updated_at
+         FROM categorization_rules
+         ORDER BY priority DESC, created_at DESC`,
+      )
+      .all() as CategorizationRuleRow[];
+    return rows.map(rowToRule);
+  }
+
+  deleteCategorizationRule(id: string): boolean {
+    const r = this.db.prepare(`DELETE FROM categorization_rules WHERE id = ?`).run(id);
+    return r.changes > 0;
   }
 
   // ─── Holdings ────────────────────────────────────────────────────────────
