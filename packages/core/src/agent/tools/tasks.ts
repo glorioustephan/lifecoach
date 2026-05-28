@@ -5,7 +5,7 @@ import type { Embedder } from "../../embeddings/index.js";
 import type { Task, TaskPriority } from "@lifecoach/schemas";
 import type { TodoistClient } from "../../integrations/index.js";
 import { indexTask } from "../../memory/task-indexer.js";
-import { LifecoachError } from "../../util/errors.js";
+import { toolError, type ToolErrorResponse } from "./errors.js";
 
 const PRIORITY_LABELS: Record<number, string> = {
   1: "p4",
@@ -50,28 +50,38 @@ const findTask = (storage: Storage, id: string): Task | undefined => {
   return storage.tasks.getByExternal("todoist", id);
 };
 
-const requireTodoistTask = (storage: Storage, id: string): Task => {
+type ResolveTaskResult =
+  | { ok: true; task: Task }
+  | { ok: false; error: ToolErrorResponse };
+
+const resolveTodoistTask = (storage: Storage, id: string): ResolveTaskResult => {
   const task = findTask(storage, id);
   if (!task) {
-    throw new LifecoachError(`No task found with id ${id}`, "TASK_NOT_FOUND");
+    return { ok: false, error: toolError(`[TASK_NOT_FOUND] No task found with id ${id}`) };
   }
   if (task.externalSource !== "todoist" || !task.externalId) {
-    throw new LifecoachError(
-      `Task ${id} is not a Todoist-backed task; write-back is only wired for Todoist for now.`,
-      "TASK_NOT_TODOIST_BACKED",
-    );
+    return {
+      ok: false,
+      error: toolError(
+        `[TASK_NOT_TODOIST_BACKED] Task ${id} is not a Todoist-backed task; write-back is only wired for Todoist for now.`,
+      ),
+    };
   }
-  return task;
+  return { ok: true, task };
 };
 
-const requireTodoist = (todoist: TodoistClient | null): TodoistClient => {
+const resolveTodoist = (
+  todoist: TodoistClient | null,
+): { ok: true; client: TodoistClient } | { ok: false; error: ToolErrorResponse } => {
   if (!todoist) {
-    throw new LifecoachError(
-      "Todoist is not configured. Add TODOIST_API_TOKEN to .env to enable write-back.",
-      "TODOIST_NOT_CONFIGURED",
-    );
+    return {
+      ok: false,
+      error: toolError(
+        "[TODOIST_NOT_CONFIGURED] Todoist is not configured. Add TODOIST_API_TOKEN to .env to enable write-back.",
+      ),
+    };
   }
-  return todoist;
+  return { ok: true, client: todoist };
 };
 
 const parseDueAt = (datetime?: string | null, date?: string | null): number | null => {
@@ -138,7 +148,9 @@ export const buildTaskTools = (deps: TaskToolDeps) => [
       labels: z.array(z.string()).optional(),
     },
     async ({ content, description, dueString, priority, projectId, labels }) => {
-      const client = requireTodoist(deps.todoist);
+      const clientResult = resolveTodoist(deps.todoist);
+      if (!clientResult.ok) return clientResult.error;
+      const client = clientResult.client;
       const created = await client.createTask({
         content,
         ...(description !== undefined ? { description } : {}),
@@ -178,8 +190,12 @@ export const buildTaskTools = (deps: TaskToolDeps) => [
       id: z.string().min(1).describe("Local task id (preferred) or Todoist external id"),
     },
     async ({ id }) => {
-      const task = requireTodoistTask(deps.storage, id);
-      const client = requireTodoist(deps.todoist);
+      const taskResult = resolveTodoistTask(deps.storage, id);
+      if (!taskResult.ok) return taskResult.error;
+      const clientResult = resolveTodoist(deps.todoist);
+      if (!clientResult.ok) return clientResult.error;
+      const task = taskResult.task;
+      const client = clientResult.client;
       await client.completeTask(task.externalId!);
       // Mirror locally — mark completed.
       deps.storage.tasks.upsertByExternal({
@@ -210,8 +226,12 @@ export const buildTaskTools = (deps: TaskToolDeps) => [
       dueString: z.string().min(1),
     },
     async ({ id, dueString }) => {
-      const task = requireTodoistTask(deps.storage, id);
-      const client = requireTodoist(deps.todoist);
+      const taskResult = resolveTodoistTask(deps.storage, id);
+      if (!taskResult.ok) return taskResult.error;
+      const clientResult = resolveTodoist(deps.todoist);
+      if (!clientResult.ok) return clientResult.error;
+      const task = taskResult.task;
+      const client = clientResult.client;
       const updated = await client.updateTask(task.externalId!, { dueString });
       const persisted = deps.storage.tasks.upsertByExternal({
         externalId: updated.id,
@@ -252,8 +272,12 @@ export const buildTaskTools = (deps: TaskToolDeps) => [
       labels: z.array(z.string()).optional(),
     },
     async ({ id, content, description, priority, labels }) => {
-      const task = requireTodoistTask(deps.storage, id);
-      const client = requireTodoist(deps.todoist);
+      const taskResult = resolveTodoistTask(deps.storage, id);
+      if (!taskResult.ok) return taskResult.error;
+      const clientResult = resolveTodoist(deps.todoist);
+      if (!clientResult.ok) return clientResult.error;
+      const task = taskResult.task;
+      const client = clientResult.client;
       const patch: Parameters<TodoistClient["updateTask"]>[1] = {};
       if (content !== undefined) patch.content = content;
       if (description !== undefined) patch.description = description;

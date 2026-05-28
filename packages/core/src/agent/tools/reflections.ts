@@ -97,32 +97,17 @@ export const buildReflectionTools = (deps: ReflectionToolDeps) => [
       limit: z.number().int().min(1).max(50).optional(),
     },
     async ({ kind, limit }) => {
-      const db = deps.storage.handle.db;
-      const where = kind && kind !== "all" ? "WHERE kind = ?" : "";
-      const params: unknown[] = [];
-      if (kind && kind !== "all") params.push(kind);
-      params.push(limit ?? 10);
-      const rows = db
-        .prepare(
-          `SELECT id, kind, period_start, period_end, body, created_at
-           FROM reflections ${where}
-           ORDER BY period_end DESC LIMIT ?`,
-        )
-        .all(...params) as Array<{
-        id: string;
-        kind: string;
-        period_start: number;
-        period_end: number;
-        body: string;
-        created_at: number;
-      }>;
+      const rows = deps.storage.reflections.list({
+        ...(kind && kind !== "all" ? { kind } : {}),
+        limit: limit ?? 10,
+      });
       if (rows.length === 0) {
         return { content: [{ type: "text", text: "No reflections yet." }] };
       }
       const formatted = rows
         .map((r) => {
-          const start = new Date(r.period_start).toISOString().slice(0, 10);
-          const end = new Date(r.period_end).toISOString().slice(0, 10);
+          const start = new Date(r.periodStart).toISOString().slice(0, 10);
+          const end = new Date(r.periodEnd).toISOString().slice(0, 10);
           const firstLine = (r.body.split("\n").find((l) => l.trim().length > 0) ?? "").slice(0, 100);
           return `[${r.id}] ${r.kind} ${start}→${end}: ${firstLine}`;
         })

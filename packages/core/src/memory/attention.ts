@@ -1,6 +1,7 @@
 import type { EvidenceRef, InsightPriority } from "@lifecoach/schemas";
 import { createHash } from "node:crypto";
 import type { Storage, AttentionSignal } from "../storage/index.js";
+import { parseStringArray } from "../util/json.js";
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
 const STALE_GOAL_MS = 14 * ONE_DAY;
@@ -94,11 +95,6 @@ interface ReflectionSignalRow {
   open_threads: string;
   period_end: number;
 }
-
-const parseStringArray = (raw: string): string[] => {
-  const parsed = JSON.parse(raw) as unknown;
-  return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
-};
 
 const reflectionThreadSignals = (storage: Storage): CandidateSignal[] => {
   const rows = storage.handle.db

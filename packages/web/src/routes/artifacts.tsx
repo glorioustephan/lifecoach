@@ -20,6 +20,7 @@ import { IconButton } from "~/components/ui/IconButton";
 import { TypeBadge, TagBadge } from "~/components/ui/Badge";
 import { Sheet, SheetBody, SheetHeader } from "~/components/ui/Sheet";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
+import { useTimedReset } from "~/lib/use-timed-reset";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -305,19 +306,8 @@ function ArtifactCard({
   const [capacitiesState, setCapacitiesState] = useState<"idle" | "ok" | "error">("idle");
   const capacitiesMsg = useRef("");
 
-  useEffect(() => {
-    if (copied) {
-      const t = setTimeout(() => setCopied(false), 1400);
-      return () => clearTimeout(t);
-    }
-  }, [copied]);
-
-  useEffect(() => {
-    if (capacitiesState !== "idle") {
-      const t = setTimeout(() => setCapacitiesState("idle"), 2500);
-      return () => clearTimeout(t);
-    }
-  }, [capacitiesState]);
+  useTimedReset(copied, () => setCopied(false), 1400);
+  useTimedReset(capacitiesState !== "idle", () => setCapacitiesState("idle"), 2500);
 
   const handleCopy = async (): Promise<void> => {
     await writeToClipboard(a.body);
@@ -618,19 +608,8 @@ function ViewArtifactSheet({
   const [capacitiesState, setCapacitiesState] = useState<"idle" | "ok" | "error">("idle");
   const capacitiesMsg = useRef("");
 
-  useEffect(() => {
-    if (copied) {
-      const t = setTimeout(() => setCopied(false), 1400);
-      return () => clearTimeout(t);
-    }
-  }, [copied]);
-
-  useEffect(() => {
-    if (capacitiesState !== "idle") {
-      const t = setTimeout(() => setCapacitiesState("idle"), 2500);
-      return () => clearTimeout(t);
-    }
-  }, [capacitiesState]);
+  useTimedReset(copied, () => setCopied(false), 1400);
+  useTimedReset(capacitiesState !== "idle", () => setCapacitiesState("idle"), 2500);
 
   const handleCopy = async (): Promise<void> => {
     if (!artifact) return;

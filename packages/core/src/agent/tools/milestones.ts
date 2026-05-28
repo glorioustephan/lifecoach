@@ -4,7 +4,7 @@ import type { Storage } from "../../storage/index.js";
 import type { Embedder } from "../../embeddings/index.js";
 import type { Milestone, MilestoneStatus } from "@lifecoach/schemas";
 import { indexMilestone } from "../../memory/goal-indexer.js";
-import { LifecoachError } from "../../util/errors.js";
+import { toolError } from "./errors.js";
 
 const milestoneStatus = z.enum(["pending", "active", "done", "abandoned"]);
 
@@ -54,7 +54,7 @@ export const buildMilestoneTools = (deps: MilestoneToolDeps) => [
     },
     async (args) => {
       if (!deps.storage.goals.get(args.goalId)) {
-        throw new LifecoachError(`No goal with id ${args.goalId}`, "GOAL_NOT_FOUND");
+        return toolError(`[GOAL_NOT_FOUND] No goal with id ${args.goalId}`);
       }
       const milestone = deps.storage.milestones.create({
         goalId: args.goalId,
@@ -121,7 +121,7 @@ export const buildMilestoneTools = (deps: MilestoneToolDeps) => [
 
       const updated = deps.storage.milestones.update(args.id, patch);
       if (!updated) {
-        throw new LifecoachError(`No milestone with id ${args.id}`, "MILESTONE_NOT_FOUND");
+        return toolError(`[MILESTONE_NOT_FOUND] No milestone with id ${args.id}`);
       }
       await indexMilestone(deps.storage, deps.embedder, updated);
       return { content: [{ type: "text", text: `Updated\n${renderMilestone(updated)}` }] };
@@ -135,7 +135,7 @@ export const buildMilestoneTools = (deps: MilestoneToolDeps) => [
     async ({ id }) => {
       const updated = deps.storage.milestones.complete(id);
       if (!updated) {
-        throw new LifecoachError(`No milestone with id ${id}`, "MILESTONE_NOT_FOUND");
+        return toolError(`[MILESTONE_NOT_FOUND] No milestone with id ${id}`);
       }
       await indexMilestone(deps.storage, deps.embedder, updated);
       return { content: [{ type: "text", text: `Completed milestone: ${updated.title}` }] };
@@ -150,7 +150,7 @@ export const buildMilestoneTools = (deps: MilestoneToolDeps) => [
     async ({ id }) => {
       const ex = deps.storage.milestones.get(id);
       if (!ex) {
-        throw new LifecoachError(`No milestone with id ${id}`, "MILESTONE_NOT_FOUND");
+        return toolError(`[MILESTONE_NOT_FOUND] No milestone with id ${id}`);
       }
       deps.storage.milestones.delete(id);
       deps.storage.embeddings.deleteForRef("milestone", id);

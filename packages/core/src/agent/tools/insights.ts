@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Storage } from "../../storage/index.js";
 import type { Memory } from "../../memory/index.js";
 import type { Insighter } from "../../memory/insighter.js";
-import { LifecoachError } from "../../util/errors.js";
+import { toolError } from "./errors.js";
 
 export interface InsightToolDeps {
   storage: Storage;
@@ -26,9 +26,8 @@ export const buildInsightTools = (deps: InsightToolDeps) => [
     {},
     async () => {
       if (!deps.insighter) {
-        throw new LifecoachError(
-          "Insighter unavailable — ANTHROPIC_API_KEY isn't configured.",
-          "INSIGHTER_NOT_CONFIGURED",
+        return toolError(
+          "[INSIGHTER_NOT_CONFIGURED] Insighter unavailable — ANTHROPIC_API_KEY isn't configured.",
         );
       }
       const insights = await deps.insighter.generate(deps.storage, deps.memory.identity);
@@ -84,7 +83,7 @@ export const buildInsightTools = (deps: InsightToolDeps) => [
     async ({ id }) => {
       const ins = deps.storage.insights.get(id);
       if (!ins) {
-        throw new LifecoachError(`No insight with id ${id}`, "INSIGHT_NOT_FOUND");
+        return toolError(`[INSIGHT_NOT_FOUND] No insight with id ${id}`);
       }
       deps.storage.insights.markActed(id);
       return { content: [{ type: "text", text: `Marked acted: ${ins.topic}` }] };
@@ -100,7 +99,7 @@ export const buildInsightTools = (deps: InsightToolDeps) => [
     async ({ id }) => {
       const ins = deps.storage.insights.get(id);
       if (!ins) {
-        throw new LifecoachError(`No insight with id ${id}`, "INSIGHT_NOT_FOUND");
+        return toolError(`[INSIGHT_NOT_FOUND] No insight with id ${id}`);
       }
       deps.storage.insights.markDismissed(id);
       return { content: [{ type: "text", text: `Dismissed: ${ins.topic}` }] };
@@ -119,7 +118,7 @@ export const buildInsightTools = (deps: InsightToolDeps) => [
     async ({ id, until }) => {
       const ins = deps.storage.insights.get(id);
       if (!ins) {
-        throw new LifecoachError(`No insight with id ${id}`, "INSIGHT_NOT_FOUND");
+        return toolError(`[INSIGHT_NOT_FOUND] No insight with id ${id}`);
       }
       let untilMs = Date.parse(until);
       if (Number.isNaN(untilMs)) {
@@ -137,7 +136,7 @@ export const buildInsightTools = (deps: InsightToolDeps) => [
             30 * 86400 * 1000;
           untilMs = Date.now() + n * factor;
         } else {
-          throw new LifecoachError(`Unparseable snooze target: ${until}`, "INVALID_SNOOZE");
+          return toolError(`[INVALID_SNOOZE] Unparseable snooze target: ${until}`);
         }
       }
       deps.storage.insights.snooze(id, untilMs);

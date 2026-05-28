@@ -1,6 +1,7 @@
 import type { Database } from "better-sqlite3";
 import type { NewReflection, Reflection, ReflectionKind } from "@lifecoach/schemas";
 import { newId, now } from "../../util/ids.js";
+import { parseStringArray } from "../../util/json.js";
 
 interface ReflectionRow {
   id: string;
@@ -15,11 +16,6 @@ interface ReflectionRow {
   body: string;
   created_at: number;
 }
-
-const parseStringArray = (raw: string): string[] => {
-  const parsed = JSON.parse(raw) as unknown;
-  return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
-};
 
 const rowToReflection = (row: ReflectionRow): Reflection => ({
   id: row.id,
@@ -131,6 +127,31 @@ export class ReflectionRepository {
     this.db
       .prepare("UPDATE reflections SET pushed_to_capacities_at = ? WHERE id = ?")
       .run(at, id);
+  }
+
+  /**
+   * Recent reflections, optionally filtered by kind. Default sort is
+   * `period_end DESC` so the most recent window appears first regardless of
+   * when the cron run produced it.
+   */
+  list(filter?: { kind?: ReflectionKind; limit?: number }): Reflection[] {
+    const limit = filter?.limit ?? 10;
+    const params: unknown[] = [];
+    let where = "";
+    if (filter?.kind) {
+      where = "WHERE kind = ?";
+      params.push(filter.kind);
+    }
+    params.push(limit);
+    const rows = this.db
+      .prepare(
+        `SELECT id, period_start, period_end, kind, title, themes, wins,
+                concerns, open_threads, body, created_at
+         FROM reflections ${where}
+         ORDER BY period_end DESC LIMIT ?`,
+      )
+      .all(...params) as ReflectionRow[];
+    return rows.map(rowToReflection);
   }
 
   count(): number {

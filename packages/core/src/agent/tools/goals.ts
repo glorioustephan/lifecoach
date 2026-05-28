@@ -14,7 +14,7 @@ import type {
   GoalStatus,
 } from "@lifecoach/schemas";
 import { indexGoal } from "../../memory/goal-indexer.js";
-import { LifecoachError } from "../../util/errors.js";
+import { toolError } from "./errors.js";
 
 const horizon = z.enum(["this-week", "this-month", "this-quarter", "this-year", "open"]);
 const status = z.enum(["active", "paused", "done", "abandoned"]);
@@ -212,7 +212,7 @@ export const buildGoalTools = (deps: GoalToolDeps) => [
 
       const updated = deps.storage.goals.update(args.id, patch);
       if (!updated) {
-        throw new LifecoachError(`No goal with id ${args.id}`, "GOAL_NOT_FOUND");
+        return toolError(`[GOAL_NOT_FOUND] No goal with id ${args.id}`);
       }
       await indexGoal(deps.storage, deps.embedder, updated);
       return { content: [{ type: "text", text: `Updated\n${renderGoal(updated)}` }] };
@@ -234,7 +234,7 @@ export const buildGoalTools = (deps: GoalToolDeps) => [
         implementationIntention: intention,
       });
       if (!updated) {
-        throw new LifecoachError(`No goal with id ${goalId}`, "GOAL_NOT_FOUND");
+        return toolError(`[GOAL_NOT_FOUND] No goal with id ${goalId}`);
       }
       await indexGoal(deps.storage, deps.embedder, updated);
       return {
@@ -263,7 +263,7 @@ export const buildGoalTools = (deps: GoalToolDeps) => [
     async ({ taskId, goalId, milestoneId }) => {
       const task = deps.storage.tasks.linkToGoal(taskId, goalId, milestoneId ?? null);
       if (!task) {
-        throw new LifecoachError(`No task with id ${taskId}`, "TASK_NOT_FOUND");
+        return toolError(`[TASK_NOT_FOUND] No task with id ${taskId}`);
       }
       const target = goalId
         ? `goal ${goalId.slice(0, 8)}${milestoneId ? ` (milestone ${milestoneId.slice(0, 8)})` : ""}`
@@ -281,7 +281,7 @@ export const buildGoalTools = (deps: GoalToolDeps) => [
     async ({ id }) => {
       const updated = deps.storage.goals.markReviewed(id);
       if (!updated) {
-        throw new LifecoachError(`No goal with id ${id}`, "GOAL_NOT_FOUND");
+        return toolError(`[GOAL_NOT_FOUND] No goal with id ${id}`);
       }
       return { content: [{ type: "text", text: `Reviewed: ${updated.title}` }] };
     },
@@ -295,7 +295,7 @@ export const buildGoalTools = (deps: GoalToolDeps) => [
     async ({ id }) => {
       const updated = deps.storage.goals.archive(id);
       if (!updated) {
-        throw new LifecoachError(`No goal with id ${id}`, "GOAL_NOT_FOUND");
+        return toolError(`[GOAL_NOT_FOUND] No goal with id ${id}`);
       }
       return { content: [{ type: "text", text: `Archived: ${updated.title}` }] };
     },
@@ -328,7 +328,7 @@ export const buildGoalTools = (deps: GoalToolDeps) => [
     },
     async (args) => {
       if (!deps.storage.goals.get(args.goalId)) {
-        throw new LifecoachError(`No goal with id ${args.goalId}`, "GOAL_NOT_FOUND");
+        return toolError(`[GOAL_NOT_FOUND] No goal with id ${args.goalId}`);
       }
       const evidence = deps.storage.goalEvidence.create({
         goalId: args.goalId,
@@ -381,7 +381,7 @@ export const buildGoalTools = (deps: GoalToolDeps) => [
     },
     async (args) => {
       if (!deps.storage.goals.get(args.goalId)) {
-        throw new LifecoachError(`No goal with id ${args.goalId}`, "GOAL_NOT_FOUND");
+        return toolError(`[GOAL_NOT_FOUND] No goal with id ${args.goalId}`);
       }
       const signal = deps.storage.goalSignals.create({
         goalId: args.goalId,
@@ -419,7 +419,7 @@ export const buildGoalTools = (deps: GoalToolDeps) => [
       if (args.unit !== undefined) patch.unit = args.unit;
       const updated = deps.storage.goalSignals.update(args.id, patch);
       if (!updated) {
-        throw new LifecoachError(`No signal with id ${args.id}`, "SIGNAL_NOT_FOUND");
+        return toolError(`[SIGNAL_NOT_FOUND] No signal with id ${args.id}`);
       }
       return { content: [{ type: "text", text: `Updated signal: ${updated.label}` }] };
     },
@@ -431,7 +431,7 @@ export const buildGoalTools = (deps: GoalToolDeps) => [
     { id: z.string().min(1) },
     async ({ id }) => {
       const updated = deps.storage.goals.update(id, { status: "done" });
-      if (!updated) throw new LifecoachError(`No goal with id ${id}`, "GOAL_NOT_FOUND");
+      if (!updated) return toolError(`[GOAL_NOT_FOUND] No goal with id ${id}`);
       await indexGoal(deps.storage, deps.embedder, updated);
       return { content: [{ type: "text", text: `Completed: ${updated.title}` }] };
     },

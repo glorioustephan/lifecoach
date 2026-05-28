@@ -25,6 +25,13 @@ export const openDb = (config: LifecoachConfig): DbHandle => {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.pragma("synchronous = NORMAL");
+  // 32 MB page cache — SQLite default of ~2 MB is sized for embedded devices.
+  // The daily Monarch sync + nightly reflection scan are read-heavy and benefit
+  // measurably; the negative sign means "kibibytes" (positive would mean pages).
+  db.pragma("cache_size = -32000");
+  // Sort/temp tables in memory rather than spilling to disk — avoids extra I/O
+  // for ORDER BY over large transaction ranges.
+  db.pragma("temp_store = MEMORY");
 
   try {
     sqliteVec.load(db);

@@ -1,7 +1,7 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type { Storage } from "../../storage/index.js";
-import { LifecoachError } from "../../util/errors.js";
+import { toolError } from "./errors.js";
 
 /**
  * User-correction tool surface for the financial-insight challenge loop.
@@ -69,7 +69,7 @@ export const buildCategorizationTools = (storage: Storage) => [
     async ({ txnId, category, note }) => {
       const txn = storage.financial.getTransaction(txnId);
       if (!txn) {
-        throw new LifecoachError(`No transaction with id ${txnId}`, "TXN_NOT_FOUND");
+        return toolError(`[TXN_NOT_FOUND] No transaction with id ${txnId}`);
       }
       storage.financial.upsertTransactionOverride({
         transactionExternalId: txn.externalId,

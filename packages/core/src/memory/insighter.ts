@@ -15,6 +15,7 @@ import { refreshAttentionSignals } from "./attention.js";
 import { indexMoneyMomentFromInsight } from "./finance-narratives.js";
 import { computeNetWorth } from "../financial/portfolio.js";
 import { normalizeToMonthlyAmount } from "../financial/recurring.js";
+import { parseStringArray } from "../util/json.js";
 import { withRetry } from "../util/retry.js";
 import { LifecoachError } from "../util/errors.js";
 import { isGoalStalled } from "../util/goal-cadence.js";
@@ -180,11 +181,6 @@ interface ContextData {
 const RECURRING_CANDIDATE_MIN_MONTHLY = 50;
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
-
-const parseStringArray = (raw: string): string[] => {
-  const parsed = JSON.parse(raw) as unknown;
-  return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
-};
 
 const gather = (storage: Storage): ContextData => {
   const db = storage.handle.db;
