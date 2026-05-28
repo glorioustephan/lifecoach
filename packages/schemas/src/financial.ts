@@ -47,6 +47,10 @@ export const transactionSchema = z.object({
   description: z.string().optional(),
   isPending: z.boolean().default(false),
   notes: z.string().optional(), // User annotations
+  /** Subscription / scheduled-charge flag (from Monarch isRecurring). */
+  isRecurring: z.boolean().default(false),
+  /** Frequency from Monarch merchant.recurringTransactionStream (e.g. "MONTHLY"). */
+  recurringFrequency: z.string().optional(),
   syncedAt: z.number().int(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),

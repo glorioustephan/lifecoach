@@ -353,7 +353,7 @@ function MonarchConnectionSection(): JSX.Element {
         r.skipped
           ? "A sync is already running."
           : r.result
-            ? `Synced — ${r.result.accountsUpserted} accounts · ${r.result.transactionsUpserted} transactions · ${r.result.holdingsSnapshotted} holdings.`
+            ? `Synced — ${r.result.accountsUpserted} accounts · ${r.result.transactionsUpserted} transactions${r.result.transactionsUnlinked > 0 ? ` (${r.result.transactionsUnlinked} unlinked)` : ""} · ${r.result.holdingsSnapshotted} holdings.`
             : "Sync complete.",
       );
       void qc.invalidateQueries({ queryKey: ["monarch-settings"] });

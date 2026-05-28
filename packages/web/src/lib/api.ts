@@ -113,6 +113,7 @@ export interface MonarchSyncResult {
   accountsUpserted: number;
   transactionsFetched: number;
   transactionsUpserted: number;
+  transactionsUnlinked: number;
   holdingsSnapshotted: number;
   startedAt: number;
   completedAt: number;

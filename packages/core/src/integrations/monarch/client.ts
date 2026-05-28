@@ -43,8 +43,15 @@ const GET_TRANSACTIONS_QUERY = `
         amount
         pending
         date
+        isRecurring
+        account { id __typename }
         category { id name __typename }
-        merchant { id name __typename }
+        merchant {
+          id
+          name
+          recurringTransactionStream { frequency isActive __typename }
+          __typename
+        }
         __typename
       }
       __typename
@@ -101,6 +108,12 @@ export interface MonarchTransaction {
   merchant: string;
   category?: { name: string } | null;
   isPending: boolean;
+  /** Real Monarch account id (null only if the response omits it). */
+  accountId: string | null;
+  /** True if Monarch flagged this transaction as recurring (subscription/scheduled). */
+  isRecurring: boolean;
+  /** Cadence from merchant.recurringTransactionStream (e.g. "MONTHLY"). */
+  recurringFrequency?: string | null;
 }
 
 export interface MonarchNetWorth {
@@ -263,6 +276,12 @@ export class MonarchClient {
         merchant: txn.merchant?.name ?? "Unknown",
         category: txn.category ? { name: txn.category.name } : null,
         isPending: txn.pending ?? false,
+        accountId: txn.account?.id ?? null,
+        isRecurring: txn.isRecurring ?? false,
+        recurringFrequency:
+          txn.merchant?.recurringTransactionStream?.isActive
+            ? (txn.merchant.recurringTransactionStream.frequency ?? null)
+            : null,
       }));
     } catch (err) {
       throw new LifecoachError(

@@ -2,17 +2,24 @@ import type { MonarchClient } from "./client.js";
 import type { Storage } from "../../storage/index.js";
 import { now } from "../../util/ids.js";
 import { LifecoachError } from "../../util/errors.js";
+import { snapshotFinancialMetrics } from "./snapshot-metrics.js";
 
 export interface MonarchSyncResult {
   accountsFetched: number;
   accountsUpserted: number;
   transactionsFetched: number;
   transactionsUpserted: number;
+  /** Transactions whose real account couldn't be mapped (sentinel fallback). */
+  transactionsUnlinked: number;
   holdingsSnapshotted: number;
   startedAt: number;
   completedAt: number;
   success: boolean;
 }
+
+/** Page size for transaction pagination. Monarch's default is small (~25-30); */
+/** we page until a short result so a 90-day sweep returns everything.        */
+const TRANSACTIONS_PAGE_SIZE = 200;
 
 /**
  * syncMonarch: Three-phase idempotent sync from Monarch to Life Coach storage.
@@ -24,6 +31,7 @@ export async function syncMonarch(client: MonarchClient, storage: Storage): Prom
     accountsUpserted: 0,
     transactionsFetched: 0,
     transactionsUpserted: 0,
+    transactionsUnlinked: 0,
     holdingsSnapshotted: 0,
     startedAt: now(),
     completedAt: 0,
@@ -95,41 +103,54 @@ export async function syncMonarch(client: MonarchClient, storage: Storage): Prom
 
     // Phase 2: Sync transactions
     console.log("[Monarch Sync] Phase 2: Syncing transactions...");
-    const last30Days = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60;
     const last90Days = Math.floor(Date.now() / 1000) - 90 * 24 * 60 * 60;
+    const startDate = new Date(last90Days * 1000).toISOString().split("T")[0];
 
-    const monarchTransactions = await client.listTransactions({
-      filters: {
-        startDate: new Date(last90Days * 1000).toISOString().split("T")[0],
-      },
-    });
-    result.transactionsFetched = monarchTransactions.length;
-
-    // Build a local-account-id lookup by externalId for fast join
+    // Build a local-account-id lookup by externalId for fast join. The
+    // lookup is built once after Phase 1 so newly-created accounts are mapped.
     const externalIdToLocalId = new Map<string, string>();
     for (const acc of storage.financial.listAccounts({})) {
       if (acc.externalId) externalIdToLocalId.set(acc.externalId, acc.id);
     }
 
-    for (const monarchTxn of monarchTransactions) {
-      const txnDate = new Date(monarchTxn.date).getTime();
-      // Transactions from monarch-money-ts don't carry an account id at this level;
-      // store with a sentinel accountId and reconcile later if needed.
-      const localAccountId = externalIdToLocalId.values().next().value ?? "unknown";
-
-      storage.financial.upsertTransaction({
-        externalId: monarchTxn.id,
-        accountId: localAccountId,
-        date: txnDate,
-        amount: monarchTxn.amount,
-        currency: "USD",
-        merchant: monarchTxn.merchant,
-        category: monarchTxn.category?.name,
-        isPending: monarchTxn.isPending,
-        syncedAt: syncTs,
+    // Paginate until a short page comes back. Monarch's default page is small
+    // (~25-30); without an explicit limit we were getting only the first page.
+    let offset = 0;
+    let pagedThisCycle = 0;
+    while (true) {
+      const page = await client.listTransactions({
+        offset,
+        limit: TRANSACTIONS_PAGE_SIZE,
+        filters: { startDate },
       });
-      result.transactionsUpserted += 1;
+      for (const monarchTxn of page) {
+        const txnDate = new Date(monarchTxn.date).getTime();
+        const mapped = monarchTxn.accountId
+          ? externalIdToLocalId.get(monarchTxn.accountId)
+          : undefined;
+        const localAccountId = mapped ?? "unknown";
+        if (!mapped) result.transactionsUnlinked += 1;
+
+        storage.financial.upsertTransaction({
+          externalId: monarchTxn.id,
+          accountId: localAccountId,
+          date: txnDate,
+          amount: monarchTxn.amount,
+          currency: "USD",
+          merchant: monarchTxn.merchant,
+          category: monarchTxn.category?.name,
+          isPending: monarchTxn.isPending,
+          isRecurring: monarchTxn.isRecurring,
+          recurringFrequency: monarchTxn.recurringFrequency ?? undefined,
+          syncedAt: syncTs,
+        });
+        result.transactionsUpserted += 1;
+        pagedThisCycle += 1;
+      }
+      if (page.length < TRANSACTIONS_PAGE_SIZE) break;
+      offset += TRANSACTIONS_PAGE_SIZE;
     }
+    result.transactionsFetched = pagedThisCycle;
 
     // Phase 3: Snapshot all holdings from Monarch portfolio
     console.log("[Monarch Sync] Phase 3: Snapshotting holdings...");
@@ -154,12 +175,26 @@ export async function syncMonarch(client: MonarchClient, storage: Storage): Prom
       result.holdingsSnapshotted += 1;
     }
 
+    // Phase 4: Snapshot derived metrics for trend tracking (net worth, debt,
+    // savings rate, monthly burn, portfolio value). Idempotent per day; once-
+    // a-day cron means each metric writes one row. Failure here is non-fatal.
+    try {
+      const snap = snapshotFinancialMetrics(storage);
+      console.log("[Monarch Sync] Phase 4: Snapshotted metrics", snap.recorded);
+    } catch (err) {
+      console.warn(
+        "[Monarch Sync] Phase 4: metric snapshot failed (non-fatal):",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+
     result.success = true;
     result.completedAt = now();
 
     console.log("[Monarch Sync] Complete:", {
       accountsUpserted: result.accountsUpserted,
       transactionsUpserted: result.transactionsUpserted,
+      transactionsUnlinked: result.transactionsUnlinked,
       holdingsSnapshotted: result.holdingsSnapshotted,
     });
 
