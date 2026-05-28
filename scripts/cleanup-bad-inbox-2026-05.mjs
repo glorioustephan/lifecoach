@@ -11,14 +11,23 @@
 // This script dismisses (1) and deletes today's snapshot of (2) so the next
 // Monarch sync recomputes a corrected number. Idempotent and safe to re-run.
 //
-// Usage (run via the @lifecoach/core workspace so better-sqlite3 resolves):
-//   pnpm --filter @lifecoach/core exec node ../../scripts/cleanup-bad-inbox-2026-05.mjs \
-//     --db ./data/lifecoach.db --dry-run
-//   pnpm --filter @lifecoach/core exec node ../../scripts/cleanup-bad-inbox-2026-05.mjs \
-//     --db ./data/lifecoach.db
+// Usage (from repo root — resolves better-sqlite3 through packages/core):
+//   node scripts/cleanup-bad-inbox-2026-05.mjs --db ./data/lifecoach.db --dry-run
+//   node scripts/cleanup-bad-inbox-2026-05.mjs --db ./data/lifecoach.db
 
 import { argv, exit } from "node:process";
-import Database from "better-sqlite3";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+// ESM resolution is anchored to this file's location, but better-sqlite3 lives
+// in @lifecoach/core's workspace deps — not at the repo root. Resolve through
+// packages/core so the script runs from `node scripts/...` without needing a
+// specific `pnpm --filter` invocation.
+const here = path.dirname(fileURLToPath(import.meta.url));
+const corePkgJson = path.resolve(here, "..", "packages", "core", "package.json");
+const require = createRequire(corePkgJson);
+const Database = require("better-sqlite3");
 
 const args = new Map();
 for (let i = 2; i < argv.length; i++) {
