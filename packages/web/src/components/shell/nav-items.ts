@@ -6,6 +6,7 @@ import {
   Settings,
   Target,
   FileStack,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -22,6 +23,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "chat", label: "Chat", to: "/", icon: MessageCircle, inTabBar: true },
   { id: "inbox", label: "Inbox", to: "/inbox", icon: Inbox, inTabBar: true },
   { id: "goals", label: "Goals", to: "/goals", icon: Target, inTabBar: false },
+  { id: "finances", label: "Finances", to: "/finances", icon: Wallet, inTabBar: false },
   { id: "memory", label: "Memory", to: "/memory", icon: Brain, inTabBar: true },
   { id: "artifacts", label: "Artifacts", to: "/artifacts", icon: FileStack, inTabBar: false },
   { id: "tasks", label: "Tasks", to: "/tasks", icon: CheckCircle2, inTabBar: true },

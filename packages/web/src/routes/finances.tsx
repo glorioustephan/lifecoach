@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/Card";
 import { EmptyState } from "~/components/ui/EmptyState";
 import { api } from "~/lib/api";
 import { cn } from "~/lib/cn";
+import { formatCurrency, formatPercent } from "~/lib/money";
 
 export const Route = createFileRoute("/finances")({
   component: FinancesRoute,
@@ -60,9 +61,7 @@ function FinancesRoute(): JSX.Element {
   const totalLiabilities = accountsData?.totalLiabilities ?? 0;
   const netWorth = accountsData?.netWorth ?? 0;
   const savingsRate =
-    totalAssets > 0
-      ? ((totalAssets / (totalAssets + totalLiabilities)) * 100).toFixed(1)
-      : "0";
+    totalAssets > 0 ? (totalAssets / (totalAssets + totalLiabilities)) * 100 : 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -100,7 +99,7 @@ function FinancesRoute(): JSX.Element {
                 </CardHeader>
                 <CardContent>
                   <div className="text-xl font-semibold text-fg">
-                    ${totalAssets.toFixed(2)}
+                    {formatCurrency(totalAssets)}
                   </div>
                 </CardContent>
               </Card>
@@ -112,7 +111,7 @@ function FinancesRoute(): JSX.Element {
                 </CardHeader>
                 <CardContent>
                   <div className="text-xl font-semibold text-fg">
-                    ${totalLiabilities.toFixed(2)}
+                    {formatCurrency(totalLiabilities)}
                   </div>
                 </CardContent>
               </Card>
@@ -127,7 +126,7 @@ function FinancesRoute(): JSX.Element {
                     "text-xl font-semibold",
                     netWorth >= 0 ? "text-success-500" : "text-destructive-300",
                   )}>
-                    ${netWorth.toFixed(2)}
+                    {formatCurrency(netWorth)}
                   </div>
                 </CardContent>
               </Card>
@@ -139,7 +138,7 @@ function FinancesRoute(): JSX.Element {
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-baseline gap-1 text-xl font-semibold text-fg">
-                    {savingsRate}
+                    {savingsRate.toFixed(1)}
                     <span className="text-sm font-normal text-fg-muted">%</span>
                   </div>
                 </CardContent>
@@ -191,7 +190,7 @@ function FinancesRoute(): JSX.Element {
                         />
                       </div>
                       <div className="mt-1.5 text-xs text-fg-faint">
-                        ${budget.spent.toFixed(2)} / ${budget.limit.toFixed(2)}
+                        {formatCurrency(budget.spent)} / {formatCurrency(budget.limit)}
                       </div>
                     </div>
                   );
@@ -226,7 +225,7 @@ function FinancesRoute(): JSX.Element {
                       "ml-4 shrink-0 text-sm font-semibold",
                       txn.amount > 0 ? "text-success-500" : "text-fg",
                     )}>
-                      {txn.amount > 0 ? "+" : ""}${Math.abs(txn.amount).toFixed(2)}
+                      {formatCurrency(txn.amount, { signed: true })}
                     </div>
                   </div>
                 ))}
@@ -245,8 +244,8 @@ function FinancesRoute(): JSX.Element {
                   const gainLoss = holding.costBasis ? holding.marketValue - holding.costBasis : 0;
                   const gainPercent =
                     holding.costBasis && holding.costBasis !== 0
-                      ? ((gainLoss / holding.costBasis) * 100).toFixed(1)
-                      : "0";
+                      ? (gainLoss / holding.costBasis) * 100
+                      : 0;
 
                   return (
                     <div
@@ -258,12 +257,12 @@ function FinancesRoute(): JSX.Element {
                           {holding.symbol}
                         </div>
                         <div className="text-xs text-fg-faint">
-                          {holding.quantity} shares @ ${holding.currentPrice.toFixed(2)}
+                          {holding.quantity} shares @ {formatCurrency(holding.currentPrice)}
                         </div>
                       </div>
                       <div className="ml-4 shrink-0 text-right">
                         <div className="text-sm font-semibold text-fg">
-                          ${holding.marketValue.toFixed(2)}
+                          {formatCurrency(holding.marketValue)}
                         </div>
                         {holding.costBasis && (
                           <div
@@ -272,7 +271,7 @@ function FinancesRoute(): JSX.Element {
                               gainLoss >= 0 ? "text-success-500" : "text-destructive-300",
                             )}
                           >
-                            {gainLoss >= 0 ? "+" : ""}${gainLoss.toFixed(2)} ({gainPercent}%)
+                            {formatCurrency(gainLoss, { signed: true })} ({formatPercent(gainPercent, { signed: true })})
                           </div>
                         )}
                       </div>
