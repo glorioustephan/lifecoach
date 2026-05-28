@@ -27,6 +27,60 @@ export interface GuardResult {
 
 export type WindowType = "calendar_month" | "mtd" | "trailing_30" | "trailing_90";
 
+export interface MonthWindow {
+  fromMs: number;
+  toMs: number;
+  /** "YYYY-MM" for a calendar month, "YYYY-MM-MTD" for month-to-date. */
+  period: string;
+  windowType: WindowType;
+}
+
+/**
+ * Resolve a tool-input month/from/to triple to a concrete window. Mirrors the
+ * convention used by `financial_monthly_rollup` and `get_rollup_contributors`:
+ *
+ *   - If `month` is supplied (YYYY-MM), use the full calendar-month bounds.
+ *   - Otherwise, if `from` is supplied, use `[from, to ?? now]` as MTD.
+ *   - Otherwise default to the current calendar month-to-date.
+ *
+ * Centralised here so both tool handlers (and any future caller) share one
+ * implementation of the YYYY-MM parse + local-timezone month bounds.
+ */
+export const parseMonthWindow = (input: {
+  month?: string;
+  from?: number;
+  to?: number;
+  /** Used when `month` is supplied — defaults to "calendar_month". */
+  windowTypeOverride?: WindowType;
+  /** Used for current-time anchoring in tests; defaults to Date.now(). */
+  nowMs?: number;
+}): MonthWindow => {
+  const nowMs = input.nowMs ?? Date.now();
+
+  if (input.month) {
+    const [yearStr, monthStr] = input.month.split("-");
+    const year = parseInt(yearStr ?? "0", 10);
+    const monthZeroBased = parseInt(monthStr ?? "1", 10) - 1;
+    return {
+      fromMs: new Date(year, monthZeroBased, 1, 0, 0, 0).getTime(),
+      toMs: new Date(year, monthZeroBased + 1, 1, 0, 0, 0).getTime() - 1,
+      period: input.month,
+      windowType: input.windowTypeOverride ?? "calendar_month",
+    };
+  }
+
+  const fromMs =
+    input.from ??
+    (() => {
+      const d = new Date(nowMs);
+      return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0).getTime();
+    })();
+  const toMs = input.to ?? nowMs;
+  const d = new Date(fromMs);
+  const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-MTD`;
+  return { fromMs, toMs, period, windowType: input.windowTypeOverride ?? "mtd" };
+};
+
 /**
  * The canonical MonthlyRollup shape. Every aggregate the agent cites must be
  * backed by this structure or derived from it. The `contributing_tx_ids` field

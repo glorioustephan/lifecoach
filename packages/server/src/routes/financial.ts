@@ -1,29 +1,21 @@
 import { Hono } from "hono";
 import type { Lifecoach } from "@lifecoach/core";
-import { backfillFromCsv, parseMonarchCsv } from "@lifecoach/core";
+import { backfillFromCsv, parseMonarchCsv, computeNetWorth } from "@lifecoach/core";
+import { FINANCE_EVIDENCE_REF_TYPES } from "@lifecoach/schemas";
 
-// Credit cards and debt accounts are liabilities; everything else is an asset.
-const LIABILITY_TYPES = new Set(["debt", "credit_card"]);
-
-const computeNetWorth = (lc: Lifecoach) => {
+const accountsWithNetWorth = (lc: Lifecoach) => {
   const accounts = lc.storage.financial.listAccounts({ status: "active" });
-  let totalAssets = 0;
-  let totalLiabilities = 0;
-  for (const a of accounts) {
-    if (LIABILITY_TYPES.has(a.type)) totalLiabilities += Math.abs(a.balance);
-    else totalAssets += a.balance;
-  }
-  return { accounts, totalAssets, totalLiabilities, netWorth: totalAssets - totalLiabilities };
+  return { accounts, ...computeNetWorth(accounts) };
 };
 
 /** Read-only views over synced Monarch data, backing the Finances page. */
 export const financialRoutes = (lc: Lifecoach) => {
   const app = new Hono();
 
-  app.get("/accounts", (c) => c.json(computeNetWorth(lc)));
+  app.get("/accounts", (c) => c.json(accountsWithNetWorth(lc)));
 
   app.get("/net-worth", (c) => {
-    const { totalAssets, totalLiabilities, netWorth } = computeNetWorth(lc);
+    const { totalAssets, totalLiabilities, netWorth } = accountsWithNetWorth(lc);
     return c.json({ totalAssets, totalLiabilities, netWorth });
   });
 
@@ -61,11 +53,10 @@ export const financialRoutes = (lc: Lifecoach) => {
   // carry the full Inbox lifecycle (Discuss / Acted / Dismiss / Snooze), and
   // an insight that cites both finance and health evidence appears in both
   // places — which is the cross-domain reasoning the unification enables.
-  const FINANCE_REF_TYPES = new Set(["account", "transaction", "budget", "holding"]);
   app.get("/insights", (c) => {
     const all = lc.storage.insights.list({ state: "active", limit: 1000 });
     const insights = all.filter((i) =>
-      i.evidenceRefs.some((ref) => FINANCE_REF_TYPES.has(ref.refType)),
+      i.evidenceRefs.some((ref) => FINANCE_EVIDENCE_REF_TYPES.has(ref.refType)),
     );
     return c.json({ insights });
   });

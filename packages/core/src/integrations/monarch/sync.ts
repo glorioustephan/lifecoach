@@ -157,7 +157,15 @@ export async function syncMonarch(
           isPending: monarchTxn.isPending,
           isRecurring: monarchTxn.isRecurring,
           recurringFrequency: monarchTxn.recurringFrequency ?? undefined,
-          categoryGroupType: monarchTxn.categoryGroupType ?? undefined,
+          // Monarch returns one of {income, expense, transfer} for known
+          // category groups; coerce anything else to undefined so the schema
+          // narrowing holds.
+          categoryGroupType:
+            monarchTxn.categoryGroupType === "income" ||
+            monarchTxn.categoryGroupType === "expense" ||
+            monarchTxn.categoryGroupType === "transfer"
+              ? monarchTxn.categoryGroupType
+              : undefined,
           syncedAt: syncTs,
         });
         result.transactionsUpserted += 1;

@@ -1,11 +1,10 @@
 import { Hono } from "hono";
 import type { Lifecoach } from "@lifecoach/core";
 import { isGoalStalled } from "@lifecoach/core";
-import type { Goal, Milestone, Task } from "@lifecoach/schemas";
+import { FINANCE_EVIDENCE_REF_TYPES, type Goal, type Milestone, type Task } from "@lifecoach/schemas";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
-const FINANCE_REF_TYPES = new Set(["account", "transaction", "budget", "holding"]);
 
 /**
  * Conditional finance tile for the morning briefing. Silence is the default —
@@ -59,7 +58,7 @@ const computeFinanceTile = (lc: Lifecoach, nowMs: number): FinanceTile | null =>
       (i) =>
         i.createdAt > nowMs - ONE_DAY_MS &&
         i.priority >= 2 &&
-        i.evidenceRefs.some((r) => FINANCE_REF_TYPES.has(r.refType)),
+        i.evidenceRefs.some((r) => FINANCE_EVIDENCE_REF_TYPES.has(r.refType)),
     )
     .sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt)[0];
   if (recent) {

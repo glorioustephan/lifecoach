@@ -1,5 +1,7 @@
 import type { Storage } from "../../storage/index.js";
 import { isTransferTxn } from "../../financial/transfer.js";
+import { computeNetWorth } from "../../financial/portfolio.js";
+import { assertEpochMs } from "../../agent/tools/epoch-input.js";
 
 /**
  * Snapshot a small set of derived financial metrics into the generic
@@ -30,8 +32,6 @@ import { isTransferTxn } from "../../financial/transfer.js";
  * MTD units so downstream prompts that haven't been updated yet always receive
  * the calendar-month figure rather than the rolling window.
  */
-const LIABILITY_TYPES = new Set<string>(["debt", "credit_card"]);
-const LIQUID_ASSET_TYPES = new Set<string>(["checking", "savings"]);
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
@@ -49,26 +49,6 @@ const startOfTodayMs = (): number => {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d.getTime();
-};
-
-/**
- * Guard: warn if a `from`/`to` timestamp value looks like it is in seconds
- * rather than milliseconds. Unix epoch seconds are < 1e12; Unix epoch
- * milliseconds for any date after 2001-09-09 are >= 1e12.
- *
- * This guard lives here because the date filter is applied inside
- * `snapshotFinancialMetrics` directly. The `financial.ts` agent tool date
- * filter is a separate concern owned by `mcp-protocol-engineer`; that path
- * should add the same check.
- */
-const validateTimestampMs = (label: string, value: number): void => {
-  if (value > 0 && value < 1e12) {
-    console.warn(
-      `[snapshot-metrics] ${label} value ${value} looks like seconds rather than ` +
-        `milliseconds (expected >= 1e12 for any date after 2001). ` +
-        `Convert to ms before passing to queryTransactions.`,
-    );
-  }
 };
 
 /** Accumulate income/expense totals from a transaction list, excluding transfers. */
@@ -110,15 +90,7 @@ export const snapshotFinancialMetrics = (storage: Storage): SnapshotResult => {
   // the internal UUID and the externalId to maximise hit rate.
   const internalAccountIds = new Set<string>(accounts.flatMap((a) => [a.id, a.externalId]));
 
-  let totalAssets = 0;
-  let totalLiabilities = 0;
-  let liquidSavings = 0;
-  for (const a of accounts) {
-    if (LIABILITY_TYPES.has(a.type)) totalLiabilities += Math.abs(a.balance);
-    else totalAssets += a.balance;
-    if (LIQUID_ASSET_TYPES.has(a.type)) liquidSavings += a.balance;
-  }
-  const netWorth = totalAssets - totalLiabilities;
+  const { totalAssets, totalLiabilities, netWorth, liquidSavings } = computeNetWorth(accounts);
 
   // Latest holdings snapshot only (sync appends a dated snapshot each run).
   const allHoldings = storage.financial.queryHoldings();
@@ -131,7 +103,7 @@ export const snapshotFinancialMetrics = (storage: Storage): SnapshotResult => {
   // Anchored to midnight on the 1st of the current month. This is the figure
   // users see in their budgeting view and intuitively understand as "this month".
   const mtdFrom = startOfCurrentMonthMs();
-  validateTimestampMs("mtdFrom", mtdFrom);
+  assertEpochMs("mtdFrom", mtdFrom);
   const mtdTxns = storage.financial.queryTransactions({ from: mtdFrom });
   const { income: incomeMtd, expenses: expensesMtd } = accumulateTotals(
     mtdTxns,
@@ -144,7 +116,7 @@ export const snapshotFinancialMetrics = (storage: Storage): SnapshotResult => {
   // narrated as a "monthly" figure — paycheck timing at month boundaries causes
   // discontinuous jumps that are windowing artifacts, not behavioral changes.
   const trailing30From = Date.now() - THIRTY_DAYS_MS;
-  validateTimestampMs("trailing30From", trailing30From);
+  assertEpochMs("trailing30From", trailing30From);
   const trailing30Txns = storage.financial.queryTransactions({ from: trailing30From });
   const { income: incomeTrailing30, expenses: expensesTrailing30 } = accumulateTotals(
     trailing30Txns,
@@ -200,4 +172,4 @@ export const snapshotFinancialMetrics = (storage: Storage): SnapshotResult => {
 
 // ─── Pure helpers exported for unit tests ───────────────────────────────────
 
-export { accumulateTotals, validateTimestampMs, startOfCurrentMonthMs };
+export { accumulateTotals, startOfCurrentMonthMs };

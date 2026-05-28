@@ -5,9 +5,12 @@ import { parseEpochInput } from "./epoch-input.js";
 import {
   buildMonthlyRollup,
   buildCategorySubtotals,
+  parseMonthWindow,
   type MonthlyRollup,
+  type WindowType,
 } from "../../financial/rollup.js";
 import { isTransferTxn } from "../../financial/transfer.js";
+import { computeNetWorth, isLiabilityType } from "../../financial/portfolio.js";
 
 export const buildFinancialTools = (storage: Storage) => [
   tool(
@@ -175,32 +178,19 @@ export const buildFinancialTools = (storage: Storage) => [
     {},
     async () => {
       const accounts = storage.financial.listAccounts({ status: "active" });
-
-      let totalAssets = 0;
-      let totalLiabilities = 0;
-      const breakdown: Array<{ type: string; balance: number }> = [];
-
-      for (const acc of accounts) {
-        if (acc.type === "debt" || acc.type === "credit_card") {
-          totalLiabilities += Math.abs(acc.balance);
-          breakdown.push({ type: `${acc.type} (${acc.displayName})`, balance: -Math.abs(acc.balance) });
-        } else {
-          totalAssets += acc.balance;
-          breakdown.push({ type: `${acc.type} (${acc.displayName})`, balance: acc.balance });
-        }
-      }
+      const { totalAssets, totalLiabilities, netWorth } = computeNetWorth(accounts);
+      const breakdown = accounts.map((acc) =>
+        isLiabilityType(acc.type)
+          ? { type: `${acc.type} (${acc.displayName})`, balance: -Math.abs(acc.balance) }
+          : { type: `${acc.type} (${acc.displayName})`, balance: acc.balance },
+      );
 
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify(
-              {
-                totalAssets,
-                totalLiabilities,
-                netWorth: totalAssets - totalLiabilities,
-                breakdown,
-              },
+              { totalAssets, totalLiabilities, netWorth, breakdown },
               null,
               2,
             ),
@@ -416,30 +406,13 @@ export const buildFinancialTools = (storage: Storage) => [
         ),
     },
     async ({ month, from, to, window_type }) => {
-      let fromMs: number;
-      let toMs: number;
-      let period: string;
-      let windowType: MonthlyRollup["windowType"];
-
-      if (month) {
-        const [yearStr, monthStr] = month.split("-");
-        const year = parseInt(yearStr ?? "0", 10);
-        const monthZeroBased = parseInt(monthStr ?? "1", 10) - 1;
-        fromMs = new Date(year, monthZeroBased, 1, 0, 0, 0).getTime();
-        toMs = new Date(year, monthZeroBased + 1, 1, 0, 0, 0).getTime() - 1;
-        period = month;
-        windowType = (window_type as MonthlyRollup["windowType"]) ?? "calendar_month";
-      } else {
-        const nowMs = Date.now();
-        fromMs = parseEpochInput(from, "from", "financial_monthly_rollup") ?? (() => {
-          const d = new Date(nowMs);
-          return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0).getTime();
-        })();
-        toMs = parseEpochInput(to, "to", "financial_monthly_rollup") ?? nowMs;
-        windowType = (window_type as MonthlyRollup["windowType"]) ?? "mtd";
-        const d = new Date(fromMs);
-        period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-MTD`;
-      }
+      const win = parseMonthWindow({
+        month,
+        from: parseEpochInput(from, "from", "financial_monthly_rollup"),
+        to: parseEpochInput(to, "to", "financial_monthly_rollup"),
+        windowTypeOverride: (window_type as WindowType | undefined) ?? undefined,
+      });
+      const { fromMs, toMs, period, windowType } = win;
 
       const transactions = storage.financial.queryTransactions({ from: fromMs, to: toMs });
       const rollup = buildMonthlyRollup({
@@ -533,27 +506,11 @@ export const buildFinancialTools = (storage: Storage) => [
         ),
     },
     async ({ month, from, to, category, include_transfers }) => {
-      let fromMs: number;
-      let toMs: number;
-      let period: string;
-
-      if (month) {
-        const [yearStr, monthStr] = month.split("-");
-        const year = parseInt(yearStr ?? "0", 10);
-        const monthZeroBased = parseInt(monthStr ?? "1", 10) - 1;
-        fromMs = new Date(year, monthZeroBased, 1, 0, 0, 0).getTime();
-        toMs = new Date(year, monthZeroBased + 1, 1, 0, 0, 0).getTime() - 1;
-        period = month;
-      } else {
-        const nowMs = Date.now();
-        fromMs = parseEpochInput(from, "from", "get_rollup_contributors") ?? (() => {
-          const d = new Date(nowMs);
-          return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0).getTime();
-        })();
-        toMs = parseEpochInput(to, "to", "get_rollup_contributors") ?? nowMs;
-        const d = new Date(fromMs);
-        period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-MTD`;
-      }
+      const { fromMs, toMs, period } = parseMonthWindow({
+        month,
+        from: parseEpochInput(from, "from", "get_rollup_contributors"),
+        to: parseEpochInput(to, "to", "get_rollup_contributors"),
+      });
 
       const allTxns = storage.financial.queryTransactions({ from: fromMs, to: toMs });
 

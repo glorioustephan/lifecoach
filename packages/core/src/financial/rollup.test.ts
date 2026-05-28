@@ -210,11 +210,11 @@ describe("buildMonthlyRollup — transfer IDs never in contributingTxIds", () =>
 describe("buildCategorySubtotals", () => {
   it("groups expenses by category with correct tx IDs, transfers excluded", () => {
     const txns = [
-      { id: "g1", amount: -100, category: "Groceries", categoryGroupType: "expense" },
-      { id: "g2", amount: -200, category: "Groceries", categoryGroupType: "expense" },
-      { id: "d1", amount: -50, category: "Dining", categoryGroupType: "expense" },
-      { id: "t1", amount: -500, category: "Transfer", categoryGroupType: "transfer" },
-      { id: "i1", amount: 3000, category: "Paycheck", categoryGroupType: "income" }, // income excluded
+      { id: "g1", amount: -100, category: "Groceries", categoryGroupType: "expense" as const },
+      { id: "g2", amount: -200, category: "Groceries", categoryGroupType: "expense" as const },
+      { id: "d1", amount: -50, category: "Dining", categoryGroupType: "expense" as const },
+      { id: "t1", amount: -500, category: "Transfer", categoryGroupType: "transfer" as const },
+      { id: "i1", amount: 3000, category: "Paycheck", categoryGroupType: "income" as const }, // income excluded
     ];
     const subtotals = buildCategorySubtotals(txns);
     const groceries = subtotals.find((s) => s.category === "Groceries");
@@ -231,9 +231,9 @@ describe("buildCategorySubtotals", () => {
 
   it("sorts by total descending", () => {
     const txns = [
-      { id: "a", amount: -10, category: "A", categoryGroupType: "expense" },
-      { id: "b", amount: -500, category: "B", categoryGroupType: "expense" },
-      { id: "c", amount: -100, category: "C", categoryGroupType: "expense" },
+      { id: "a", amount: -10, category: "A", categoryGroupType: "expense" as const },
+      { id: "b", amount: -500, category: "B", categoryGroupType: "expense" as const },
+      { id: "c", amount: -100, category: "C", categoryGroupType: "expense" as const },
     ];
     const subtotals = buildCategorySubtotals(txns);
     expect(subtotals[0]?.category).toBe("B");

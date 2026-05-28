@@ -70,3 +70,32 @@ export function parseEpochInput(
   // Already in milliseconds.
   return value;
 }
+
+/**
+ * Assert (warn-only) that `value` is plausibly Unix milliseconds rather than
+ * seconds. Use at call sites where the value is already typed `number` but
+ * arrived via a code path that doesn't run `parseEpochInput` — e.g.
+ * snapshot-metrics' direct date filter on `queryTransactions`. Same threshold
+ * (1e12) as `parseEpochInput` so the two stay in lockstep.
+ *
+ * Distinct from `parseEpochInput` because callers here have a `number` (not a
+ * `number | undefined`) and never want auto-conversion — they need an
+ * observable signal that the upstream value is suspect, not silent rewriting.
+ */
+export function assertEpochMs(
+  label: string,
+  value: number,
+  warn: WarnFn = defaultWarn,
+): void {
+  if (value > 0 && value < 1e12) {
+    warn({
+      tool: label,
+      field: "epoch-ms",
+      receivedSeconds: value,
+      normalizedMs: value * 1000,
+      warning:
+        `${label} value ${value} looks like seconds rather than milliseconds ` +
+        "(expected >= 1e12 for any date after 2001). Convert to ms before passing.",
+    });
+  }
+}

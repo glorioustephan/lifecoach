@@ -3,33 +3,35 @@ import { createTestStorage, type TestStorageHandle } from "../../testing/test-st
 import {
   snapshotFinancialMetrics,
   accumulateTotals,
-  validateTimestampMs,
   startOfCurrentMonthMs,
 } from "./snapshot-metrics.js";
+import { assertEpochMs } from "../../agent/tools/epoch-input.js";
 
 // ─── isTransferTxn tests have moved to ../../financial/transfer.test.ts ─────
 
-// ─── validateTimestampMs ─────────────────────────────────────────────────────
+// ─── assertEpochMs (formerly validateTimestampMs, consolidated into the
+// shared epoch helper in agent/tools/epoch-input.ts) ────────────────────────
 
-describe("validateTimestampMs", () => {
+describe("assertEpochMs", () => {
   it("warns when timestamp looks like seconds (< 1e12)", () => {
     const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    validateTimestampMs("from", 1_748_300_000); // seconds-epoch value
+    assertEpochMs("from", 1_748_300_000); // seconds-epoch value
     expect(spy).toHaveBeenCalledOnce();
-    expect(spy.mock.calls[0]![0]).toMatch(/looks like seconds/);
+    // The structured log payload contains the "looks like seconds" warning text.
+    expect(spy.mock.calls[0]![1]).toMatch(/looks like seconds/);
     spy.mockRestore();
   });
 
   it("does not warn for a valid ms timestamp", () => {
     const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    validateTimestampMs("from", 1_748_300_000_000); // ms-epoch value
+    assertEpochMs("from", 1_748_300_000_000); // ms-epoch value
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 
   it("does not warn for zero (unset sentinel)", () => {
     const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    validateTimestampMs("from", 0);
+    assertEpochMs("from", 0);
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });

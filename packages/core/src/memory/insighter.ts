@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   evidenceRefSchema,
   insightPriority,
+  FINANCE_EVIDENCE_REF_TYPES,
   type EvidenceRef,
   type Insight,
   type InsightPriority,
@@ -12,11 +13,11 @@ import type { IdentityMemory } from "./identity.js";
 import type { SemanticMemory } from "./semantic.js";
 import { refreshAttentionSignals } from "./attention.js";
 import { indexMoneyMomentFromInsight } from "./finance-narratives.js";
+import { computeNetWorth } from "../financial/portfolio.js";
+import { normalizeToMonthlyAmount } from "../financial/recurring.js";
 import { withRetry } from "../util/retry.js";
 import { LifecoachError } from "../util/errors.js";
 import { isGoalStalled } from "../util/goal-cadence.js";
-
-const FINANCE_EVIDENCE_REF_TYPES = new Set(["account", "transaction", "budget", "holding"]);
 
 const insightPayloadSchema = z.object({
   insights: z
@@ -176,18 +177,7 @@ interface ContextData {
   };
 }
 
-const FINANCIAL_LIABILITY_TYPES = new Set<string>(["debt", "credit_card"]);
 const RECURRING_CANDIDATE_MIN_MONTHLY = 50;
-const RECURRING_FREQUENCY_TO_MONTHLY: Record<string, number> = {
-  weekly: 52 / 12,
-  biweekly: 26 / 12,
-  monthly: 1,
-  bimonthly: 0.5,
-  quarterly: 1 / 3,
-  semiannual: 1 / 6,
-  annual: 1 / 12,
-  yearly: 1 / 12,
-};
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
 
@@ -382,12 +372,7 @@ const gatherFinancial = (
   nowMs: number,
 ): ContextData["financial"] => {
   const accounts = storage.financial.listAccounts({ status: "active" });
-  let totalAssets = 0;
-  let totalLiabilities = 0;
-  for (const a of accounts) {
-    if (FINANCIAL_LIABILITY_TYPES.has(a.type)) totalLiabilities += Math.abs(a.balance);
-    else totalAssets += a.balance;
-  }
+  const { totalAssets, totalLiabilities, netWorth } = computeNetWorth(accounts);
 
   const month = new Date(nowMs);
   const thisMonth = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}`;
@@ -442,14 +427,11 @@ const gatherFinancial = (
     byMerchant.set(key, entry);
   }
   const recurringCandidates = Array.from(byMerchant.entries())
-    .map(([merchant, v]) => {
-      const freqMul = v.freq ? RECURRING_FREQUENCY_TO_MONTHLY[v.freq] : undefined;
-      // If frequency known, normalize a single charge × freq; else use 90d avg.
-      const monthlyEstimate = freqMul
-        ? (v.totalAbs / v.count) * freqMul
-        : v.totalAbs / 3; // 90 days ≈ 3 months
-      return { merchant, monthlyEstimate, sampleCount: v.count };
-    })
+    .map(([merchant, v]) => ({
+      merchant,
+      monthlyEstimate: normalizeToMonthlyAmount(v.totalAbs, v.count, v.freq, 3),
+      sampleCount: v.count,
+    }))
     .filter((c) => c.monthlyEstimate >= RECURRING_CANDIDATE_MIN_MONTHLY)
     .sort((a, b) => b.monthlyEstimate - a.monthlyEstimate)
     .slice(0, 10);
@@ -461,11 +443,7 @@ const gatherFinancial = (
       type: a.type,
       balance: a.balance,
     })),
-    netWorthSummary: {
-      totalAssets,
-      totalLiabilities,
-      netWorth: totalAssets - totalLiabilities,
-    },
+    netWorthSummary: { totalAssets, totalLiabilities, netWorth },
     budgets: budgets.map((b) => ({
       id: b.id,
       category: b.category,

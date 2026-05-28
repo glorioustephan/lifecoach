@@ -13,6 +13,7 @@ import { withRetry } from "../util/retry.js";
 import { LifecoachError } from "../util/errors.js";
 import { isGoalStalled } from "../util/goal-cadence.js";
 import { isTransferTxn } from "../financial/transfer.js";
+import { computeNetWorth } from "../financial/portfolio.js";
 
 // ─── Structured payload the LLM emits via tool use ───────────────────────────
 
@@ -392,13 +393,8 @@ const renderData = (data: PeriodData): string => {
   // Include financial data for weekly/monthly reflections
   if (data.financialAccounts && data.financialAccounts.length > 0) {
     parts.push("\n## Financial Status");
-    const totalAssets = data.financialAccounts
-      .filter((a) => a.type !== "debt" && a.type !== "credit_card")
-      .reduce((sum, a) => sum + a.balance, 0);
-    const totalLiabilities = data.financialAccounts
-      .filter((a) => a.type === "debt" || a.type === "credit_card")
-      .reduce((sum, a) => sum + Math.abs(a.balance), 0);
-    parts.push(`- Net worth: $${(totalAssets - totalLiabilities).toFixed(2)}`);
+    const { netWorth } = computeNetWorth(data.financialAccounts);
+    parts.push(`- Net worth: $${netWorth.toFixed(2)}`);
 
     if (data.financialTransactionSummary) {
       parts.push(`- Spending this period: $${data.financialTransactionSummary.totalSpent.toFixed(2)}`);

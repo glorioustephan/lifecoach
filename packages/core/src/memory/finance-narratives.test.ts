@@ -32,7 +32,7 @@ const makeTxn = (
     amount: number;
     merchant: string;
     category: string;
-    categoryGroupType: string;
+    categoryGroupType: "income" | "expense" | "transfer";
     date: number;
     isRecurring: boolean;
   }> = {},

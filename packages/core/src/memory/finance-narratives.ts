@@ -1,6 +1,7 @@
 import type { Storage } from "../storage/index.js";
 import type { SemanticMemory } from "./semantic.js";
 import { isTransferTxn } from "../financial/transfer.js";
+import { normalizeToMonthlyAmount } from "../financial/recurring.js";
 
 /**
  * Index financial NARRATIVES (monthly rollups, "money moments") for semantic
@@ -13,18 +14,6 @@ import { isTransferTxn } from "../financial/transfer.js";
  * for that key (handled by `SemanticMemory.indexFinanceNarrative` →
  * `indexRef` → `deleteForRef` + insert).
  */
-
-const LIABILITY_TYPES = new Set<string>(["debt", "credit_card"]);
-const RECURRING_FREQ_TO_MONTHLY: Record<string, number> = {
-  weekly: 52 / 12,
-  biweekly: 26 / 12,
-  monthly: 1,
-  bimonthly: 0.5,
-  quarterly: 1 / 3,
-  semiannual: 1 / 6,
-  annual: 1 / 12,
-  yearly: 1 / 12,
-};
 
 const monthKey = (date: Date): string =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -121,10 +110,12 @@ const buildMonthlyNarrative = (
     .sort((a, b) => b[1].total - a[1].total)
     .slice(0, 6);
 
+  // Window is one calendar month, so when freq is unknown the observed total
+  // already IS the monthly figure — pass fallbackMonths=1 to preserve that
+  // semantic. Insighter (which walks a 90-day window) passes fallbackMonths=3.
   let monthlyRecurringEstimate = 0;
   for (const [, v] of recurringByMerchant) {
-    const freqMul = v.freq ? RECURRING_FREQ_TO_MONTHLY[v.freq] : undefined;
-    monthlyRecurringEstimate += freqMul ? (v.totalAbs / v.count) * freqMul : v.totalAbs;
+    monthlyRecurringEstimate += normalizeToMonthlyAmount(v.totalAbs, v.count, v.freq, 1);
   }
 
   // Net-worth narrative: first + last observation in window.

@@ -196,3 +196,11 @@ export {
   type ImportEvent,
 } from "./util/snapshot.js";
 export { NotImplementedError, LifecoachError } from "./util/errors.js";
+export {
+  LIABILITY_ACCOUNT_TYPES,
+  LIQUID_ASSET_TYPES,
+  isLiabilityType,
+  isLiquidAssetType,
+  computeNetWorth,
+  type NetWorthSummary,
+} from "./financial/portfolio.js";

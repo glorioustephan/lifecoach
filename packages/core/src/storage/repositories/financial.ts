@@ -6,6 +6,7 @@ import {
   budgetStatus,
   insightCategory,
   financialInsightPriority,
+  transactionCategoryGroupType,
   type Account,
   type NewAccount,
   type Transaction,
@@ -148,7 +149,12 @@ const rowToTransaction = (row: TransactionRow): Transaction => ({
   notes: row.notes ?? undefined,
   isRecurring: row.is_recurring === 1,
   recurringFrequency: row.recurring_frequency ?? undefined,
-  categoryGroupType: row.category_group_type ?? undefined,
+  // categoryGroupType narrowed to a known enum at the schema layer; legacy
+  // rows with unexpected values fall back to undefined rather than crashing.
+  categoryGroupType:
+    row.category_group_type == null
+      ? undefined
+      : transactionCategoryGroupType.safeParse(row.category_group_type).data,
   isTransfer: row.is_transfer == null ? undefined : row.is_transfer === 1,
   syncedAt: row.synced_at,
   createdAt: row.created_at,

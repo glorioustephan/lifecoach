@@ -14,6 +14,9 @@ export type AccountType = z.infer<typeof accountType>;
 export const accountStatus = z.enum(["active", "inactive", "closed"]);
 export type AccountStatus = z.infer<typeof accountStatus>;
 
+export const transactionCategoryGroupType = z.enum(["income", "expense", "transfer"]);
+export type TransactionCategoryGroupType = z.infer<typeof transactionCategoryGroupType>;
+
 export const accountSchema = z.object({
   id: z.string(),
   externalId: z.string(), // Monarch account ID
@@ -53,12 +56,13 @@ export const transactionSchema = z.object({
   /** Frequency from Monarch merchant.recurringTransactionStream (e.g. "MONTHLY"). */
   recurringFrequency: z.string().optional(),
   /**
-   * Monarch category-group type for this transaction's category. Known values:
-   * `income`, `expense`, `transfer`. Used to exclude transfers (between owned
-   * accounts, credit-card payments, loan principal) from monthly_burn /
-   * savings_rate so cash movements aren't counted as spending.
+   * Monarch category-group type for this transaction's category — narrowed to
+   * the known set because `isTransferTxn` and the rollup module both treat
+   * any non-conforming value as an unknown signal. Used to exclude transfers
+   * (between owned accounts, credit-card payments, loan principal) from
+   * monthly_burn / savings_rate so cash movements aren't counted as spending.
    */
-  categoryGroupType: z.string().optional(),
+  categoryGroupType: transactionCategoryGroupType.optional(),
   /**
    * Monarch's own boolean transfer flag (priority-1 signal in `isTransferTxn`).
    * True means the transaction is a cash movement between owned accounts.
@@ -108,7 +112,8 @@ export type BudgetStatus = z.infer<typeof budgetStatus>;
 export const budgetSchema = z.object({
   id: z.string(),
   category: z.string().min(1),
-  month: z.string(), // YYYY-MM format
+  // YYYY-MM, validated at the schema layer. Months 01–12 only — no 13+.
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Expected YYYY-MM (e.g. 2026-05)"),
   limit: z.number(),
   spent: z.number().default(0),
   status: budgetStatus.default("active"),
@@ -159,6 +164,25 @@ export const newFinancialInsightSchema = financialInsightSchema.omit({
   dismissedAt: true,
 });
 export type NewFinancialInsight = z.infer<typeof newFinancialInsightSchema>;
+
+/**
+ * Evidence-ref `refType` values that mark an Insight as finance-domain. The
+ * unified Insighter records every insight with one or more `evidenceRefs`;
+ * any insight referencing at least one of these ref types is surfaced on the
+ * Finances page (and counted as a finance insight for briefings, etc.).
+ *
+ * Keep this in sync with `evidenceRefType` in `./insight.ts` — these are
+ * exactly the finance-domain subset of that enum.
+ */
+export const FINANCE_EVIDENCE_REF_TYPES: ReadonlySet<string> = new Set([
+  "account",
+  "transaction",
+  "budget",
+  "holding",
+]);
+
+export const isFinanceEvidenceRefType = (refType: string): boolean =>
+  FINANCE_EVIDENCE_REF_TYPES.has(refType);
 
 // ─── Categorization corrections ─────────────────────────────────────────────
 // Stored separately from `transactions` so re-syncs from Monarch never
