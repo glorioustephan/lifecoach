@@ -44,6 +44,7 @@ const GET_TRANSACTIONS_QUERY = `
         pending
         date
         isRecurring
+        isTransfer
         account { id __typename }
         category {
           id
@@ -124,6 +125,14 @@ export interface MonarchTransaction {
   accountId: string | null;
   /** True if Monarch flagged this transaction as recurring (subscription/scheduled). */
   isRecurring: boolean;
+  /**
+   * Monarch's own boolean transfer flag. When true the transaction is a cash
+   * movement between owned accounts and must be excluded from income/expense
+   * rollups. Takes priority over all category-based heuristics (tier 0 in
+   * `isTransferTxn`). May be absent on older synced rows — callers must
+   * tolerate undefined.
+   */
+  isTransfer?: boolean | null;
   /** Cadence from merchant.recurringTransactionStream (e.g. "MONTHLY"). */
   recurringFrequency?: string | null;
 }
@@ -292,6 +301,7 @@ export class MonarchClient {
         isPending: txn.pending ?? false,
         accountId: txn.account?.id ?? null,
         isRecurring: txn.isRecurring ?? false,
+        isTransfer: txn.isTransfer != null ? Boolean(txn.isTransfer) : null,
         recurringFrequency:
           txn.merchant?.recurringTransactionStream?.isActive
             ? (txn.merchant.recurringTransactionStream.frequency ?? null)

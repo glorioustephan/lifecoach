@@ -1,5 +1,6 @@
 import type { Storage } from "../storage/index.js";
 import type { SemanticMemory } from "./semantic.js";
+import { isTransferTxn } from "../financial/transfer.js";
 
 /**
  * Index financial NARRATIVES (monthly rollups, "money moments") for semantic
@@ -70,12 +71,25 @@ const buildMonthlyNarrative = (
 
   let income = 0;
   let expenses = 0;
+  let transfersIn = 0;
+  let transfersOut = 0;
   const catRollup = new Map<string, { total: number; count: number }>();
   const merchantRollup = new Map<string, { total: number; count: number }>();
   const recurringByMerchant = new Map<string, { totalAbs: number; count: number; freq?: string }>();
   const notable: Array<{ merchant: string; amount: number; date: number; category?: string }> = [];
 
   for (const t of txns) {
+    // Exclude transfers between owned accounts (Ally sweeps, credit-card
+    // payments, loan principal) from income/expense totals. Counting both
+    // legs of an internal transfer inflates figures and produces fictional
+    // burn numbers. Track separately so the narrative can surface the total
+    // as informational context.
+    if (isTransferTxn(t)) {
+      if (t.amount > 0) transfersIn += t.amount;
+      else if (t.amount < 0) transfersOut += Math.abs(t.amount);
+      continue;
+    }
+
     if (t.amount > 0) income += t.amount;
     else if (t.amount < 0) expenses += Math.abs(t.amount);
     const cat = t.category ?? "uncategorized";
@@ -119,16 +133,24 @@ const buildMonthlyNarrative = (
   const nwDelta = nwStart !== undefined && nwEnd !== undefined ? nwEnd - nwStart : undefined;
 
   const lines: string[] = [];
-  lines.push(`[finance/month] ${mk} (${monthName(year, m0)})`);
+  // narrative_schema_version:2 — includes transfer-excluded income/expenses
+  // and a separate transfers line. Bump this constant when the prose format
+  // changes materially so downstream recall can filter stale v1 narratives.
+  lines.push(`[finance/month v2] ${mk} (${monthName(year, m0)}) window: ${mk} calendar month`);
   if (nwStart !== undefined && nwEnd !== undefined) {
     lines.push(
       `Net worth: ${fmt(nwStart)} → ${fmt(nwEnd)} (${(nwDelta ?? 0) >= 0 ? "+" : ""}${fmt(nwDelta ?? 0)}).`,
     );
   }
-  if (income > 0 || expenses > 0) {
+  if (income > 0 || expenses > 0 || transfersIn > 0 || transfersOut > 0) {
     lines.push(
-      `Income: ${fmt(income)} · Expenses: ${fmt(expenses)} · Savings rate: ${savingsRate.toFixed(1)}%.`,
+      `Income (excl. transfers): ${fmt(income)} · Expenses (excl. transfers): ${fmt(expenses)} · Savings rate: ${savingsRate.toFixed(1)}%.`,
     );
+    if (transfersIn > 0 || transfersOut > 0) {
+      lines.push(
+        `Transfers in/out (informational, excluded from income/expenses): in ${fmt(transfersIn)} · out ${fmt(transfersOut)}.`,
+      );
+    }
   }
   if (topCategories.length > 0) {
     lines.push(

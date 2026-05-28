@@ -1,4 +1,5 @@
 import type { Storage } from "../../storage/index.js";
+import { isTransferTxn } from "../../financial/transfer.js";
 
 /**
  * Snapshot a small set of derived financial metrics into the generic
@@ -11,44 +12,83 @@ import type { Storage } from "../../storage/index.js";
  * recorded for today (we run on a daily cron).
  *
  * Metrics emitted:
- *  - net_worth         (assets − liabilities), unit USD
- *  - total_debt        sum of liability balances (abs), unit USD
- *  - liquid_savings    sum of checking + savings balances, unit USD
- *  - portfolio_value   latest holdings snapshot market value, unit USD
- *  - monthly_burn      abs sum of expense txns over the last 30 days, unit USD
- *  - savings_rate      (income − expenses) / income × 100 over last 30 days, unit %
+ *  - net_worth              (assets − liabilities), unit USD
+ *  - total_debt             sum of liability balances (abs), unit USD
+ *  - liquid_savings         sum of checking + savings balances, unit USD
+ *  - portfolio_value        latest holdings snapshot market value, unit USD
+ *  - monthly_burn_mtd       abs sum of expense txns since start of current
+ *                           calendar month, unit USD/mtd
+ *  - monthly_burn_trailing_30d  abs sum of expense txns over trailing 30 days
+ *                           anchored to Date.now(), unit USD/trailing30d
+ *  - savings_rate_mtd       (income − expenses) / income × 100 over current
+ *                           calendar-month-to-date, unit %/mtd
+ *  - savings_rate_trailing_30d  same formula over trailing 30 days,
+ *                           unit %/trailing30d
+ *
+ * Historical aliases (kept for backward-compat consumers that read the old key
+ * names): `monthly_burn` and `savings_rate` are written with the MTD value and
+ * MTD units so downstream prompts that haven't been updated yet always receive
+ * the calendar-month figure rather than the rolling window.
  */
 const LIABILITY_TYPES = new Set<string>(["debt", "credit_card"]);
 const LIQUID_ASSET_TYPES = new Set<string>(["checking", "savings"]);
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * Category names (case-insensitive substring match) treated as transfers when
- * Monarch did not return a `categoryGroup.type`. Older synced rows have
- * `categoryGroupType = null`; this fallback keeps the burn figure honest until
- * the next sync repopulates the column.
+ * Returns the Unix-ms timestamp for the first instant of the current calendar
+ * month in local time.
  */
-const TRANSFER_CATEGORY_NAME_PATTERNS = [
-  "transfer",
-  "credit card payment",
-  "loan payment",
-  "balance adjustment",
-];
-
-const isTransferTxn = (t: {
-  categoryGroupType?: string;
-  category?: string;
-}): boolean => {
-  if (t.categoryGroupType) return t.categoryGroupType.toLowerCase() === "transfer";
-  if (!t.category) return false;
-  const cat = t.category.toLowerCase();
-  return TRANSFER_CATEGORY_NAME_PATTERNS.some((p) => cat.includes(p));
+const startOfCurrentMonthMs = (): number => {
+  const d = new Date();
+  d.setDate(1);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
 };
 
 const startOfTodayMs = (): number => {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d.getTime();
+};
+
+/**
+ * Guard: warn if a `from`/`to` timestamp value looks like it is in seconds
+ * rather than milliseconds. Unix epoch seconds are < 1e12; Unix epoch
+ * milliseconds for any date after 2001-09-09 are >= 1e12.
+ *
+ * This guard lives here because the date filter is applied inside
+ * `snapshotFinancialMetrics` directly. The `financial.ts` agent tool date
+ * filter is a separate concern owned by `mcp-protocol-engineer`; that path
+ * should add the same check.
+ */
+const validateTimestampMs = (label: string, value: number): void => {
+  if (value > 0 && value < 1e12) {
+    console.warn(
+      `[snapshot-metrics] ${label} value ${value} looks like seconds rather than ` +
+        `milliseconds (expected >= 1e12 for any date after 2001). ` +
+        `Convert to ms before passing to queryTransactions.`,
+    );
+  }
+};
+
+/** Accumulate income/expense totals from a transaction list, excluding transfers. */
+const accumulateTotals = (
+  txns: ReadonlyArray<{
+    amount: number;
+    categoryGroupType?: string | null;
+    category?: string | null;
+    accountId?: string | null;
+  }>,
+  internalAccountIds: ReadonlySet<string>,
+): { income: number; expenses: number } => {
+  let income = 0;
+  let expenses = 0;
+  for (const t of txns) {
+    if (isTransferTxn(t, internalAccountIds)) continue;
+    if (t.amount > 0) income += t.amount;
+    else if (t.amount < 0) expenses += Math.abs(t.amount);
+  }
+  return { income, expenses };
 };
 
 export interface SnapshotResult {
@@ -62,6 +102,14 @@ export const snapshotFinancialMetrics = (storage: Storage): SnapshotResult => {
 
   // Compute from currently-synced local state.
   const accounts = storage.financial.listAccounts({ status: "active" });
+
+  // Build the internal-accounts set for transfer cross-referencing (account-pair rule).
+  // All accounts in the user's own Monarch workspace are considered internal.
+  // The external_id stored on each account row is the Monarch account ID; transactions
+  // carry accountId which maps to the internal UUID.  We therefore collect both
+  // the internal UUID and the externalId to maximise hit rate.
+  const internalAccountIds = new Set<string>(accounts.flatMap((a) => [a.id, a.externalId]));
+
   let totalAssets = 0;
   let totalLiabilities = 0;
   let liquidSavings = 0;
@@ -79,29 +127,59 @@ export const snapshotFinancialMetrics = (storage: Storage): SnapshotResult => {
     .filter((h) => h.snapshotDate === latestHoldingDate)
     .reduce((s, h) => s + (h.marketValue ?? 0), 0);
 
-  // Last-30-day spend / income from transactions. Convention: positive = inflow,
-  // negative = outflow (matches the finances.tsx sign treatment).
-  const since = Date.now() - THIRTY_DAYS_MS;
-  const recentTxns = storage.financial.queryTransactions({ from: since });
-  let income = 0;
-  let expenses = 0;
-  for (const t of recentTxns) {
-    // Transfers between owned accounts (Ally ↔ joint, credit-card payments,
-    // loan principal) aren't spending — counting them was inflating monthly
-    // burn by the size of cash movements between accounts.
-    if (isTransferTxn(t)) continue;
-    if (t.amount > 0) income += t.amount;
-    else if (t.amount < 0) expenses += Math.abs(t.amount);
-  }
-  const savingsRate = income > 0 ? ((income - expenses) / income) * 100 : 0;
+  // ── Calendar-month-to-date window ────────────────────────────────────────
+  // Anchored to midnight on the 1st of the current month. This is the figure
+  // users see in their budgeting view and intuitively understand as "this month".
+  const mtdFrom = startOfCurrentMonthMs();
+  validateTimestampMs("mtdFrom", mtdFrom);
+  const mtdTxns = storage.financial.queryTransactions({ from: mtdFrom });
+  const { income: incomeMtd, expenses: expensesMtd } = accumulateTotals(
+    mtdTxns,
+    internalAccountIds,
+  );
+  const savingsRateMtd = incomeMtd > 0 ? ((incomeMtd - expensesMtd) / incomeMtd) * 100 : 0;
+
+  // ── Trailing-30-day window ────────────────────────────────────────────────
+  // Anchored to Date.now(). Useful for smoothed trend analysis but MUST NOT be
+  // narrated as a "monthly" figure — paycheck timing at month boundaries causes
+  // discontinuous jumps that are windowing artifacts, not behavioral changes.
+  const trailing30From = Date.now() - THIRTY_DAYS_MS;
+  validateTimestampMs("trailing30From", trailing30From);
+  const trailing30Txns = storage.financial.queryTransactions({ from: trailing30From });
+  const { income: incomeTrailing30, expenses: expensesTrailing30 } = accumulateTotals(
+    trailing30Txns,
+    internalAccountIds,
+  );
+  const savingsRateTrailing30 =
+    incomeTrailing30 > 0 ? ((incomeTrailing30 - expensesTrailing30) / incomeTrailing30) * 100 : 0;
 
   const metrics: Array<{ metric: string; value: number; unit: string }> = [
     { metric: "net_worth", value: netWorth, unit: "USD" },
     { metric: "total_debt", value: totalLiabilities, unit: "USD" },
     { metric: "liquid_savings", value: liquidSavings, unit: "USD" },
     { metric: "portfolio_value", value: portfolioValue, unit: "USD" },
-    { metric: "monthly_burn", value: expenses, unit: "USD" },
-    { metric: "savings_rate", value: savingsRate, unit: "%" },
+
+    // Primary MTD metrics (calendar-month intuition).
+    { metric: "monthly_burn_mtd", value: expensesMtd, unit: "USD/mtd" },
+    { metric: "savings_rate_mtd", value: savingsRateMtd, unit: "%/mtd" },
+
+    // Trailing-30 metrics (trend/smoothing use case only).
+    {
+      metric: "monthly_burn_trailing_30d",
+      value: expensesTrailing30,
+      unit: "USD/trailing30d",
+    },
+    {
+      metric: "savings_rate_trailing_30d",
+      value: savingsRateTrailing30,
+      unit: "%/trailing30d",
+    },
+
+    // Backward-compat aliases — write the MTD value so any prompt that reads
+    // these legacy keys gets the calendar-month figure.  These will be removed
+    // once all consumers migrate to the explicit *_mtd / *_trailing_30d keys.
+    { metric: "monthly_burn", value: expensesMtd, unit: "USD/mtd" },
+    { metric: "savings_rate", value: savingsRateMtd, unit: "%/mtd" },
   ];
 
   const recorded: string[] = [];
@@ -119,3 +197,7 @@ export const snapshotFinancialMetrics = (storage: Storage): SnapshotResult => {
   }
   return { recorded };
 };
+
+// ─── Pure helpers exported for unit tests ───────────────────────────────────
+
+export { accumulateTotals, validateTimestampMs, startOfCurrentMonthMs };

@@ -36,6 +36,13 @@ export const openDb = (config: LifecoachConfig): DbHandle => {
     );
   }
 
+  // Create the embeddings virtual table before running migrations so that any
+  // migration that references the `embeddings` table (e.g. purge scripts) does
+  // not fail on a fresh database.  The dim-mismatch guard runs after migrations
+  // once the `meta` table exists (created by 001_init.sql).
+  db.exec(
+    `CREATE VIRTUAL TABLE IF NOT EXISTS embeddings USING vec0(embedding FLOAT[${config.embeddingDim}])`,
+  );
   runMigrations(db);
   ensureEmbeddingTable(db, config.embeddingDim);
   upsertMeta(db, "embedding_dim", String(config.embeddingDim));
@@ -58,15 +65,14 @@ const runMigrations = (db: DatabaseType): void => {
     applied_at INTEGER NOT NULL
   )`);
 
-  const applied = new Set(
-    db
-      .prepare("SELECT name FROM _migrations")
-      .all()
-      .map((row) => (row as { name: string }).name),
-  );
+  // Check applied status per-iteration rather than caching upfront: an earlier
+  // migration may rewrite _migrations rows (e.g. a repair that renames old
+  // entries to match files that were renamed on disk), and later iterations
+  // must see those updates.
+  const isApplied = db.prepare("SELECT 1 FROM _migrations WHERE name = ?");
 
   for (const file of files) {
-    if (applied.has(file)) continue;
+    if (isApplied.get(file)) continue;
     const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), "utf8");
     db.exec("BEGIN");
     try {

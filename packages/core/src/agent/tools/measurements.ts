@@ -1,6 +1,7 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type { Storage } from "../../storage/index.js";
+import { parseEpochInput } from "./epoch-input.js";
 
 /**
  * Measurement tools are partially scaffolded.
@@ -12,16 +13,36 @@ import type { Storage } from "../../storage/index.js";
 export const buildMeasurementTools = (storage: Storage) => [
   tool(
     "query_measurements",
-    "Read a time-series of measurements for a given metric (e.g. 'fasting_glucose', 'hrv', 'weight').",
+    "Read a time-series of measurements for a given metric (e.g. 'fasting_glucose', 'hrv', 'weight'). " +
+      "Returns all recorded values in the requested time window together with a statistical summary " +
+      "(mean, min, max, count). Call this when the user asks about trends or history for a health metric. " +
+      "Date bounds must be Unix epoch milliseconds — e.g. 1709251200000 for 2024-03-01. " +
+      "Values below 1e12 are auto-converted from seconds and a warning is logged.",
     {
-      metric: z.string().min(1),
-      from: z.number().int().optional().describe("Unix ms"),
-      to: z.number().int().optional().describe("Unix ms"),
+      metric: z.string().min(1).describe("The metric slug, e.g. 'fasting_glucose', 'hrv', 'weight'."),
+      from: z
+        .number()
+        .int()
+        .optional()
+        .describe(
+          "Unix epoch milliseconds start bound (inclusive). Example: 1709251200000 for 2024-03-01. " +
+            "Values < 1e12 are auto-converted from seconds. Omit or pass 0 for no lower bound.",
+        ),
+      to: z
+        .number()
+        .int()
+        .optional()
+        .describe(
+          "Unix epoch milliseconds end bound (inclusive). " +
+            "Values < 1e12 are auto-converted from seconds. Omit for no upper bound.",
+        ),
     },
     async ({ metric, from, to }) => {
+      const fromMs = parseEpochInput(from, "from", "query_measurements");
+      const toMs = parseEpochInput(to, "to", "query_measurements");
       const range = {
-        ...(from !== undefined ? { from } : {}),
-        ...(to !== undefined ? { to } : {}),
+        ...(fromMs !== undefined ? { from: fromMs } : {}),
+        ...(toMs !== undefined ? { to: toMs } : {}),
       };
       const rows = storage.measurements.query(metric, range);
       const summary = storage.measurements.summarize(metric, range);
@@ -43,14 +64,25 @@ export const buildMeasurementTools = (storage: Storage) => [
       metric: z.string().min(1),
       value: z.number(),
       unit: z.string().optional(),
-      recordedAt: z.number().int().optional().describe("Unix ms; defaults to now"),
+      recordedAt: z
+        .number()
+        .int()
+        .optional()
+        .describe(
+          "Unix epoch milliseconds when the measurement was taken — e.g. 1709251200000 for 2024-03-01. " +
+            "Defaults to now. Values < 1e12 are auto-converted from seconds.",
+        ),
     },
     async ({ metric, value, unit, recordedAt }) => {
+      const recordedAtMs =
+        recordedAt !== undefined
+          ? (parseEpochInput(recordedAt, "recordedAt", "record_measurement") ?? Date.now())
+          : Date.now();
       const measurement = storage.measurements.create({
         metric,
         value,
         ...(unit ? { unit } : {}),
-        recordedAt: recordedAt ?? Date.now(),
+        recordedAt: recordedAtMs,
       });
       return {
         content: [

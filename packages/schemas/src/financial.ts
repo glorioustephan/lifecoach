@@ -58,6 +58,12 @@ export const transactionSchema = z.object({
    * savings_rate so cash movements aren't counted as spending.
    */
   categoryGroupType: z.string().optional(),
+  /**
+   * Monarch's own boolean transfer flag (priority-1 signal in `isTransferTxn`).
+   * True means the transaction is a cash movement between owned accounts.
+   * Null/undefined on rows synced before migration 1779979153 added the column.
+   */
+  isTransfer: z.boolean().optional(),
   syncedAt: z.number().int(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),

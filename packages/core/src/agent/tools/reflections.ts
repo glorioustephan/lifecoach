@@ -4,6 +4,7 @@ import type { Memory } from "../../memory/index.js";
 import type { Storage } from "../../storage/index.js";
 import type { Reflector } from "../../memory/reflector.js";
 import { kindWindow } from "../../memory/reflector.js";
+import { parseEpochInput } from "./epoch-input.js";
 
 export interface ReflectionToolDeps {
   memory: Memory;
@@ -47,8 +48,14 @@ export const buildReflectionTools = (deps: ReflectionToolDeps) => [
         };
       }
       const window = kindWindow(kind);
-      const fromTs = typeof from === "number" ? from : parseTs(from) ?? window.from;
-      const toTs = typeof to === "number" ? to : parseTs(to) ?? window.to;
+      const fromTs =
+        typeof from === "number"
+          ? (parseEpochInput(from, "from", "summarize_period") ?? window.from)
+          : (parseTs(from) ?? window.from);
+      const toTs =
+        typeof to === "number"
+          ? (parseEpochInput(to, "to", "summarize_period") ?? window.to)
+          : (parseTs(to) ?? window.to);
 
       const reflection = await deps.reflector.generate(
         deps.storage,
