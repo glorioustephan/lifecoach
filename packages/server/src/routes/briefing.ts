@@ -2,6 +2,74 @@ import { Hono } from "hono";
 import type { Lifecoach } from "@lifecoach/core";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
+const FINANCE_REF_TYPES = new Set(["account", "transaction", "budget", "holding"]);
+
+/**
+ * Conditional finance tile for the morning briefing. Silence is the default —
+ * we only return a tile when there's something worth a glance:
+ *   - a meaningful net-worth movement over the last week, OR
+ *   - a high-priority (p≥2) finance insight created in the last 24h.
+ */
+type FinanceTile =
+  | {
+      kind: "net_worth_delta";
+      currentValue: number;
+      deltaAmount: number;
+      deltaPercent: number;
+      windowDays: number;
+    }
+  | {
+      kind: "insight";
+      insightId: string;
+      topic: string;
+      priority: 1 | 2 | 3;
+    };
+
+const computeFinanceTile = (lc: Lifecoach, nowMs: number): FinanceTile | null => {
+  const nwSeries = lc.storage.measurements.query("net_worth", {
+    from: nowMs - SEVEN_DAYS_MS - ONE_DAY_MS,
+    to: nowMs,
+  });
+  if (nwSeries.length >= 2) {
+    const oldest = nwSeries[0]!;
+    const latest = nwSeries[nwSeries.length - 1]!;
+    const deltaAmount = latest.value - oldest.value;
+    const deltaPercent = oldest.value !== 0 ? (deltaAmount / Math.abs(oldest.value)) * 100 : 0;
+    // Meaningful = at least $500 OR 1% movement — avoids tiny daily noise.
+    if (Math.abs(deltaAmount) >= 500 || Math.abs(deltaPercent) >= 1) {
+      return {
+        kind: "net_worth_delta",
+        currentValue: latest.value,
+        deltaAmount,
+        deltaPercent,
+        windowDays: Math.max(
+          1,
+          Math.round((latest.recordedAt - oldest.recordedAt) / ONE_DAY_MS),
+        ),
+      };
+    }
+  }
+  // Fallback to a fresh, high-priority finance insight.
+  const recent = lc.storage.insights
+    .list({ state: "active", limit: 50 })
+    .filter(
+      (i) =>
+        i.createdAt > nowMs - ONE_DAY_MS &&
+        i.priority >= 2 &&
+        i.evidenceRefs.some((r) => FINANCE_REF_TYPES.has(r.refType)),
+    )
+    .sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt)[0];
+  if (recent) {
+    return {
+      kind: "insight",
+      insightId: recent.id,
+      topic: recent.topic,
+      priority: recent.priority,
+    };
+  }
+  return null;
+};
 
 /**
  * The morning briefing endpoint composes a single response from every system
@@ -60,6 +128,8 @@ export const briefingRoutes = (lc: Lifecoach) => {
         }
       | undefined;
 
+    const finance = computeFinanceTile(lc, nowMs);
+
     return c.json({
       generatedAt: nowMs,
       tasks: {
@@ -73,6 +143,7 @@ export const briefingRoutes = (lc: Lifecoach) => {
       },
       insights,
       reflection: reflectionRow ?? null,
+      finance, // null when nothing worth a glance — silence by default.
     });
   });
 

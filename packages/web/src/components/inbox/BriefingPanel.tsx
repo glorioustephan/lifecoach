@@ -1,8 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { AlertCircle, Calendar, Target, CheckCircle2, ScrollText } from "lucide-react";
-import { api, type GoalRow } from "~/lib/api";
+import {
+  AlertCircle,
+  Calendar,
+  Target,
+  CheckCircle2,
+  ScrollText,
+  TrendingUp,
+  TrendingDown,
+  Wallet,
+} from "lucide-react";
+import { api, type BriefingFinanceTile, type GoalRow } from "~/lib/api";
 import { cn } from "~/lib/cn";
+import { formatCurrency, formatPercent } from "~/lib/money";
 import { useProfileName } from "~/lib/use-profile";
 
 /**
@@ -109,6 +119,10 @@ export const BriefingPanel = (): JSX.Element | null => {
         </BriefingTile>
       </div>
 
+      {/* Conditional finance tile — silence is the default; only renders when */}
+      {/* there's a meaningful net-worth move or a fresh high-priority insight. */}
+      {data.finance && <FinanceLine tile={data.finance} />}
+
       {/* Latest reflection */}
       {reflection && (
         <Link
@@ -125,6 +139,52 @@ export const BriefingPanel = (): JSX.Element | null => {
         </Link>
       )}
     </section>
+  );
+};
+
+const FinanceLine = ({ tile }: { tile: BriefingFinanceTile }): JSX.Element => {
+  if (tile.kind === "net_worth_delta") {
+    const positive = tile.deltaAmount >= 0;
+    const Icon = positive ? TrendingUp : TrendingDown;
+    const colorClass = positive ? "text-success-500" : "text-warning-500";
+    return (
+      <Link
+        to="/finances"
+        className="mt-3 flex items-start gap-3 rounded-md border border-border-subtle bg-surface/50 px-3 py-2.5 transition-colors hover:border-accent/40 hover:bg-surface-elevated/40"
+      >
+        <Icon className={cn("mt-0.5 size-4 shrink-0", colorClass)} strokeWidth={1.75} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] uppercase tracking-wide text-fg-faint">
+            net worth · last {tile.windowDays}d
+          </p>
+          <p className="mt-0.5 truncate text-sm text-fg">
+            {formatCurrency(tile.currentValue)}{" "}
+            <span className={cn("font-medium", colorClass)}>
+              ({formatCurrency(tile.deltaAmount, { signed: true })},{" "}
+              {formatPercent(tile.deltaPercent, { signed: true })})
+            </span>
+          </p>
+        </div>
+      </Link>
+    );
+  }
+  return (
+    <Link
+      to="/inbox"
+      className="mt-3 flex items-start gap-3 rounded-md border border-border-subtle bg-surface/50 px-3 py-2.5 transition-colors hover:border-accent/40 hover:bg-surface-elevated/40"
+    >
+      <Wallet
+        className={cn(
+          "mt-0.5 size-4 shrink-0",
+          tile.priority === 3 ? "text-destructive-300" : "text-warning-500",
+        )}
+        strokeWidth={1.75}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] uppercase tracking-wide text-fg-faint">finance insight</p>
+        <p className="mt-0.5 truncate text-sm text-fg">{tile.topic}</p>
+      </div>
+    </Link>
   );
 };
 

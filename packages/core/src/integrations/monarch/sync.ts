@@ -4,6 +4,7 @@ import type { SemanticMemory } from "../../memory/semantic.js";
 import { now } from "../../util/ids.js";
 import { LifecoachError } from "../../util/errors.js";
 import { snapshotFinancialMetrics } from "./snapshot-metrics.js";
+import { refreshFinancialGoals } from "./refresh-financial-goals.js";
 import { indexFinanceNarratives } from "../../memory/finance-narratives.js";
 
 export interface MonarchSyncResult {
@@ -198,6 +199,21 @@ export async function syncMonarch(
     } catch (err) {
       console.warn(
         "[Monarch Sync] Phase 4: metric snapshot failed (non-fatal):",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+
+    // Phase 4b: Refresh financial-targeting Goals (savings buckets, debt
+    // paydown, etc.) so their currentProgress tracks the latest measurement
+    // — no separate Goals UI required. Non-fatal.
+    try {
+      const refreshed = refreshFinancialGoals(storage);
+      if (refreshed.goalsUpdated > 0) {
+        console.log("[Monarch Sync] Phase 4b: Refreshed financial goals", refreshed.goalIds);
+      }
+    } catch (err) {
+      console.warn(
+        "[Monarch Sync] Phase 4b: financial-goal refresh failed (non-fatal):",
         err instanceof Error ? err.message : String(err),
       );
     }

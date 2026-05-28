@@ -301,6 +301,7 @@ export const api = {
         body: string;
         created_at: number;
       } | null;
+      finance: BriefingFinanceTile | null;
     }>("/api/briefing"),
   recentSessions: () =>
     get<{
@@ -531,6 +532,21 @@ export const api = {
     return data as MonarchBackfillResponse;
   },
 };
+
+export type BriefingFinanceTile =
+  | {
+      kind: "net_worth_delta";
+      currentValue: number;
+      deltaAmount: number;
+      deltaPercent: number;
+      windowDays: number;
+    }
+  | {
+      kind: "insight";
+      insightId: string;
+      topic: string;
+      priority: 1 | 2 | 3;
+    };
 
 export interface MonarchBackfillResponse {
   result: {
