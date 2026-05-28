@@ -19,6 +19,7 @@ import { Button } from "~/components/ui/Button";
 import { IconButton } from "~/components/ui/IconButton";
 import { TypeBadge, TagBadge } from "~/components/ui/Badge";
 import { Sheet, SheetBody, SheetHeader } from "~/components/ui/Sheet";
+import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -775,46 +776,22 @@ function ConfirmDeleteDialog({
     },
   });
 
-  if (!artifact) return null;
-
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="delete-artifact-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-      onClick={onCancel}
-    >
-      <div
-        className="w-full max-w-md rounded-lg border border-border bg-surface p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 id="delete-artifact-title" className="text-base font-semibold text-fg">
-          Delete this artifact?
-        </h2>
-        <p className="mt-2 text-sm text-fg-muted">
-          <span className="font-medium text-fg">"{artifact.title}"</span> will be
+    <ConfirmDialog
+      open={!!artifact}
+      onOpenChange={(open) => { if (!open) onCancel(); }}
+      title="Delete this artifact?"
+      body={
+        <>
+          <span className="font-medium text-fg">"{artifact?.title}"</span> will be
           permanently deleted and cannot be recovered.
-        </p>
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={deleteMut.isPending}
-            className="rounded-md px-3 py-1.5 text-sm text-fg-muted hover:bg-surface-elevated/50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => deleteMut.mutate(artifact.id)}
-            disabled={deleteMut.isPending}
-            className="rounded-md bg-destructive-500/90 px-3 py-1.5 text-sm text-bg transition-colors hover:bg-destructive-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive-300 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-          >
-            {deleteMut.isPending ? "Deleting…" : "Delete"}
-          </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+      confirmLabel={deleteMut.isPending ? "Deleting…" : "Delete"}
+      onCancel={onCancel}
+      onConfirm={() => { if (artifact) deleteMut.mutate(artifact.id); }}
+      isPending={deleteMut.isPending}
+      variant="destructive"
+    />
   );
 }

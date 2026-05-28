@@ -410,6 +410,7 @@ function MonarchConnectionSection(): JSX.Element {
           <input
             type="email"
             autoComplete="off"
+            aria-label="Monarch email"
             placeholder="Monarch email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -418,6 +419,7 @@ function MonarchConnectionSection(): JSX.Element {
           <input
             type="password"
             autoComplete="new-password"
+            aria-label="Monarch password"
             placeholder={hasCreds ? "Password (••••••, enter to replace)" : "Password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -426,6 +428,7 @@ function MonarchConnectionSection(): JSX.Element {
           <input
             type="password"
             autoComplete="off"
+            aria-label="Monarch MFA secret (TOTP key, optional)"
             placeholder="MFA secret (optional, TOTP key)"
             value={mfaSecret}
             onChange={(e) => setMfaSecret(e.target.value)}

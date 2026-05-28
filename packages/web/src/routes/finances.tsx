@@ -101,7 +101,10 @@ function FinancesRoute(): JSX.Element {
   const totalAssets = accountsData?.totalAssets ?? 0;
   const totalLiabilities = accountsData?.totalLiabilities ?? 0;
   const netWorth = accountsData?.netWorth ?? 0;
-  const savingsRate =
+  // Ratio of assets to total balance sheet (assets / (assets + liabilities)).
+  // NOTE: this is NOT a real savings rate (income - expenses) / income — see
+  // .claude/plans/wave-1-correctness-safety.md W1.3 for the proper fix.
+  const assetRatio =
     totalAssets > 0 ? (totalAssets / (totalAssets + totalLiabilities)) * 100 : 0;
 
   return (
@@ -193,14 +196,16 @@ function FinancesRoute(): JSX.Element {
                 </CardContent>
               </Card>
 
-              {/* Savings Rate */}
+              {/* Asset Ratio */}
               <Card>
                 <CardHeader className="pb-1">
-                  <CardTitle className="text-xs font-medium text-fg-muted">Savings Rate</CardTitle>
+                  <CardTitle className="text-xs font-medium text-fg-muted" title="Assets ÷ (Assets + Liabilities). Not a true savings rate.">
+                    Asset Ratio
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-baseline gap-1 text-xl font-semibold text-fg">
-                    {savingsRate.toFixed(1)}
+                    {assetRatio.toFixed(1)}
                     <span className="text-sm font-normal text-fg-muted">%</span>
                   </div>
                 </CardContent>

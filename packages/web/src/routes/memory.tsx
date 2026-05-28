@@ -9,6 +9,7 @@ import { PaginationNav } from "~/components/ui/PaginationNav";
 import { Button } from "~/components/ui/Button";
 import { IconButton } from "~/components/ui/IconButton";
 import { Sheet, SheetBody, SheetHeader } from "~/components/ui/Sheet";
+import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import {
   api,
   type DocumentRow,
@@ -333,49 +334,24 @@ function ConfirmForgetFactDialog({
     },
   });
 
-  if (!fact) return null;
-
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="forget-fact-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-      onClick={onCancel}
-    >
-      <div
-        className="w-full max-w-md rounded-lg border border-border bg-surface p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 id="forget-fact-title" className="text-base font-semibold text-fg">
-          Forget this memory?
-        </h2>
-        <p className="mt-2 text-sm text-fg-muted">
-          <span className="font-medium text-fg">"{fact.subject}"</span> will be
+    <ConfirmDialog
+      open={!!fact}
+      onOpenChange={(open) => { if (!open) onCancel(); }}
+      title="Forget this memory?"
+      body={
+        <>
+          <span className="font-medium text-fg">"{fact?.subject}"</span> will be
           soft-deleted and removed from semantic recall. The row stays in the
           database so it can be restored later if needed.
-        </p>
-        <div className="mt-5 flex justify-end gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onCancel}
-            disabled={forget.isPending}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => forget.mutate(fact.id)}
-            disabled={forget.isPending}
-            loading={forget.isPending}
-          >
-            {forget.isPending ? "Forgetting…" : "Forget"}
-          </Button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+      confirmLabel={forget.isPending ? "Forgetting…" : "Forget"}
+      onCancel={onCancel}
+      onConfirm={() => { if (fact) forget.mutate(fact.id); }}
+      isPending={forget.isPending}
+      variant="destructive"
+    />
   );
 }
 
@@ -498,49 +474,25 @@ function ConfirmForgetDialog({
   onConfirm: (id: string) => void;
   pending: boolean;
 }): JSX.Element | null {
-  if (!doc) return null;
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="forget-doc-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-      onClick={onCancel}
-    >
-      <div
-        className="w-full max-w-md rounded-lg border border-border bg-surface p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 id="forget-doc-title" className="text-base font-semibold text-fg">
-          Forget this document?
-        </h2>
-        <p className="mt-2 text-sm text-fg-muted">
+    <ConfirmDialog
+      open={!!doc}
+      onOpenChange={(open) => { if (!open) onCancel(); }}
+      title="Forget this document?"
+      body={
+        <>
           This removes{" "}
-          <span className="font-medium text-fg">{doc.title ?? "(untitled)"}</span>{" "}
+          <span className="font-medium text-fg">{doc?.title ?? "(untitled)"}</span>{" "}
           and every fact, measurement, and embedding the coach derived from it.
           The source file (if still on disk) is untouched.
-        </p>
-        <div className="mt-5 flex justify-end gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onCancel}
-            disabled={pending}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => onConfirm(doc.id)}
-            disabled={pending}
-            loading={pending}
-          >
-            {pending ? "Forgetting…" : "Forget"}
-          </Button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+      confirmLabel={pending ? "Forgetting…" : "Forget"}
+      onCancel={onCancel}
+      onConfirm={() => { if (doc) onConfirm(doc.id); }}
+      isPending={pending}
+      variant="destructive"
+    />
   );
 }
 

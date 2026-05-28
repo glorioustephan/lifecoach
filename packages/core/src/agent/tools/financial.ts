@@ -310,27 +310,27 @@ export const buildFinancialTools = (storage: Storage) => [
       note: z.string().min(1),
     },
     async ({ transactionId, note }) => {
-      const transaction = storage.financial.getTransaction(transactionId);
-      if (!transaction) {
+      const updated = storage.financial.updateTransactionNotes(transactionId, note);
+      if (!updated) {
         return {
+          isError: true,
           content: [
             {
               type: "text",
-              text: JSON.stringify({ error: `Transaction ${transactionId} not found` }),
+              text: `Error: Transaction ${transactionId} not found`,
             },
           ],
         };
       }
 
-      // Note: This updates the transaction's notes field
-      // In a real implementation, we'd update via repository
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify({
               transactionId,
-              message: `Note added: "${note}"`,
+              notes: updated.notes,
+              message: `Note saved: "${note}"`,
             }),
           },
         ],

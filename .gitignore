@@ -25,6 +25,7 @@ routeTree.gen.ts
 # Lifecoach data (personal — never commit)
 data/lifecoach.db
 data/lifecoach.db-*
+data/*.bak*
 data/raw/*
 !data/raw/.gitkeep
 data/snapshots/*
@@ -43,6 +44,7 @@ imports/
 
 # Ephemeral Claude Code agent worktrees
 .claude/worktrees/
+.claude/plans/
 
 # Logs
 *.log

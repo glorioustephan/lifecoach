@@ -342,6 +342,16 @@ export class FinancialRepository {
 
   // ─── Transactions ────────────────────────────────────────────────────────
 
+  updateTransactionNotes(id: string, notes: string): Transaction | undefined {
+    const existing = this.getTransaction(id);
+    if (!existing) return undefined;
+    const ts = now();
+    this.db
+      .prepare(`UPDATE transactions SET notes = ?, updated_at = ? WHERE id = ?`)
+      .run(notes, ts, id);
+    return { ...existing, notes, updatedAt: ts };
+  }
+
   createTransaction(transaction: NewTransaction): Transaction {
     const id = newId();
     const ts = now();

@@ -12,6 +12,7 @@ import type { IdentityMemory } from "./identity.js";
 import { withRetry } from "../util/retry.js";
 import { LifecoachError } from "../util/errors.js";
 import { isGoalStalled } from "../util/goal-cadence.js";
+import { isTransferTxn } from "../financial/transfer.js";
 
 // ─── Structured payload the LLM emits via tool use ───────────────────────────
 
@@ -270,25 +271,29 @@ const gatherPeriodData = (storage: Storage, from: number, to: number, includeFin
       )
       .all() as Array<{ topic: string; body: string; category: string; priority: number }>;
 
-    const txns = db
-      .prepare(
-        `SELECT category, SUM(ABS(amount)) as total
-         FROM transactions
-         WHERE date >= ? AND date < ?
-         GROUP BY category
-         ORDER BY total DESC
-         LIMIT 5`,
-      )
-      .all(from, to) as Array<{ category: string; total: number }>;
-
-    const totalSpent = txns.reduce((sum, t) => sum + t.total, 0);
+    // Route through the repository so effective categorization (overrides +
+    // rules) applies, then exclude transfers and inflows. Mirrors the same
+    // discipline applied in finance-narratives so reflection summaries don't
+    // inflate spend with credit-card payments, brokerage sweeps, etc.
+    const rawTxns = storage.financial.queryTransactions({ from, to });
+    const spendByCategory = new Map<string, number>();
+    let totalSpent = 0;
+    for (const t of rawTxns) {
+      if (isTransferTxn(t)) continue;
+      if (t.amount >= 0) continue; // only count outflows
+      const abs = Math.abs(t.amount);
+      const cat = t.category ?? "uncategorized";
+      spendByCategory.set(cat, (spendByCategory.get(cat) ?? 0) + abs);
+      totalSpent += abs;
+    }
+    const topCategories = Array.from(spendByCategory.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([category, amount]) => ({ category, amount }));
 
     data.financialAccounts = financialAccounts;
     data.financialInsights = financialInsights;
-    data.financialTransactionSummary = {
-      totalSpent,
-      topCategories: txns.map((t) => ({ category: t.category || "uncategorized", amount: t.total })),
-    };
+    data.financialTransactionSummary = { totalSpent, topCategories };
   }
 
   return data;
