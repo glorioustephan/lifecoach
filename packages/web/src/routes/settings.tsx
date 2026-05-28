@@ -1,11 +1,13 @@
 import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Moon, Sun } from "lucide-react";
 import { api } from "~/lib/api";
 import { ViewHeader } from "~/components/ui/ViewHeader";
 import { TabNav } from "~/components/ui/TabNav";
 import { cn } from "~/lib/cn";
 import { formatRelative } from "~/lib/time";
+import { useTheme } from "~/lib/theme";
 
 type Tab = "profile" | "sources" | "system" | "archived";
 
@@ -26,6 +28,7 @@ function SettingsRoute(): JSX.Element {
   const search = useSearch({ from: "/settings" });
   const [tab, setTab] = useState<Tab>(search.tab ?? "profile");
   const qc = useQueryClient();
+  const { theme, setTheme } = useTheme();
 
   const { data: status } = useQuery({ queryKey: ["status"], queryFn: api.status });
   const { data: profile } = useQuery({ queryKey: ["profile"], queryFn: api.profile });
@@ -124,6 +127,48 @@ function SettingsRoute(): JSX.Element {
           )}
 
           {tab === "system" && (
+            <>
+              <section className="rounded-md border border-border bg-surface">
+                <header className="border-b border-border-subtle px-4 py-3">
+                  <h2 className="text-sm font-medium text-fg">Appearance</h2>
+                </header>
+                <div className="flex items-center justify-between gap-4 px-4 py-3">
+                  <div className="min-w-0">
+                    <div className="text-sm text-fg">Theme</div>
+                    <div className="text-xs text-fg-faint">
+                      {theme === "dark" ? "Dark mode" : "Light mode"}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={theme === "dark"}
+                    aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                    className={cn(
+                      "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors",
+                      theme === "dark"
+                        ? "border-accent/40 bg-accent/15"
+                        : "border-border bg-surface-elevated",
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "inline-flex size-5 items-center justify-center rounded-full bg-accent text-accent-fg transition-transform duration-200 ease-out",
+                        theme === "dark" ? "translate-x-[22px]" : "translate-x-0.5",
+                      )}
+                    >
+                      {theme === "dark" ? (
+                        <Moon className="size-3" strokeWidth={2} />
+                      ) : (
+                        <Sun className="size-3" strokeWidth={2} />
+                      )}
+                    </span>
+                  </button>
+                </div>
+              </section>
+
             <section className="rounded-md border border-border bg-surface">
               <header className="border-b border-border-subtle px-4 py-3">
                 <h2 className="text-sm font-medium text-fg">System</h2>
@@ -150,6 +195,7 @@ function SettingsRoute(): JSX.Element {
                 <Row k="Artifacts" v={status?.counts.artifacts ?? "—"} />
               </dl>
             </section>
+            </>
           )}
 
           {tab === "archived" && (
