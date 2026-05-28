@@ -1,14 +1,17 @@
 import { createFileRoute, useSearch } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { api } from "~/lib/api";
 import { ViewHeader } from "~/components/ui/ViewHeader";
 import { TabNav } from "~/components/ui/TabNav";
 import { cn } from "~/lib/cn";
-import { formatRelative } from "~/lib/time";
 import { useTheme } from "~/lib/theme";
-import { toast } from "~/lib/use-toast";
+import { ImportExportSection } from "~/components/settings/ImportExportSection";
+import { MonarchConnectionSection } from "~/components/settings/MonarchConnectionSection";
+import { SourceRow } from "~/components/settings/SourceRow";
+import { ArtifactExtractionSection } from "~/components/settings/ArtifactExtractionSection";
+import { ArchivedSessionRow } from "~/components/settings/ArchivedSessionRow";
 
 type Tab = "profile" | "sources" | "system" | "archived";
 
@@ -65,8 +68,8 @@ function SettingsRoute(): JSX.Element {
       .split(".")
       .map((segment) =>
         segment
-          .replace(/([a-z0-9])([A-Z])/g, "$1 $2") // camelCase → spaced
-          .replace(/[_-]+/g, " ") // snake_case / kebab-case → spaces
+          .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+          .replace(/[_-]+/g, " ")
           .trim()
           .toLowerCase()
           .replace(/^\w/, (c) => c.toUpperCase()),
@@ -170,32 +173,32 @@ function SettingsRoute(): JSX.Element {
                 </div>
               </section>
 
-            <section className="rounded-md border border-border bg-surface">
-              <header className="border-b border-border-subtle px-4 py-3">
-                <h2 className="text-sm font-medium text-fg">System</h2>
-              </header>
-              <dl className="divide-y divide-border-subtle">
-                <Row k="Version" v={status?.deployment?.gitSha} />
-                <Row k="Branch" v={status?.deployment?.gitBranch} />
-                <Row k="Built" v={status?.deployment?.builtAt} />
-                <Row k="Environment" v={status?.deployment?.environment} />
-                <Row k="Data dir" v={status?.deployment?.dataDir} />
-                <Row k="Model" v={status?.model} />
-                <Row
-                  k="Embedder"
-                  v={`${status?.embedder.enabled ? "on" : "off"} (dim ${status?.embedder.dim ?? "—"})`}
-                />
-                <Row k="Todoist" v={status?.todoist ? "connected" : "not configured"} />
-                <Row k="Capacities" v={status?.capacities ? "connected" : "not configured"} />
-                <Row k="Facts" v={status?.counts.facts ?? "—"} />
-                <Row k="Documents" v={status?.counts.documents ?? "—"} />
-                <Row k="Measurements" v={status?.counts.measurements ?? "—"} />
-                <Row k="Active tasks" v={status?.counts.activeTasks ?? "—"} />
-                <Row k="Sessions" v={status?.counts.sessions ?? "—"} />
-                <Row k="Messages" v={status?.counts.messages ?? "—"} />
-                <Row k="Artifacts" v={status?.counts.artifacts ?? "—"} />
-              </dl>
-            </section>
+              <section className="rounded-md border border-border bg-surface">
+                <header className="border-b border-border-subtle px-4 py-3">
+                  <h2 className="text-sm font-medium text-fg">System</h2>
+                </header>
+                <dl className="divide-y divide-border-subtle">
+                  <Row k="Version" v={status?.deployment?.gitSha} />
+                  <Row k="Branch" v={status?.deployment?.gitBranch} />
+                  <Row k="Built" v={status?.deployment?.builtAt} />
+                  <Row k="Environment" v={status?.deployment?.environment} />
+                  <Row k="Data dir" v={status?.deployment?.dataDir} />
+                  <Row k="Model" v={status?.model} />
+                  <Row
+                    k="Embedder"
+                    v={`${status?.embedder.enabled ? "on" : "off"} (dim ${status?.embedder.dim ?? "—"})`}
+                  />
+                  <Row k="Todoist" v={status?.todoist ? "connected" : "not configured"} />
+                  <Row k="Capacities" v={status?.capacities ? "connected" : "not configured"} />
+                  <Row k="Facts" v={status?.counts.facts ?? "—"} />
+                  <Row k="Documents" v={status?.counts.documents ?? "—"} />
+                  <Row k="Measurements" v={status?.counts.measurements ?? "—"} />
+                  <Row k="Active tasks" v={status?.counts.activeTasks ?? "—"} />
+                  <Row k="Sessions" v={status?.counts.sessions ?? "—"} />
+                  <Row k="Messages" v={status?.counts.messages ?? "—"} />
+                  <Row k="Artifacts" v={status?.counts.artifacts ?? "—"} />
+                </dl>
+              </section>
             </>
           )}
 
@@ -219,434 +222,6 @@ function SettingsRoute(): JSX.Element {
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-type Source = NonNullable<Awaited<ReturnType<typeof api.sources>>["sources"]>[number];
-
-function ImportExportSection(): JSX.Element {
-  const qc = useQueryClient();
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-
-  const importMut = useMutation({
-    mutationFn: (files: File[]) => api.importMarkdown(files, (p) => setProgress(p)),
-    onMutate: () => {
-      setProgress({ done: 0, total: 0 });
-    },
-    onSuccess: (r) => {
-      setProgress(null);
-      const parts = [`Imported ${r.imported}`, `skipped ${r.skipped} (dupes)`];
-      if (r.failed > 0) parts.push(`failed ${r.failed}`);
-      const detail = parts.join(" · ") + (r.errors.length > 0 ? ` — ${r.errors[0]}` : "");
-      if (r.failed > 0) {
-        toast.warning("Import finished with errors", detail);
-      } else {
-        toast.success("Import complete", detail);
-      }
-      void qc.invalidateQueries({ queryKey: ["sources"] });
-      void qc.invalidateQueries({ queryKey: ["status"] });
-    },
-    onError: (err: unknown) => {
-      setProgress(null);
-      toast.error("Import failed", err instanceof Error ? err.message : String(err));
-    },
-  });
-
-  const onPick = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const files = Array.from(e.target.files ?? []);
-    e.target.value = ""; // allow re-selecting the same files
-    if (files.length > 0) importMut.mutate(files);
-  };
-
-  const btn =
-    "cursor-pointer rounded-md border border-border-subtle px-2.5 py-1 text-xs text-fg-muted transition-colors hover:border-accent/40 hover:text-fg";
-
-  return (
-    <section className="rounded-md border border-border bg-surface">
-      <header className="border-b border-border-subtle px-4 py-3">
-        <h2 className="text-sm font-medium text-fg">Import / Export</h2>
-        <p className="mt-0.5 text-xs text-fg-faint">
-          Import a .zip of markdown (e.g. a Capacities export) or a folder of files — each is
-          ingested and deduped. Export dumps your documents, conversations, and reflections to a
-          markdown zip for backup.
-        </p>
-      </header>
-      <div className="space-y-2 px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <label className={cn(btn, importMut.isPending && "pointer-events-none opacity-50")}>
-            {importMut.isPending
-              ? progress && progress.total > 0
-                ? `importing ${progress.done}/${progress.total}…`
-                : "importing…"
-              : "Import .zip / files"}
-            <input
-              type="file"
-              accept=".zip,.md,.markdown"
-              multiple
-              className="hidden"
-              onChange={onPick}
-              disabled={importMut.isPending}
-            />
-          </label>
-          <label className={cn(btn, importMut.isPending && "pointer-events-none opacity-50")}>
-            Import folder
-            <input
-              type="file"
-              multiple
-              className="hidden"
-              onChange={onPick}
-              disabled={importMut.isPending}
-              {...({ webkitdirectory: "" } as Record<string, string>)}
-            />
-          </label>
-          <a href={api.exportUrl} download className={btn}>
-            Export (.zip)
-          </a>
-        </div>
-        {importMut.isPending && (
-          <p className="text-[11px] text-fg-muted">
-            {progress && progress.total > 0
-              ? `Importing ${progress.done} of ${progress.total} files… keep this tab open.`
-              : "Reading upload…"}
-          </p>
-        )}
-      </div>
-    </section>
-  );
-}
-
-// ─── Monarch Money Connection ────────────────────────────────────────────────
-
-function MonarchConnectionSection(): JSX.Element {
-  const qc = useQueryClient();
-  const { data: settings } = useQuery({
-    queryKey: ["monarch-settings"],
-    queryFn: api.monarchSettings,
-  });
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [mfaSecret, setMfaSecret] = useState("");
-
-  const save = useMutation({
-    mutationFn: () =>
-      api.saveMonarchCredentials({
-        email: email.trim(),
-        password,
-        ...(mfaSecret.trim() ? { mfaSecret: mfaSecret.trim() } : {}),
-      }),
-    onSuccess: () => {
-      toast.success("Monarch connected", "Credentials verified and stored.");
-      setPassword("");
-      setMfaSecret("");
-      void qc.invalidateQueries({ queryKey: ["monarch-settings"] });
-      void qc.invalidateQueries({ queryKey: ["sources"] });
-    },
-    onError: (err: unknown) => {
-      toast.error("Could not connect Monarch", err instanceof Error ? err.message : String(err));
-    },
-  });
-
-  const sync = useMutation({
-    mutationFn: api.syncMonarch,
-    onSuccess: (r) => {
-      if (r.skipped) {
-        toast.info("Already syncing", "A sync is already running.");
-      } else if (r.result) {
-        toast.success(
-          "Monarch synced",
-          `${r.result.accountsUpserted} accounts · ${r.result.transactionsUpserted} transactions${r.result.transactionsUnlinked > 0 ? ` (${r.result.transactionsUnlinked} unlinked)` : ""} · ${r.result.holdingsSnapshotted} holdings`,
-        );
-      } else {
-        toast.success("Sync complete");
-      }
-      void qc.invalidateQueries({ queryKey: ["monarch-settings"] });
-      void qc.invalidateQueries({ queryKey: ["finances"] });
-      void qc.invalidateQueries({ queryKey: ["sources"] });
-      void qc.invalidateQueries({ queryKey: ["status"] });
-    },
-    onError: (err: unknown) => {
-      toast.error("Sync failed", err instanceof Error ? err.message : String(err));
-    },
-  });
-
-  const hasCreds = settings?.hasCredentials ?? false;
-  const canSave = email.trim().length > 0 && password.length > 0 && !save.isPending;
-  const input =
-    "w-full rounded-md border border-border-subtle bg-bg px-2.5 py-1.5 text-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
-  const btn =
-    "cursor-pointer rounded-md border border-border-subtle px-2.5 py-1 text-xs text-fg-muted transition-colors hover:border-accent/40 hover:text-fg disabled:cursor-not-allowed disabled:opacity-50";
-
-  return (
-    <section className="rounded-md border border-border bg-surface">
-      <header className="border-b border-border-subtle px-4 py-3">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-sm font-medium text-fg">Monarch Money</h2>
-          <span
-            className={cn(
-              "text-[11px] uppercase tracking-wide",
-              settings?.connected ? "text-success-500" : "text-fg-faint",
-            )}
-          >
-            {settings?.connected ? "connected" : hasCreds ? "needs attention" : "not configured"}
-          </span>
-        </div>
-        <p className="mt-0.5 text-xs text-fg-faint">
-          Connect your Monarch Money account to sync accounts, transactions, budgets, and holdings.
-          Credentials are encrypted at rest (requires <code>LIFECOACH_SECRET_KEY</code>).
-        </p>
-        {settings?.lastSyncAt && (
-          <p className="mt-1 font-mono text-[10px] text-fg-faint">
-            Last sync: {formatRelative(settings.lastSyncAt)}
-          </p>
-        )}
-        {settings?.lastError && !settings.connected && (
-          <p className="mt-1 text-[11px] text-warning-200">{settings.lastError}</p>
-        )}
-      </header>
-      <div className="space-y-2.5 px-4 py-3">
-        <div className="space-y-2">
-          <input
-            type="email"
-            autoComplete="off"
-            aria-label="Monarch email"
-            placeholder="Monarch email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={input}
-          />
-          <input
-            type="password"
-            autoComplete="new-password"
-            aria-label="Monarch password"
-            placeholder={hasCreds ? "Password (••••••, enter to replace)" : "Password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={input}
-          />
-          <input
-            type="password"
-            autoComplete="off"
-            aria-label="Monarch MFA secret (TOTP key, optional)"
-            placeholder="MFA secret (optional, TOTP key)"
-            value={mfaSecret}
-            onChange={(e) => setMfaSecret(e.target.value)}
-            className={input}
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => save.mutate()} disabled={!canSave} className={btn}>
-            {save.isPending ? "Connecting…" : "Save & Connect"}
-          </button>
-          {hasCreds && (
-            <button
-              type="button"
-              onClick={() => sync.mutate()}
-              disabled={sync.isPending}
-              className={btn}
-            >
-              {sync.isPending ? "Syncing…" : "Sync now"}
-            </button>
-          )}
-        </div>
-        {hasCreds && (
-          <p className="text-[11px] text-fg-faint">
-            Credentials are saved (encrypted). “Sync now” uses the stored login — you don’t need to
-            re-enter anything. The fields above are only for updating them.
-          </p>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function SourceRow({ source }: { source: Source }): JSX.Element {
-  const qc = useQueryClient();
-
-  const sync = useMutation({
-    mutationFn: async () => {
-      if (source.id === "todoist") {
-        const { result } = await api.syncTodoist();
-        return `${result.upserted} upserted · ${result.newlyCompleted} completed · ${result.embedded} embedded`;
-      }
-      throw new Error(`No sync for source ${source.id}`);
-    },
-    onSuccess: (msg) => {
-      toast.success(`${source.name} synced`, msg);
-      void qc.invalidateQueries({ queryKey: ["sources"] });
-      void qc.invalidateQueries({ queryKey: ["status"] });
-    },
-    onError: (err: unknown) => {
-      toast.error(`${source.name} sync failed`, err instanceof Error ? err.message : String(err));
-    },
-  });
-
-  // Capacities is no longer mirrored (the API only exposes titles), so it's
-  // status-only like Google Calendar/Gmail — only Todoist still syncs here.
-  const canSync = source.connected && source.id === "todoist";
-  const counts: string[] = [];
-  if (typeof source.tasks === "number") counts.push(`${source.tasks} tasks`);
-  if (typeof source.ingestedFiles === "number") counts.push(`${source.ingestedFiles} files`);
-
-  return (
-    <div className="px-4 py-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-fg">{source.name}</p>
-          <p
-            className={cn(
-              "mt-1 text-[11px] uppercase tracking-wide",
-              source.connected ? "text-success-500" : "text-fg-faint",
-            )}
-          >
-            {source.connected ? "connected" : "not configured"}
-            {counts.length > 0 ? ` · ${counts.join(" · ")}` : ""}
-          </p>
-        </div>
-        {canSync && (
-          <button
-            type="button"
-            onClick={() => sync.mutate()}
-            disabled={sync.isPending}
-            className={cn(
-              "rounded-md border border-border-subtle px-2.5 py-1 text-xs text-fg-muted",
-              "transition-colors hover:border-accent/40 hover:text-fg",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-            )}
-          >
-            {sync.isPending ? "syncing…" : "Sync"}
-          </button>
-        )}
-      </div>
-      {source.id === "capacities" && source.connected && !source.defaultSpaceId && (
-        <p className="mt-1 text-[10px] text-fg-faint">
-          Set <code>CAPACITIES_DEFAULT_SPACE_ID</code> to enable reflection write-back and
-          save-to-daily-note tools.
-        </p>
-      )}
-    </div>
-  );
-}
-
-// ─── Artifact Extraction Section ─────────────────────────────────────────────
-
-function ArtifactExtractionSection(): JSX.Element {
-  const qc = useQueryClient();
-
-  const { data } = useQuery({
-    queryKey: ["artifact-settings"],
-    queryFn: api.artifactSettings,
-  });
-
-  const settings = data?.settings;
-
-  const toggle = useMutation({
-    mutationFn: (next: boolean) => api.setArtifactAutoExtract(next),
-    onSuccess: (_data, next) => {
-      void qc.invalidateQueries({ queryKey: ["artifact-settings"] });
-      void qc.invalidateQueries({ queryKey: ["status"] });
-      toast.success(next ? "Auto-extraction enabled" : "Auto-extraction disabled");
-    },
-    onError: (err: unknown) => {
-      toast.error("Could not update setting", err instanceof Error ? err.message : String(err));
-    },
-  });
-
-  const enabled = settings?.enabled ?? false;
-
-  return (
-    <div className="flex flex-col gap-1 px-4 py-4 md:grid md:grid-cols-[140px_1fr] md:items-start md:gap-4">
-      <label htmlFor="artifact-extract-label" className="text-xs text-fg-faint">
-        Daily auto-extraction
-      </label>
-      <div className="min-w-0">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <p id="artifact-extract-label" className="text-sm text-fg">Daily auto-extraction</p>
-            <p className="mt-1 text-xs text-fg-muted">
-              Scans recent conversations each day and saves new recipes &amp; artifacts automatically.
-            </p>
-            {settings?.autoDisabled && (
-              <p className="mt-2 text-[11px] text-warning-200">
-                Paused automatically after 5 empty runs. Toggle on to resume.
-              </p>
-            )}
-            {settings?.lastScanAt && (
-              <p className="mt-1 font-mono text-[10px] text-fg-faint">
-                Last scan: {formatRelative(settings.lastScanAt)}
-              </p>
-            )}
-          </div>
-          {/* Toggle pill */}
-          <button
-            type="button"
-            role="switch"
-            aria-checked={enabled}
-            aria-labelledby="artifact-extract-label"
-            onClick={() => toggle.mutate(!enabled)}
-            disabled={toggle.isPending}
-            className={cn(
-              "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
-              enabled ? "bg-accent" : "bg-surface-elevated",
-              toggle.isPending && "opacity-60 cursor-not-allowed",
-            )}
-          >
-            <span className="sr-only">{enabled ? "Disable" : "Enable"} daily auto-extraction</span>
-            <span
-              className={cn(
-                "pointer-events-none inline-block size-4 rounded-full bg-bg shadow-sm ring-0 transition-transform",
-                enabled ? "translate-x-4" : "translate-x-0",
-              )}
-            />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-type ArchivedSession = NonNullable<
-  Awaited<ReturnType<typeof api.archivedSessions>>["sessions"]
->[number];
-
-function ArchivedSessionRow({
-  session,
-  qc,
-}: {
-  session: ArchivedSession;
-  qc: ReturnType<typeof useQueryClient>;
-}): JSX.Element {
-  const unarchive = useMutation({
-    mutationFn: () => api.unarchiveSession(session.id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["sessions"] });
-      toast.success("Session restored");
-    },
-    onError: (err: unknown) => {
-      toast.error("Restore failed", err instanceof Error ? err.message : String(err));
-    },
-  });
-
-  const label = session.summary ?? session.preview ?? "(empty conversation)";
-
-  return (
-    <div className="flex items-start justify-between gap-3 px-4 py-3">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm text-fg">{label}</p>
-        <p className="mt-1 text-xs text-fg-faint">
-          Archived {formatRelative(session.archivedAt ?? 0)} · {session.messageCount} messages
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={() => unarchive.mutate()}
-        disabled={unarchive.isPending}
-        className="shrink-0 rounded-md border border-border-subtle px-2.5 py-1 text-xs text-fg-muted transition-colors hover:border-accent/40 hover:text-fg disabled:opacity-50"
-      >
-        {unarchive.isPending ? "Restoring…" : "Restore"}
-      </button>
     </div>
   );
 }
