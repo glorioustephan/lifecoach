@@ -47,12 +47,7 @@ export const sendChat = async (opts: SendOptions): Promise<void> => {
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    // SSE messages are separated by blank lines.
+  const drainFrames = (): void => {
     let boundary = buffer.indexOf("\n\n");
     while (boundary !== -1) {
       const chunk = buffer.slice(0, boundary);
@@ -60,6 +55,24 @@ export const sendChat = async (opts: SendOptions): Promise<void> => {
       handleChunk(chunk, opts.onEvent);
       boundary = buffer.indexOf("\n\n");
     }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    drainFrames();
+  }
+
+  // EOF flush: a server that closes the connection right after the last event
+  // (or a network hiccup that drops the trailing blank line) used to leave the
+  // final SSE frame stranded in `buffer`, which surfaced as a mid-word
+  // truncation in the UI. Decode any pending UTF-8 bytes, drain any complete
+  // frames, then process anything that still looks like a valid frame.
+  buffer += decoder.decode();
+  drainFrames();
+  if (buffer.trim().length > 0 && /(^|\n)data:/.test(buffer)) {
+    handleChunk(buffer, opts.onEvent);
   }
 };
 
