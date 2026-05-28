@@ -108,3 +108,20 @@ files; prompt-kit uses `@/` internally. Both aliases are configured in
 pnpm --filter @lifecoach/web typecheck   # fast; run after every tsx edit
 pnpm --filter @lifecoach/web build       # full build; run before marking done
 ```
+
+---
+
+## Package map
+
+| Package | Purpose |
+|---|---|
+| `@lifecoach/core` | Stateful logic — storage, memory layers, agent runtime, integrations, embeddings, ingest pipeline, artifacts |
+| `@lifecoach/schemas` | Shared TypeScript types + Zod schemas (identity, episodic, semantic, financial, task, artifact, …) |
+| `@lifecoach/cli` | CLI surface (`chat`, `query`, `ingest`, `sync`, `reflect`, `insights`, `artifacts`, `export`, `import`, `reset`) |
+| `@lifecoach/server` | Hono HTTP API + web host (routes for chat, memory, tasks, financial, briefing, …) |
+| `@lifecoach/web` | Vite + React 19 + TanStack Router UI with Tailwind v4 + prompt-kit |
+| `@lifecoach/mcp-server` | MCP stdio server exposing the memory tool surface to external MCP clients |
+| `@lifecoach/mcp-alpaca-server` | Separate MCP server for Alpaca investment data (read-only, advisory) |
+| `@lifecoach/connectors` | External integration adapters (Todoist, Capacities, Monarch, Alpaca) |
+
+**Dependency direction:** `web` → `server` → `core` → `schemas`. Never reverse. No cross-package relative imports — use `@lifecoach/<pkg>` everywhere.
