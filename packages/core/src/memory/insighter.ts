@@ -562,7 +562,7 @@ Call \`record_insights\` with **0–3 high-quality insights**. Quality bar:
 4. **Non-redundant.** Check the "Prior insights" section. No nagging: don't repeat an old insight unless the evidence changed materially.
 5. **Honest but not alarmist.** Health-related observations should cite the measurements and avoid medical authority. A 12% HRV dip is worth flagging; a 2% one isn't.
 
-**Financial observations.** Financial state appears as "Financial state (rollups)" above with citable IDs (\`account=…\`, \`budget=…\`, \`holding=…\`). Treat money like any other life signal — when a financial pattern coincides with a life pattern (sleep, stress, a goal, a recurring theme in messages), that coincidence IS the insight; that's the thing only this coach can see. No financial advice, just observations and simple math. Be especially honest about uncertainty: category rollups depend on Monarch's categorization which can be wrong. When you cite a category number, **invite the user to challenge it** (e.g. "If 'Dining $1,036' looks high, tell me which transactions don't belong and I'll recategorize them so the picture stays accurate"). Treat the recurring-expenses list as candidates for a separate, gated discussion — surface at most one such item per pass, with a clear monthly dollar figure.
+**Financial observations.** Financial state appears as "Financial state (rollups)" above with citable IDs (\`account=…\`, \`budget=…\`, \`holding=…\`). Treat money like any other life signal — when a financial pattern coincides with a life pattern (sleep, stress, a goal, a recurring theme in messages), that coincidence IS the insight; that's the thing only this coach can see. No financial advice, just observations and simple math. Be especially honest about uncertainty: category rollups depend on Monarch's categorization which can be wrong. When you cite a category number, **invite the user to challenge it** (e.g. "If 'Dining $1,036' looks high, tell me which transactions don't belong and I'll recategorize them so the picture stays accurate"). For recurring-expense downgrade suggestions (from the "Recurring expenses ≥$50/mo" list), use the **exact topic format \`Recurring: <Merchant>\`** (so the system can suppress the same suggestion for ~9 months after a dismissal) and surface **at most one** such item per pass with a clear monthly dollar figure. Don't do the alternative research in this pass — the chat agent does it lazily when the user clicks Discuss.
 
 If genuinely nothing notable jumps out, return an empty array. That's a valid answer.`;
 
@@ -623,12 +623,26 @@ export class Insighter {
   }
 }
 
+/**
+ * Recurring-expense downgrade suggestions ("Recurring: <merchant>" topics) get
+ * a long suppression window: if the user already dismissed one, don't raise it
+ * again for ~9 months. Without this, the model would re-surface "switch your
+ * phone plan" every insight pass.
+ */
+const RECURRING_TOPIC_PREFIX = "Recurring:";
+const RECURRING_DISMISSAL_SUPPRESSION_MS = 270 * ONE_DAY; // ~9 months
+
 const persist = (storage: Storage, payload: InsightPayload): Insight[] => {
   const created: Insight[] = [];
-  const sinceMs = Date.now() - 30 * ONE_DAY;
+  const nowMs = Date.now();
+  const sinceMs = nowMs - 30 * ONE_DAY;
   for (const item of payload.insights) {
     const evidenceRefs = item.evidenceRefs ?? [];
     if (isDuplicateInsight(storage, item.topic, evidenceRefs, sinceMs)) continue;
+    if (item.topic.startsWith(RECURRING_TOPIC_PREFIX)) {
+      const cutoff = nowMs - RECURRING_DISMISSAL_SUPPRESSION_MS;
+      if (storage.insights.dismissedByTopicSince(item.topic, cutoff)) continue;
+    }
     const ins = storage.insights.create({
       topic: item.topic,
       body: item.body,

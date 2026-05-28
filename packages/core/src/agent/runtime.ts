@@ -95,6 +95,8 @@ export class AgentRuntime {
       reflector,
       insighter,
       capacitiesDefaultSpaceId: config.capacitiesDefaultSpaceId,
+      anthropicApiKey: config.anthropicApiKey,
+      model: config.model,
     });
     const mcpServer = createSdkMcpServer({
       name: "lifecoach-memory",

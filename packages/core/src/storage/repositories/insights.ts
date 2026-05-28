@@ -174,6 +174,24 @@ export class InsightRepository {
     return rows.map(rowToInsight);
   }
 
+  /**
+   * True if a DISMISSED insight with the same topic exists since `sinceMs`.
+   * Used to honor long-suppression (e.g. 6–12 months for recurring-expense
+   * downgrade suggestions): if the user already said no, don't keep raising it.
+   */
+  dismissedByTopicSince(topic: string, sinceMs: number): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT id FROM insights
+         WHERE LOWER(topic) = LOWER(?)
+           AND dismissed_at IS NOT NULL
+           AND dismissed_at >= ?
+         LIMIT 1`,
+      )
+      .get(topic.trim(), sinceMs) as { id: string } | undefined;
+    return row !== undefined;
+  }
+
   /** Clear acted/dismissed/snoozed flags. Useful for undo. */
   reactivate(id: string): void {
     this.db

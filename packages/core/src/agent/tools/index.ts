@@ -18,6 +18,7 @@ import { buildInsightTools } from "./insights.js";
 import { buildGoalTools } from "./goals.js";
 import { buildCapacitiesTools } from "./capacities.js";
 import { buildFinancialTools } from "./financial.js";
+import { buildWebResearchTools } from "./web-research.js";
 
 export interface ToolDeps {
   memory: Memory;
@@ -30,6 +31,10 @@ export interface ToolDeps {
   insighter: Insighter | null;
   /** Default target space for Capacities write-back tools. */
   capacitiesDefaultSpaceId?: string | undefined;
+  /** Required for web-research tools (Anthropic web_search server tool). */
+  anthropicApiKey?: string | undefined;
+  /** Model used by sub-call tools (e.g. web research). */
+  model?: string | undefined;
 }
 
 /**
@@ -66,6 +71,7 @@ export const buildAllTools = (deps: ToolDeps) => [
     defaultSpaceId: deps.capacitiesDefaultSpaceId,
   }),
   ...buildFinancialTools(deps.storage),
+  ...buildWebResearchTools({ apiKey: deps.anthropicApiKey, model: deps.model }),
 ];
 
 export type LifecoachTool = ReturnType<typeof buildAllTools>[number];
