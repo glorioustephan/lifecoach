@@ -60,13 +60,13 @@ export const toast: ToastFn = Object.assign(
   (input: ToastInput) => push(input),
   {
     success: (title: string, description?: string) =>
-      push({ title, description, variant: "success" }),
+      push({ title, ...(description !== undefined ? { description } : {}), variant: "success" }),
     error: (title: string, description?: string) =>
-      push({ title, description, variant: "error", duration: 8000 }),
+      push({ title, ...(description !== undefined ? { description } : {}), variant: "error", duration: 8000 }),
     warning: (title: string, description?: string) =>
-      push({ title, description, variant: "warning" }),
+      push({ title, ...(description !== undefined ? { description } : {}), variant: "warning" }),
     info: (title: string, description?: string) =>
-      push({ title, description, variant: "info" }),
+      push({ title, ...(description !== undefined ? { description } : {}), variant: "info" }),
     dismiss,
   },
 );

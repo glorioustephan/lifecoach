@@ -1,4 +1,10 @@
 {
+  // Strategy 2: exactOptionalPropertyTypes and verbatimModuleSyntax are
+  // enforced globally (tsconfig.base.json) but relaxed here for the web
+  // package.  Prompt-kit-installed vendor files in src/components/ui/ emit
+  // errors under both flags and AGENTS.md Rule 3 forbids modifying them.
+  // All seven other @lifecoach/* packages inherit the full strict suite.
+  // Revisit once prompt-kit upstream ships strictness-clean component types.
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2023",
@@ -13,7 +19,9 @@
     "paths": {
       "~/*": ["./src/*"],
       "@/*": ["./src/*"]
-    }
+    },
+    "exactOptionalPropertyTypes": false,
+    "verbatimModuleSyntax": false
   },
   "include": ["src/**/*", "vite.config.ts"],
   "exclude": ["src/stories/**/*"]

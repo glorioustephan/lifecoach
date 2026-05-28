@@ -178,11 +178,11 @@ export class MilestoneRepository {
   update(
     id: string,
     patch: {
-      title?: string;
-      body?: string | null;
-      status?: MilestoneStatus;
-      orderIndex?: number;
-      dueAt?: number | null;
+      title?: string | undefined;
+      body?: string | null | undefined;
+      status?: MilestoneStatus | undefined;
+      orderIndex?: number | undefined;
+      dueAt?: number | null | undefined;
     },
   ): Milestone | undefined {
     const existing = this.get(id);

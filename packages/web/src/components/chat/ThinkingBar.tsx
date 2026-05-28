@@ -29,7 +29,7 @@ export const ThinkingBar = ({ onStop }: Props): JSX.Element | null => {
     <div className="ml-10 px-4 py-1">
       <ThinkingBarPrimitive
         isThinking={isThinking || isTool}
-        onStop={onStop}
+        {...(onStop !== undefined ? { onStop } : {})}
       >
         {isTool ? "Running tool" : "Thinking"}
       </ThinkingBarPrimitive>

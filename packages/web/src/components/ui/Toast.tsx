@@ -60,12 +60,14 @@ const ICONS: Record<ToastVariant, React.ComponentType<{ className?: string; stro
   info: Info,
 };
 
-interface ToastRootProps
-  extends Omit<React.ComponentPropsWithoutRef<typeof RadixToast.Root>, "title">,
-    VariantProps<typeof toastVariants> {
+interface ToastRootProps {
+  variant?: ToastVariant;
   title: string;
   description?: string;
   action?: { label: string; onClick: () => void };
+  duration?: number;
+  className?: string;
+  onOpenChange?: (open: boolean) => void;
 }
 
 const ToastRoot = ({
@@ -75,14 +77,14 @@ const ToastRoot = ({
   action,
   className,
   duration,
-  ...props
+  onOpenChange,
 }: ToastRootProps): JSX.Element => {
-  const Icon = ICONS[(variant ?? "default") as ToastVariant];
+  const Icon = ICONS[variant];
   return (
     <RadixToast.Root
-      duration={duration}
+      {...(duration !== undefined ? { duration } : {})}
       className={cn(toastVariants({ variant }), className)}
-      {...props}
+      {...(onOpenChange !== undefined ? { onOpenChange } : {})}
     >
       {Icon ? <Icon className={iconClass({ variant })} strokeWidth={1.75} /> : null}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -124,11 +126,11 @@ export const Toaster = (): JSX.Element => {
       {toasts.map((t) => (
         <ToastRoot
           key={t.id}
-          variant={t.variant}
+          {...(t.variant !== undefined ? { variant: t.variant } : {})}
           title={t.title}
-          description={t.description}
-          duration={t.duration}
-          action={t.action}
+          {...(t.description !== undefined ? { description: t.description } : {})}
+          {...(t.duration !== undefined ? { duration: t.duration } : {})}
+          {...(t.action !== undefined ? { action: t.action } : {})}
           onOpenChange={(open) => {
             if (!open) dismiss(t.id);
           }}

@@ -8,16 +8,9 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
-    // exactOptionalPropertyTypes: full sweep done across @lifecoach/* code,
-    // but the flag triggers 31 errors inside prompt-kit-installed components
-    // (loader, dropdown-menu, image, markdown) which AGENTS.md Rule 3
-    // forbids us from editing. Re-enable once prompt-kit upstream supports
-    // the stricter prop types, or once we wrap each prompt-kit component in
-    // a strictness-bridging wrapper. The widenings already applied to
-    // @lifecoach/* code (repository signatures + spread guards in callers)
-    // are kept as a no-op improvement — they tighten the type contract for
-    // future strict-mode sweeps without changing current behavior.
-    "exactOptionalPropertyTypes": false,
+    // Strict — see .claude/plans/audit-2026-05-28-overview.md for migration notes.
+    // prompt-kit vendor files are excluded from the web tsconfig to avoid editing them.
+    "exactOptionalPropertyTypes": true,
     "esModuleInterop": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
@@ -27,6 +20,6 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "verbatimModuleSyntax": false
+    "verbatimModuleSyntax": true
   }
 }

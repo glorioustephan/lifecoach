@@ -164,7 +164,7 @@ export class ArtifactRepository {
 
   update(
     id: string,
-    patch: { title?: string; body?: string; tags?: string[]; category?: string | null },
+    patch: { title?: string | undefined; body?: string | undefined; tags?: string[] | undefined; category?: string | null | undefined },
   ): Artifact | undefined {
     const existing = this.get(id);
     if (!existing) return undefined;

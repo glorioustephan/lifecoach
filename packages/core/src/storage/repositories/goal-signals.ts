@@ -106,12 +106,12 @@ export class GoalSignalRepository {
   update(
     id: string,
     patch: {
-      label?: string;
-      kind?: GoalSignalKind;
-      metric?: string | null;
-      targetValue?: number | null;
-      currentValue?: number | null;
-      unit?: string | null;
+      label?: string | undefined;
+      kind?: GoalSignalKind | undefined;
+      metric?: string | null | undefined;
+      targetValue?: number | null | undefined;
+      currentValue?: number | null | undefined;
+      unit?: string | null | undefined;
     },
   ): GoalSignal | undefined {
     const existing = this.get(id);

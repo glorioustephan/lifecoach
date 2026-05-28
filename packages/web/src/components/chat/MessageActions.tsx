@@ -104,7 +104,7 @@ export const MessageActions = ({
       if (!artifactSource || !firstType) throw new Error("no artifact");
       return api.saveArtifactFromMessage({
         content: artifactSource.content,
-        sessionId,
+        ...(sessionId !== undefined ? { sessionId } : {}),
         type: firstType,
       });
     },

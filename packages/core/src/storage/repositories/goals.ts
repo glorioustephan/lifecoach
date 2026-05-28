@@ -180,9 +180,8 @@ export class GoalRepository {
    *  hook points (e.g. re-index) stay in one spot. */
   update(
     id: string,
-    patch: Partial<
-      Pick<
-        Goal,
+    patch: {
+      [K in
         | "title"
         | "body"
         | "horizon"
@@ -203,8 +202,8 @@ export class GoalRepository {
         | "lastReviewedAt"
         | "archivedAt"
         | "dueAt"
-      >
-    >,
+      ]?: Goal[K] | undefined;
+    },
   ): Goal | undefined {
     const existing = this.get(id);
     if (!existing) return undefined;

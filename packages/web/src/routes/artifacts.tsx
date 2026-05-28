@@ -92,8 +92,8 @@ function ArtifactsRoute(): JSX.Element {
     queryKey: ["artifacts", { type: typeFilter, q, page }],
     queryFn: () =>
       api.artifacts({
-        type: typeFilter === "all" ? undefined : typeFilter,
-        q: q || undefined,
+        ...(typeFilter !== "all" ? { type: typeFilter } : {}),
+        ...(q ? { q } : {}),
         limit: LIMIT,
         offset: page * LIMIT,
       }),

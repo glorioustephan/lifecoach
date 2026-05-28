@@ -11,9 +11,15 @@ export const RailNav = (): JSX.Element => {
   const { location } = useRouterState();
 
   // Check if the current location is settings with ?tab=sources (the Sources redirect target).
-  const isSourcesTab =
-    location.pathname === "/settings" &&
-    new URLSearchParams(location.search).get("tab") === "sources";
+  // TanStack Router types location.search as the parsed search object; access the
+  // typed property directly rather than re-parsing the raw query string.
+  const searchTab =
+    location.search !== null &&
+    typeof location.search === "object" &&
+    "tab" in location.search
+      ? (location.search as { tab?: string }).tab
+      : undefined;
+  const isSourcesTab = location.pathname === "/settings" && searchTab === "sources";
 
   return (
     <nav

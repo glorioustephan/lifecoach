@@ -56,8 +56,8 @@ export const Composer = ({ disabled, onSubmit }: Props): JSX.Element => {
         value={value}
         onValueChange={setValue}
         onSubmit={handleSubmit}
-        isLoading={disabled}
-        disabled={disabled}
+        isLoading={disabled ?? false}
+        disabled={disabled ?? false}
         maxHeight={200}
         className={cn(
           // Override prompt-kit defaults (rounded-3xl, p-2, shadow-xs) with lifecoach style.
