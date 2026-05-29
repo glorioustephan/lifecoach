@@ -12,8 +12,12 @@ import type { IdentityMemory } from "./identity.js";
 import { withRetry } from "../util/retry.js";
 import { LifecoachError } from "../util/errors.js";
 import { isGoalStalled } from "../util/goal-cadence.js";
-import { isTransferTxn } from "../financial/transfer.js";
-import { computeNetWorth } from "../financial/portfolio.js";
+import {
+  buildFinancialReflectionContext,
+  renderFinancialReflectionContext,
+  FINANCIAL_REFLECTION_INSTRUCTION,
+  type FinancialReflectionContext,
+} from "../financial/reflection-context.js";
 
 // ─── Structured payload the LLM emits via tool use ───────────────────────────
 
@@ -120,12 +124,29 @@ interface PeriodData {
   completedMilestones: Array<Milestone & { goalTitle: string }>;
   /** Subset of activeGoals that meet the stalled criterion (see goal-cadence.ts). */
   stalledGoals: Goal[];
-  financialAccounts?: Array<{ displayName: string; type: string; balance: number }>;
+  /**
+   * Guard-aware financial context. Carries the rollup's G1–G6 outcome and
+   * the Monarch sync freshness check; the render layer must respect both.
+   * `kind === "omitted"` when the reflection kind doesn't want financial
+   * data (daily) or the caller passed `includeFinancial=false`.
+   */
+  financial?: FinancialReflectionContext;
+  /**
+   * Standalone financial insights — these are already-persisted rows from
+   * the Insighter, which has its own guard discipline. Surfaced here so
+   * the reflector can name them; not re-validated by guards because they
+   * carry their own contract.
+   */
   financialInsights?: Array<{ topic: string; body: string; category: string; priority: number }>;
-  financialTransactionSummary?: { totalSpent: number; topCategories: Array<{ category: string; amount: number }> };
 }
 
-const gatherPeriodData = (storage: Storage, from: number, to: number, includeFinancial = false): PeriodData => {
+const gatherPeriodData = (
+  storage: Storage,
+  from: number,
+  to: number,
+  kind: ReflectionKind,
+  includeFinancial = false,
+): PeriodData => {
   // Repository methods + projection map keeps the gather function out of raw
   // SQL while preserving the original projected wire shapes the prompt
   // renderer downstream expects.
@@ -185,42 +206,25 @@ const gatherPeriodData = (storage: Storage, from: number, to: number, includeFin
     stalledGoals,
   };
 
-  // Include financial data for weekly/monthly reflections
+  // Financial section is delegated to the guard-aware context builder.
+  // It evaluates the G1–G6 rollup guards AND the Monarch sync freshness
+  // check before letting any dollar figure reach the prompt. See
+  // `packages/core/src/financial/reflection-context.ts` for the contract.
   if (includeFinancial) {
-    const financialAccounts: NonNullable<PeriodData["financialAccounts"]> =
-      storage.financial
-        .listAccounts({ status: "active" })
-        .sort((a, b) => a.type.localeCompare(b.type))
-        .map((a) => ({ displayName: a.displayName, type: a.type, balance: a.balance }));
-
-    const financialInsights: NonNullable<PeriodData["financialInsights"]> = storage.financial
-      .listInsights({ dismissedOnly: false })
-      .slice(0, 5)
-      .map((i) => ({ topic: i.topic, body: i.body, category: i.category, priority: i.priority }));
-
-    // Route through the repository so effective categorization (overrides +
-    // rules) applies, then exclude transfers and inflows. Mirrors the same
-    // discipline applied in finance-narratives so reflection summaries don't
-    // inflate spend with credit-card payments, brokerage sweeps, etc.
-    const rawTxns = storage.financial.queryTransactions({ from, to });
-    const spendByCategory = new Map<string, number>();
-    let totalSpent = 0;
-    for (const t of rawTxns) {
-      if (isTransferTxn(t)) continue;
-      if (t.amount >= 0) continue; // only count outflows
-      const abs = Math.abs(t.amount);
-      const cat = t.category ?? "uncategorized";
-      spendByCategory.set(cat, (spendByCategory.get(cat) ?? 0) + abs);
-      totalSpent += abs;
+    data.financial = buildFinancialReflectionContext(storage, kind, from, to);
+    if (data.financial.kind !== "omitted" && data.financial.kind !== "not-configured") {
+      data.financialInsights = storage.financial
+        .listInsights({ dismissedOnly: false })
+        .slice(0, 5)
+        .map((i) => ({
+          topic: i.topic,
+          body: i.body,
+          category: i.category,
+          priority: i.priority,
+        }));
     }
-    const topCategories = Array.from(spendByCategory.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([category, amount]) => ({ category, amount }));
-
-    data.financialAccounts = financialAccounts;
-    data.financialInsights = financialInsights;
-    data.financialTransactionSummary = { totalSpent, topCategories };
+  } else {
+    data.financial = { kind: "omitted" };
   }
 
   return data;
@@ -316,27 +320,27 @@ const renderData = (data: PeriodData): string => {
     }
   }
 
-  // Include financial data for weekly/monthly reflections
-  if (data.financialAccounts && data.financialAccounts.length > 0) {
-    parts.push("\n## Financial Status");
-    const { netWorth } = computeNetWorth(data.financialAccounts);
-    parts.push(`- Net worth: $${netWorth.toFixed(2)}`);
+  // Financial section — guard-aware. The renderer returns "" for `omitted`
+  // and `not-configured` (silent skip). For `sync-stale` and `guards-failed`
+  // it emits explicit suppression markers so the model knows NOT to invent
+  // dollar figures around them.
+  if (data.financial) {
+    const financialBlock = renderFinancialReflectionContext(data.financial);
+    if (financialBlock) parts.push(financialBlock);
+  }
 
-    if (data.financialTransactionSummary) {
-      parts.push(`- Spending this period: $${data.financialTransactionSummary.totalSpent.toFixed(2)}`);
-      if (data.financialTransactionSummary.topCategories.length > 0) {
-        parts.push("- Top categories: " + data.financialTransactionSummary.topCategories
-          .map((c) => `${c.category} ($${c.amount.toFixed(2)})`)
-          .join(", "));
-      }
-    }
-
-    if (data.financialInsights && data.financialInsights.length > 0) {
-      parts.push("\n## Financial Insights");
-      for (const insight of data.financialInsights) {
-        const priorityLabel = insight.priority === 3 ? "URGENT" : insight.priority === 2 ? "WATCH" : "NOTE";
-        parts.push(`- [${priorityLabel}] ${insight.topic}`);
-      }
+  if (
+    data.financial &&
+    data.financial.kind !== "omitted" &&
+    data.financial.kind !== "not-configured" &&
+    data.financialInsights &&
+    data.financialInsights.length > 0
+  ) {
+    parts.push("\n## Financial Insights (from the Insighter; guard-validated upstream)");
+    for (const insight of data.financialInsights) {
+      const priorityLabel =
+        insight.priority === 3 ? "URGENT" : insight.priority === 2 ? "WATCH" : "NOTE";
+      parts.push(`- [${priorityLabel}] ${insight.topic}`);
     }
   }
 
@@ -364,6 +368,7 @@ ${identityProfile}
 
 ## Period
 ${formatTimestamp(from)} → ${formatTimestamp(to)}
+${FINANCIAL_REFLECTION_INSTRUCTION}
 
 ## What happened during this ${label}
 ${rendered}
@@ -414,8 +419,15 @@ export class Reflector {
     }
 
     const includeFinancial = kind === "weekly" || kind === "monthly";
-    const data = gatherPeriodData(storage, from, to, includeFinancial);
+    const data = gatherPeriodData(storage, from, to, kind, includeFinancial);
 
+    // Activity check — only count financial activity when the guards actually
+    // cleared (`kind === "ok"`). A sync-stale or guards-failed period with
+    // no other signal isn't worth a model call: it would produce a
+    // reflection whose only content is "we can't say anything about money,"
+    // which is noise.
+    const financialActivity =
+      data.financial?.kind === "ok" && data.financial.rollup.expenses > 0;
     const hasActivity =
       data.messages.length > 0 ||
       data.facts.length > 0 ||
@@ -424,7 +436,7 @@ export class Reflector {
       data.priorReflections.length > 0 ||
       data.goalEvidence.length > 0 ||
       data.completedMilestones.length > 0 ||
-      (data.financialTransactionSummary?.totalSpent ?? 0) > 0;
+      financialActivity;
     if (!hasActivity) return null;
 
     const rendered = renderData(data);
