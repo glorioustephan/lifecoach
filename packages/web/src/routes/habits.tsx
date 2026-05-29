@@ -160,6 +160,24 @@ function TodayTab({ today, onOpenDetail, onNewHabit }: TodayTabProps): JSX.Eleme
     );
   }, [batchData]);
 
+  // Group by parentGoalId. Computed unconditionally — must sit above any
+  // early returns so React's hook order stays stable across renders
+  // (rules-of-hooks; React error #310 otherwise).
+  const groups = useMemo(() => {
+    const grouped = new Map<string | null, HabitRow[]>();
+    for (const habit of habits) {
+      const key = habit.parentGoalId ?? null;
+      const list = grouped.get(key) ?? [];
+      list.push(habit);
+      grouped.set(key, list);
+    }
+    // Sort habits within each group alphabetically.
+    for (const list of grouped.values()) {
+      list.sort((a, b) => a.title.localeCompare(b.title));
+    }
+    return grouped;
+  }, [habits]);
+
   const completeMut = useMutation({
     mutationFn: ({ habitId }: { habitId: string }) =>
       api.completeHabit(habitId, { date: today }),
@@ -206,22 +224,6 @@ function TodayTab({ today, onOpenDetail, onNewHabit }: TodayTabProps): JSX.Eleme
       />
     );
   }
-
-  // Group by parentGoalId.
-  const groups = useMemo(() => {
-    const grouped = new Map<string | null, HabitRow[]>();
-    for (const habit of habits) {
-      const key = habit.parentGoalId ?? null;
-      const list = grouped.get(key) ?? [];
-      list.push(habit);
-      grouped.set(key, list);
-    }
-    // Sort habits within each group alphabetically.
-    for (const list of grouped.values()) {
-      list.sort((a, b) => a.title.localeCompare(b.title));
-    }
-    return grouped;
-  }, [habits]);
 
   return (
     <div className="space-y-6">
