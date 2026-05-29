@@ -71,10 +71,32 @@ app.route("/api", api);
 
 app.get("/health", (c) => c.text("ok"));
 
-// Static frontend bundle — only served in production-style web mode.
-// In dev, Vite serves the frontend on a separate port and proxies /api here.
+// Dev-mode landing page — if a developer opens the API port directly (3717)
+// instead of the Vite dev server (3718), give them a one-click redirect
+// instead of a bare 404 + favicon.ico 404 in the console.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, "../../web/dist");
+if (!serveBuiltFrontend) {
+  app.get("/", (c) =>
+    c.html(
+      `<!doctype html><html><head><meta charset="utf-8"><title>lifecoach (API)</title>
+       <meta http-equiv="refresh" content="0; url=http://localhost:3718/">
+       <style>body{font-family:system-ui;margin:3rem auto;max-width:32rem;color:#0f172a;line-height:1.5}
+       a{color:#0ea5e9}code{background:#f1f5f9;padding:.1rem .3rem;border-radius:.25rem;font-size:.9em}</style>
+       </head><body>
+       <h1>lifecoach &mdash; API server</h1>
+       <p>You're on the API port (<code>:3717</code>). The dev UI is at
+       <a href="http://localhost:3718/">http://localhost:3718</a> (Vite, with HMR) &mdash; redirecting…</p>
+       <p>API surface: <code>/api/*</code>, <code>/health</code>.</p>
+       </body></html>`,
+    ),
+  );
+  // Silence the favicon.ico 404 noise; the dev UI has its own favicon.
+  app.get("/favicon.ico", (c) => c.body(null, 204));
+}
+
+// Static frontend bundle — only served in production-style web mode.
+// In dev, Vite serves the frontend on a separate port and proxies /api here.
 if (serveBuiltFrontend && fs.existsSync(webDist)) {
   app.use(
     "/*",
