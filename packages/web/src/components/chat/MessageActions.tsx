@@ -2,37 +2,31 @@
  * MessageActions — copy + save-artifact / create-items row for chat messages.
  *
  * Wraps prompt-kit's `MessageAction` sub-component (from components/ui/message.tsx)
- * for the per-button tooltip pattern. All app-specific logic (copy fallback,
- * artifact declaration, actionable-items proposal, React Query mutation, artifact
- * link) is here.
+ * for the per-button tooltip pattern.
  *
  * Per ui-design-system §1.2 — Decision: Wrap (MessageActions).
  *
  * ## Button rendering logic (ADHD-10: predictable interaction surfaces)
  *
- * Three tiers, evaluated top-down:
+ * Two tiers — the agent declares its intent explicitly, the UI never guesses:
  *
  * 1. toolUse.name === "propose_artifact"
- *    → Full-weight "Save <descriptor.label>" button. Explicit agent declaration
- *      wins unconditionally. Legacy heuristic is NOT consulted.
+ *    → Full-weight "Save <descriptor.label>" button → existing artifact save flow.
  *
  * 2. toolUse.name === "propose_actionable_items"
  *    → Full-weight "Create N items" button → opens ProposalReviewModal.
  *
- * 3. toolUse absent OR unknown tool
- *    → Heuristic fallback (detectArtifactTypes). Rendered as a lower-weight
- *      outlined "Maybe save?" button. Kept for legacy messages (pre-propose tool
- *      era). Deprecation plan: remove when telemetry shows ≥95% of artifact
- *      messages arrive via propose_artifact.
- *
- * The heuristic code path in packages/schemas/src/artifact.ts:77-108 is
- * intentionally unchanged — this file merely controls when it renders.
+ * No legacy fallback. The old heuristic in `packages/schemas/src/artifact.ts`
+ * (`detectArtifactTypes`) produced false positives — most notably the
+ * "Save recipe" button firing on any message with ≥3 quantity+unit matches.
+ * It still backs the autonomous artifact scanner (cron path in `artifacts/scan.ts`)
+ * but is no longer consulted for user-facing buttons.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Copy, BookmarkPlus, ListPlus } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { detectArtifactTypes, getArtifactDescriptor } from "@lifecoach/schemas";
+import { getArtifactDescriptor } from "@lifecoach/schemas";
 import { api } from "~/lib/api";
 import { useChatState } from "./chat-state";
 import { cn } from "~/lib/cn";
@@ -46,16 +40,11 @@ interface Props {
   content: string;
   /** Slight visual offset; mobile shows actions always-visible, desktop on group-hover. */
   align?: "left" | "right";
-  /**
-   * When present (assistant messages only), enables the save-artifact / create-items
-   * button. The toolUse field takes priority over the heuristic.
-   */
+  /** Raw assistant-message content used as the save payload when the agent
+   *  declared `propose_artifact`. Omit on user messages (no save button). */
   artifactSource?: { content: string };
-  /**
-   * When present, the agent explicitly declared its intent via propose_artifact
-   * or propose_actionable_items. Presence of this field disables the heuristic.
-   * See the tier documentation at the top of this file.
-   */
+  /** The agent's tool-use declaration on this message — drives which action
+   *  button (if any) renders. See the tier documentation at the top. */
   toolUse?: ToolUseCapture;
 }
 
@@ -125,8 +114,8 @@ export const MessageActions = ({
   // ── Determine which tier applies ──────────────────────────────────────────
   //
   // ADHD-10: predictable interaction surfaces — the same visual weight always
-  // means the same confidence level. Full-weight = explicit agent declaration;
-  // outlined/faint = heuristic fallback.
+  // means the same confidence. Both tiers are full-weight; the agent's
+  // explicit declaration is what gates rendering.
   const proposeArtifactType =
     toolUse?.name === "propose_artifact"
       ? (toolUse.input as { type?: string } | undefined)?.type
@@ -147,27 +136,13 @@ export const MessageActions = ({
       } | undefined)?.parentGoalSuggestion
     : undefined;
 
-  // Tier 3: heuristic fallback — only when toolUse is absent or unknown.
-  // When the agent has declared intent, we never consult the heuristic.
-  const heuristicEnabled = !toolUse;
-  const detectedTypes = useMemo(
-    () =>
-      heuristicEnabled && artifactSource ? detectArtifactTypes(artifactSource.content) : [],
-    [heuristicEnabled, artifactSource],
-  );
-  const heuristicFirstType = detectedTypes[0];
-  const heuristicDescriptor = heuristicFirstType
-    ? getArtifactDescriptor(heuristicFirstType)
-    : undefined;
-
   const saveArtifact = useMutation({
     mutationFn: () => {
-      const type = proposeArtifactType ?? heuristicFirstType;
-      if (!artifactSource || !type) throw new Error("no artifact");
+      if (!artifactSource || !proposeArtifactType) throw new Error("no artifact");
       return api.saveArtifactFromMessage({
         content: artifactSource.content,
         ...(sessionId !== undefined ? { sessionId } : {}),
-        type,
+        type: proposeArtifactType,
       });
     },
     onSuccess: () => {
@@ -282,53 +257,6 @@ export const MessageActions = ({
             </button>
           </MessageAction>
 
-        /*
-         * Tier 3 — heuristic fallback.
-         * Lower visual weight (text-fg-faint, outline style) to signal lower
-         * confidence. Only visible when the agent did NOT call a propose tool.
-         * Deprecation target: remove when ≥95% of artifact messages arrive via
-         * propose_artifact (ADHD-10: predictable interaction surfaces).
-         */
-        ) : heuristicDescriptor && artifactSource ? (
-          saveState === "saved" ? (
-            <Link
-              to="/artifacts"
-              className={cn(
-                "flex items-center gap-1 rounded-md px-2 h-9 text-xs transition-colors",
-                "text-success-500 hover:bg-surface-elevated/60",
-              )}
-            >
-              <Check className="size-3.5" strokeWidth={1.75} />
-              <span>Saved — view</span>
-            </Link>
-          ) : (
-            <MessageAction tooltip="Maybe save?" side="top">
-              <button
-                type="button"
-                onClick={() => saveArtifact.mutate()}
-                disabled={saveArtifact.isPending}
-                aria-label="Maybe save?"
-                className={cn(
-                  "flex items-center gap-1 rounded-md border border-border px-2 h-9 text-xs transition-colors",
-                  saveState === "error"
-                    ? "text-destructive-300 border-destructive-300/50"
-                    : "text-fg-faint hover:text-fg hover:bg-surface-elevated/60",
-                  saveArtifact.isPending && "opacity-60 cursor-not-allowed",
-                )}
-              >
-                <BookmarkPlus className="size-3.5" strokeWidth={1.75} />
-                <span>
-                  {saveState === "nothing"
-                    ? "Nothing to save"
-                    : saveState === "error"
-                      ? "Couldn't save"
-                      : saveArtifact.isPending
-                        ? "Saving…"
-                        : "Maybe save?"}
-                </span>
-              </button>
-            </MessageAction>
-          )
         ) : null}
       </div>
 

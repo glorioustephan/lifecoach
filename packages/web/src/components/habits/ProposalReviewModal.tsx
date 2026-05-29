@@ -344,6 +344,13 @@ export const ProposalReviewModal = ({
               <Dialog.Title className="text-base font-semibold text-fg">
                 Review {checkedCount} item{checkedCount !== 1 ? "s" : ""}
               </Dialog.Title>
+              {/* Visually-hidden description satisfies Radix's aria-describedby
+                  requirement on DialogContent without adding visual clutter. */}
+              <Dialog.Description className="sr-only">
+                Review the agent's recommended habits and tasks. Edit titles or
+                cadence inline, optionally group them under a goal, then create
+                the selected items in one step.
+              </Dialog.Description>
               <button
                 type="button"
                 onClick={onClose}
