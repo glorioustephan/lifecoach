@@ -43,3 +43,9 @@ export {
   type ArtifactListFilter,
 } from "./artifacts.js";
 export { FinancialRepository } from "./financial.js";
+export {
+  HabitRepository,
+  HabitCompletionRepository,
+  type HabitListFilter,
+  type HabitCompletionListFilter,
+} from "./habits.js";

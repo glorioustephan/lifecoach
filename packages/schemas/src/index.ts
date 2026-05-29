@@ -14,3 +14,4 @@ export * from "./milestone.js";
 export * from "./project.js";
 export * from "./artifact.js";
 export * from "./financial.js";
+export * from "./habit.js";

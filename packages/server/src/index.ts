@@ -25,6 +25,7 @@ import { goalRoutes } from "./routes/goals.js";
 import { artifactRoutes } from "./routes/artifacts.js";
 import { briefingRoutes } from "./routes/briefing.js";
 import { financialRoutes } from "./routes/financial.js";
+import { habitRoutes } from "./routes/habits.js";
 import { loadAuthConfig, requireAuth } from "./middleware/auth.js";
 
 const lc = createLifecoach();
@@ -63,6 +64,7 @@ api.route("/goals", goalRoutes(lc));
 api.route("/artifacts", artifactRoutes(lc));
 api.route("/briefing", briefingRoutes(lc));
 api.route("/financial", financialRoutes(lc));
+api.route("/habits", habitRoutes(lc));
 app.route("/api", api);
 
 app.get("/health", (c) => c.text("ok"));

@@ -508,6 +508,51 @@ Append-only feed of events bearing on a goal's progress. Sources: chat (agent `r
 
 ---
 
+## Habits tables
+
+Habits were introduced in migration `1780019158_create_habits.sql` as part of Workstream A. Habits are first-class recurring-action entities, distinct from goals. They may stand alone or link up to a parent goal/milestone.
+
+### `habits`
+
+Recurring action entities. Status and cadence drive stall detection (`isHabitStalled` in `packages/core/src/util/habit-cadence.ts`).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | TEXT PK | |
+| `title` | TEXT | Required. |
+| `cadence` | TEXT | `daily \| weekly \| monthly`. |
+| `status` | TEXT | Default `'active'`. Values: `active \| paused \| archived`. |
+| `parent_goal_id` | TEXT | Nullable. FK → `goals(id) ON DELETE SET NULL`. |
+| `parent_milestone_id` | TEXT | Nullable. FK → `milestones(id) ON DELETE SET NULL`. Only valid when `parent_goal_id` is also set (CHECK constraint). |
+| `notes` | TEXT | Nullable. Free-text context. |
+| `last_completed_at` | INTEGER | Nullable. Epoch ms of most recent logged completion; stamped by `setLastCompleted()` after each `habit_completions` insert. |
+| `created_at` | INTEGER | |
+| `updated_at` | INTEGER | |
+
+**CHECK constraint:** `parent_milestone_id IS NULL OR parent_goal_id IS NOT NULL` — prevents orphaned milestone links.
+
+**Indexes:**
+- `idx_habits_parent_goal_id` (partial) on `(parent_goal_id) WHERE parent_goal_id IS NOT NULL`
+- `idx_habits_status` on `(status)`
+
+### `habit_completions`
+
+Append-only log of individual completions. Deleting a row undoes a logged completion (UI undo / History tab).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | TEXT PK | |
+| `habit_id` | TEXT | FK → `habits(id) ON DELETE CASCADE`. |
+| `completed_at` | INTEGER | Epoch ms. Stored at local noon on the given date (avoids timezone edge cases). |
+| `notes` | TEXT | Nullable. |
+| `origin` | TEXT | `manual \| conversation \| cron`. |
+| `created_at` | INTEGER | |
+
+**Indexes:**
+- `idx_habit_completions_habit_id_date` on `(habit_id, completed_at DESC)` — composite covering the per-habit history and `countByDayForHabits` GROUP BY.
+
+---
+
 ## Financial tables
 
 Financial tables were introduced in migration `008_financial.sql`. All subsequent financial migrations extend these tables.

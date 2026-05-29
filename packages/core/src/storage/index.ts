@@ -21,6 +21,8 @@ import {
   ProjectRepository,
   ArtifactRepository,
   FinancialRepository,
+  HabitRepository,
+  HabitCompletionRepository,
 } from "./repositories/index.js";
 
 export interface Storage {
@@ -45,6 +47,8 @@ export interface Storage {
   projects: ProjectRepository;
   artifacts: ArtifactRepository;
   financial: FinancialRepository;
+  habits: HabitRepository;
+  habitCompletions: HabitCompletionRepository;
   close: () => void;
 }
 
@@ -73,6 +77,8 @@ export const createStorage = (config: LifecoachConfig): Storage => {
     projects: new ProjectRepository(db),
     artifacts: new ArtifactRepository(db),
     financial: new FinancialRepository(db),
+    habits: new HabitRepository(db),
+    habitCompletions: new HabitCompletionRepository(db),
     close: handle.close,
   };
 };
