@@ -24,6 +24,12 @@ interface ModalShellProps {
   onSubmit?: (e: React.FormEvent) => void;
   /** Width cap for the surface card. Defaults to max-w-md. */
   maxWidthClass?: string;
+  /**
+   * Cap the surface at 90dvh and make the body scroll, keeping the header and
+   * footer pinned. Use for long/variable content (e.g. a reviewable list); the
+   * body keeps its own inner spacing rather than the default space-y-4.
+   */
+  scrollBody?: boolean;
 }
 
 export const ModalShell = ({
@@ -35,6 +41,7 @@ export const ModalShell = ({
   footer,
   onSubmit,
   maxWidthClass = "max-w-md",
+  scrollBody = false,
 }: ModalShellProps): JSX.Element => {
   const Surface = onSubmit ? "form" : "div";
   return (
@@ -51,11 +58,18 @@ export const ModalShell = ({
             className={cn(
               "flex w-full flex-col rounded-xl border border-border bg-surface shadow-2xl",
               maxWidthClass,
+              scrollBody && "max-h-[90dvh]",
             )}
           >
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
-              <Dialog.Title className="text-base font-semibold text-fg">{title}</Dialog.Title>
-              {description && <Dialog.Description className="sr-only">{description}</Dialog.Description>}
+              <Dialog.Title className="text-base font-semibold text-fg">
+                {title}
+              </Dialog.Title>
+              {description && (
+                <Dialog.Description className="sr-only">
+                  {description}
+                </Dialog.Description>
+              )}
               <button
                 type="button"
                 onClick={onClose}
@@ -66,7 +80,15 @@ export const ModalShell = ({
               </button>
             </div>
 
-            <div className="space-y-4 px-5 py-4">{children}</div>
+            <div
+              className={
+                scrollBody
+                  ? "flex-1 overflow-y-auto px-5 py-4"
+                  : "space-y-4 px-5 py-4"
+              }
+            >
+              {children}
+            </div>
 
             <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
               {footer}
