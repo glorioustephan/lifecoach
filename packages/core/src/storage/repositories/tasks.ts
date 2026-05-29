@@ -182,6 +182,68 @@ export class TaskRepository {
   }
 
   /**
+   * Create a local-only task (no external source/id). Used by the propose-bulk
+   * endpoint when the agent proposes a one-time action item from a conversation.
+   *
+   * Fields that are only meaningful for synced tasks (externalId, externalSource,
+   * url, dueString) default to null.
+   */
+  create(task: {
+    content: string;
+    description?: string | null;
+    dueAt?: number | null;
+    goalId?: string | null;
+    notes?: string | null;
+  }): Task {
+    const id = newId();
+    const ts = now();
+    this.db
+      .prepare(
+        `INSERT INTO tasks(${FULL_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        null, // external_id
+        null, // external_source
+        task.content,
+        task.description ?? null,
+        null, // project_id
+        null, // project_name
+        JSON.stringify([]), // labels
+        null, // priority
+        task.dueAt ?? null,
+        null, // due_string
+        null, // completed_at
+        null, // url
+        ts,  // created_at
+        ts,  // updated_at
+        ts,  // synced_at
+        task.goalId ?? null,
+        null, // milestone_id
+      );
+    return {
+      id,
+      externalId: null,
+      externalSource: null,
+      content: task.content,
+      description: task.description ?? null,
+      projectId: null,
+      projectName: null,
+      labels: [],
+      priority: null,
+      dueAt: task.dueAt ?? null,
+      dueString: null,
+      completedAt: null,
+      url: null,
+      createdAt: ts,
+      updatedAt: ts,
+      syncedAt: ts,
+      goalId: task.goalId ?? null,
+      milestoneId: null,
+    };
+  }
+
+  /**
    * Upsert by (external_source, external_id). Used by the sync flow.
    * Local-only tasks (no external IDs) should use `create()` instead.
    */

@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import type { ToolCallState } from "./ToolCallDisclosure";
+import type { ToolUseCapture } from "~/lib/chat-stream";
 
 export type ChatItem =
   | {
@@ -16,6 +17,8 @@ export type ChatItem =
       role: "user" | "assistant";
       content: string;
       streaming?: boolean;
+      /** Populated for assistant messages that called propose_artifact or propose_actionable_items. */
+      toolUse?: ToolUseCapture;
     }
   | { kind: "tool"; id: string; state: ToolCallState }
   | { kind: "error"; id: string; message: string };

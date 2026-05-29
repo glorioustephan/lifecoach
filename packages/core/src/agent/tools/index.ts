@@ -22,6 +22,7 @@ import { buildFinancialTools } from "./financial.js";
 import { buildCategorizationTools } from "./categorization.js";
 import { buildWebResearchTools } from "./web-research.js";
 import { buildHabitTools } from "./habits.js";
+import { buildProposeTools } from "./propose.js";
 
 export interface ToolDeps {
   memory: Memory;
@@ -78,6 +79,7 @@ export const buildAllTools = (deps: ToolDeps) => [
   ...buildCategorizationTools(deps.storage),
   ...buildWebResearchTools({ apiKey: deps.anthropicApiKey, model: deps.model }),
   ...buildHabitTools({ storage: deps.storage }),
+  ...buildProposeTools({ storage: deps.storage }),
 ];
 
 export type LifecoachTool = ReturnType<typeof buildAllTools>[number];

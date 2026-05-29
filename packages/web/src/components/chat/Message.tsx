@@ -17,6 +17,7 @@ import { cn } from "~/lib/cn";
 import { Markdown } from "./Markdown";
 import { MessageActions } from "./MessageActions";
 import { MessageAvatar } from "~/components/ui/message";
+import type { ToolUseCapture } from "~/lib/chat-stream";
 
 interface Props {
   role: "user" | "assistant";
@@ -24,9 +25,15 @@ interface Props {
   streaming?: boolean;
   /** True when this is the first message in a consecutive run from the same role. */
   isRunStart?: boolean;
+  /**
+   * When present on an assistant message, the agent declared intent via
+   * propose_artifact or propose_actionable_items. MessageActions uses this to
+   * render the appropriate action button instead of falling back to heuristics.
+   */
+  toolUse?: ToolUseCapture;
 }
 
-export const Message = ({ role, content, streaming, isRunStart = true }: Props): JSX.Element => {
+export const Message = ({ role, content, streaming, isRunStart = true, toolUse }: Props): JSX.Element => {
   if (role === "user") {
     return (
       <div className="group ml-auto flex max-w-[80%] flex-col">
@@ -88,7 +95,11 @@ export const Message = ({ role, content, streaming, isRunStart = true }: Props):
         </div>
         {!streaming && content.length > 0 && (
           <div className="mt-1 pl-4">
-            <MessageActions content={content} artifactSource={{ content }} />
+            <MessageActions
+              content={content}
+              artifactSource={{ content }}
+              toolUse={toolUse}
+            />
           </div>
         )}
       </div>

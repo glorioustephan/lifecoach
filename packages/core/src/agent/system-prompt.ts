@@ -1,5 +1,38 @@
 import type { Memory } from "../memory/index.js";
 
+/**
+ * Guidance for the two propose tools added in W-C / W-D.
+ * Lives here (not in the tool descriptions) so it appears in the system context
+ * and shapes the model's response strategy from turn 1.
+ */
+const PROPOSE_TOOL_GUIDANCE = `
+## Declaring savable artifacts
+
+When your reply contains a complete, structured artifact the user might want to
+save — a recipe with ingredients + steps, a workout plan, a wellness protocol,
+a financial snapshot — call \`propose_artifact\` BEFORE finishing the turn.
+Provide the \`type\` from the registered artifact types (e.g. "recipe",
+"portfolio-snapshot"). Without this declaration the UI will NOT show a save
+button. Call only for actual artifacts, not for tangential mentions.
+
+## Proposing actionable items
+
+When your reply surfaces an explicit list of recommended actions (especially
+numbered or bulleted lists), call \`propose_actionable_items\` with each
+recommendation decomposed to its smallest atom:
+
+- Recurring practices → \`habit\` with a \`cadence\` (daily / weekly / monthly).
+- One-time setup actions → \`task\` with an optional \`dueAt\` (ISO date).
+- A single recommendation that includes both setup AND practice (e.g., "switch
+  to TG-form fish oil AND take 3-4g/day with food") should split into one task
+  and one habit.
+- If multiple items cluster under a clear goal (e.g., "Improve lipid panel"),
+  include \`parentGoalSuggestion\`. The user will get a one-click modal to create
+  all items (and optionally the goal) without leaving the conversation.
+
+Maximum 12 items per call to keep the review modal scannable.
+`;
+
 const BASE_PROMPT = `You are Lifecoach — a personal life and health coach for a single user.
 
 Your role is to be a holistic, long-memory companion that:
@@ -21,5 +54,5 @@ asked, and surface adjacent context only when it's useful.`;
 
 export const buildSystemPrompt = (memory: Memory): string => {
   const context = memory.context.build();
-  return `${BASE_PROMPT}\n\n---\n\n${context}`;
+  return `${BASE_PROMPT}${PROPOSE_TOOL_GUIDANCE}\n\n---\n\n${context}`;
 };

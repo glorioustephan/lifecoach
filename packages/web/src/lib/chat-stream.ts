@@ -7,12 +7,18 @@
 //
 // Plus a synthetic 'session' event the server sends first.
 
+export type ToolUseCapture = {
+  name: string;
+  input?: Record<string, unknown>;
+  output?: string;
+};
+
 export type ChatEvent =
   | { type: "session"; sessionId: string }
   | { type: "text-delta"; text: string }
   | { type: "tool-start"; toolUseId: string; name: string; input: unknown }
   | { type: "tool-result"; toolUseId: string; output?: unknown; error?: string }
-  | { type: "done"; toolCallCount: number }
+  | { type: "done"; toolCallCount: number; toolUse?: ToolUseCapture }
   | { type: "error"; message: string };
 
 export interface SendOptions {

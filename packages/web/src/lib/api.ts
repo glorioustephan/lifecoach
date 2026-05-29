@@ -628,6 +628,12 @@ export const api = {
         role: "user" | "assistant" | "system" | "tool";
         content: string;
         createdAt: number;
+        toolUse?: {
+          name: string;
+          input?: Record<string, unknown>;
+          output?: unknown;
+          error?: string;
+        };
       }[];
     }>(`/api/chat/sessions/${encodeURIComponent(id)}`),
   sources: () =>
@@ -811,6 +817,19 @@ export const api = {
    * than the live 90-day sync window are upserted (synthetic external IDs make
    * re-uploads idempotent). Returns counts so the UI can show what happened.
    */
+  /**
+   * Bulk-create a goal (optional) + habits + tasks from the ProposalReviewModal.
+   * Single server-side transaction — all rows succeed or none do.
+   */
+  proposeBulk: (body: {
+    goalToCreate?: { title: string; kind: "outcome" | "process" | "identity"; outcome?: string };
+    parentGoalId?: string;
+    items: Array<
+      | { type: "habit"; title: string; cadence: "daily" | "weekly" | "monthly"; notes?: string }
+      | { type: "task"; title: string; dueAt?: number; notes?: string }
+    >;
+  }) => postJson<ProposeBulkResult>("/api/propose/bulk", body),
+
   backfillMonarchCsv: async (file: File): Promise<MonarchBackfillResponse> => {
     const form = new FormData();
     form.append("file", file);
@@ -825,6 +844,29 @@ export const api = {
     return data as MonarchBackfillResponse;
   },
 };
+
+// ─── Habits ───────────────────────────────────────────────────────────────────
+
+export interface HabitRow {
+  id: string;
+  title: string;
+  cadence: "daily" | "weekly" | "monthly";
+  status: "active" | "paused" | "archived";
+  parentGoalId: string | null;
+  parentMilestoneId: string | null;
+  notes: string | null;
+  lastCompletedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+// ─── Propose bulk-create ──────────────────────────────────────────────────────
+
+export interface ProposeBulkResult {
+  goal?: GoalRow;
+  habits: HabitRow[];
+  tasks: TaskRow[];
+}
 
 export type BriefingFinanceTile =
   | {

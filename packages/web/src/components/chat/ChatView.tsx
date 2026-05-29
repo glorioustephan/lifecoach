@@ -29,6 +29,12 @@ interface Props {
     id: string;
     role: "user" | "assistant" | "system" | "tool";
     content: string;
+    toolUse?: {
+      name: string;
+      input?: Record<string, unknown>;
+      output?: unknown;
+      error?: string;
+    };
   }>;
 }
 
@@ -70,10 +76,25 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
       items: (initialMessages ?? [])
         .filter((m) => m.role === "user" || m.role === "assistant")
         .map((m) => ({
-          kind: "message",
+          kind: "message" as const,
           id: m.id,
           role: m.role as "user" | "assistant",
           content: m.content,
+          // Propagate persisted propose toolUse so restored messages render
+          // action buttons the same as live messages (ADHD-10: predictable surfaces).
+          ...(m.toolUse &&
+          (m.toolUse.name === "propose_artifact" ||
+            m.toolUse.name === "propose_actionable_items")
+            ? {
+                toolUse: {
+                  name: m.toolUse.name,
+                  ...(m.toolUse.input !== undefined ? { input: m.toolUse.input } : {}),
+                  ...(typeof m.toolUse.output === "string"
+                    ? { output: m.toolUse.output }
+                    : {}),
+                },
+              }
+            : {}),
         })),
     });
   }, [sessionId, initialMessages, ctxSessionId, reset]);
@@ -154,7 +175,13 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
           update((prev) =>
             prev.map((it) =>
               it.kind === "message" && it.id === assistantId
-                ? { ...it, streaming: false }
+                ? {
+                    ...it,
+                    streaming: false,
+                    // Attach the propose toolUse if the agent declared one this
+                    // turn. The UI renders action buttons based on this field.
+                    ...(event.toolUse !== undefined ? { toolUse: event.toolUse } : {}),
+                  }
                 : it,
             ),
           );
@@ -301,6 +328,7 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
                       role={item.role}
                       content={item.content}
                       streaming={item.streaming === true}
+                      toolUse={item.toolUse}
                     />
                   );
                 }

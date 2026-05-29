@@ -22,11 +22,17 @@ import { buildMcpServers } from "@lifecoach/core/agent";
  *   { type: 'done',        toolCallCount }
  *   { type: 'error',       message }
  */
+export type ToolUseCapture = {
+  name: string;
+  input?: Record<string, unknown>;
+  output?: string;
+};
+
 export type ChatEvent =
   | { type: "text-delta"; text: string }
   | { type: "tool-start"; toolUseId: string; name: string; input: unknown }
   | { type: "tool-result"; toolUseId: string; output?: unknown; error?: string }
-  | { type: "done"; toolCallCount: number }
+  | { type: "done"; toolCallCount: number; toolUse?: ToolUseCapture }
   | { type: "error"; message: string };
 
 export interface ChatStreamInput {
@@ -89,6 +95,17 @@ export async function* streamChatTurn(
   let toolCallCount = 0;
   let capturedSdkSessionId: string | undefined;
   let emittedAny = false;
+  /**
+   * Capture the last propose_* tool call declared this turn so the assistant
+   * message row can store it in toolUse. The UI reads this to render action
+   * buttons (Save artifact / Create N items) without relying on heuristics.
+   * We capture the last one because multiple propose calls are unusual, and
+   * propose_artifact + propose_actionable_items are mutually exclusive in
+   * practice.
+   */
+  let capturedProposeToolName: string | undefined;
+  let capturedProposeInput: Record<string, unknown> | undefined;
+  let capturedProposeOutput: string | undefined;
   // Tracks whether the most recent event was a tool call (or its result). When
   // text resumes after that, we need to inject paragraph spacing — otherwise
   // the text block immediately preceding the tool ("Logging this…") concats
@@ -141,6 +158,15 @@ export async function* streamChatTurn(
               // separated from the prior text block.
               pendingTextSeparator = true;
               emittedAny = true;
+              // Capture propose_* calls so the assistant message row can store
+              // toolUse for the UI to render action buttons.
+              if (
+                block.name === "propose_artifact" ||
+                block.name === "propose_actionable_items"
+              ) {
+                capturedProposeToolName = block.name;
+                capturedProposeInput = block.input as Record<string, unknown> | undefined ?? undefined;
+              }
               yield {
                 type: "tool-start",
                 toolUseId: block.id,
@@ -166,6 +192,10 @@ export async function* streamChatTurn(
             if (b.type !== "tool_result" || !b.tool_use_id) continue;
             const error = b.is_error ? extractErrorText(b.content) : undefined;
             emittedAny = true;
+            // Capture the output text from propose_* results for the toolUse record.
+            if (capturedProposeToolName && !error && b.content !== undefined) {
+              capturedProposeOutput = extractErrorText(b.content);
+            }
             yield {
               type: "tool-result",
               toolUseId: b.tool_use_id,
@@ -204,14 +234,37 @@ export async function* streamChatTurn(
     lc.storage.sessions.setSdkSessionId(input.sessionId, capturedSdkSessionId);
   }
 
-  // Persist the assistant turn.
+  // Persist the assistant turn. If the agent called propose_artifact or
+  // propose_actionable_items, attach the toolUse so the UI can render the
+  // appropriate action button when the session is loaded later.
   memory.episodic.appendMessage({
     sessionId: input.sessionId,
     role: "assistant",
     content: assistantText.trim(),
+    ...(capturedProposeToolName
+      ? {
+          toolUse: {
+            name: capturedProposeToolName,
+            ...(capturedProposeInput !== undefined ? { input: capturedProposeInput } : {}),
+            ...(capturedProposeOutput !== undefined ? { output: capturedProposeOutput } : {}),
+          },
+        }
+      : {}),
   });
 
-  yield { type: "done", toolCallCount };
+  yield {
+    type: "done",
+    toolCallCount,
+    ...(capturedProposeToolName
+      ? {
+          toolUse: {
+            name: capturedProposeToolName,
+            ...(capturedProposeInput !== undefined ? { input: capturedProposeInput } : {}),
+            ...(capturedProposeOutput !== undefined ? { output: capturedProposeOutput } : {}),
+          } satisfies ToolUseCapture,
+        }
+      : {}),
+  };
 }
 
 const extractErrorText = (content: unknown): string => {
