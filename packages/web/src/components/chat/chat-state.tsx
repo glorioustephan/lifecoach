@@ -27,17 +27,29 @@ interface ChatState {
   sessionId: string | undefined;
   items: ChatItem[];
   streaming: boolean;
+  /**
+   * Text queued to be submitted as the next user turn the moment ChatView
+   * mounts/observes it. Used by entry points outside the chat view (e.g.
+   * Insight "Discuss") so the seed prompt actually reaches the backend
+   * instead of only sitting in client state.
+   */
+  pendingSubmit: string | undefined;
 }
 
 interface ChatActions {
   /** Replace the entire chat state — used when loading a specific session by URL. */
-  reset: (next: { sessionId: string | undefined; items: ChatItem[] }) => void;
+  reset: (next: {
+    sessionId: string | undefined;
+    items: ChatItem[];
+    pendingSubmit?: string;
+  }) => void;
   /** Append items at the end (e.g. user message + assistant placeholder on submit). */
   append: (items: ChatItem[]) => void;
   /** Update items via a reducer. Use for streaming text appends, tool state changes, etc. */
   update: (fn: (items: ChatItem[]) => ChatItem[]) => void;
   setSessionId: (id: string | undefined) => void;
   setStreaming: (s: boolean) => void;
+  clearPendingSubmit: () => void;
 }
 
 const StateCtx = createContext<ChatState | null>(null);
@@ -52,16 +64,22 @@ export const ChatStateProvider = ({ children }: { children: ReactNode }): JSX.El
   const [sessionId, setSessionId] = useState<string | undefined>(undefined);
   const [items, setItems] = useState<ChatItem[]>([]);
   const [streaming, setStreaming] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState<string | undefined>(undefined);
 
   // Stable refs for setters so the actions object doesn't change identity.
   const setItemsRef = useRef(setItems);
   setItemsRef.current = setItems;
 
   const reset = useCallback(
-    (next: { sessionId: string | undefined; items: ChatItem[] }) => {
+    (next: {
+      sessionId: string | undefined;
+      items: ChatItem[];
+      pendingSubmit?: string;
+    }) => {
       setSessionId(next.sessionId);
       setItems(next.items);
       setStreaming(false);
+      setPendingSubmit(next.pendingSubmit);
     },
     [],
   );
@@ -71,14 +89,24 @@ export const ChatStateProvider = ({ children }: { children: ReactNode }): JSX.El
   const update = useCallback((fn: (items: ChatItem[]) => ChatItem[]) => {
     setItemsRef.current((prev) => fn(prev));
   }, []);
+  const clearPendingSubmit = useCallback(() => {
+    setPendingSubmit(undefined);
+  }, []);
 
   const state = useMemo<ChatState>(
-    () => ({ sessionId, items, streaming }),
-    [sessionId, items, streaming],
+    () => ({ sessionId, items, streaming, pendingSubmit }),
+    [sessionId, items, streaming, pendingSubmit],
   );
   const actions = useMemo<ChatActions>(
-    () => ({ reset, append, update, setSessionId, setStreaming }),
-    [reset, append, update],
+    () => ({
+      reset,
+      append,
+      update,
+      setSessionId,
+      setStreaming,
+      clearPendingSubmit,
+    }),
+    [reset, append, update, clearPendingSubmit],
   );
 
   return (

@@ -45,8 +45,15 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
   const setAgentState = useSetAgentState();
   const navigate = useNavigate();
   const profileName = useProfileName();
-  const { items, streaming, sessionId: ctxSessionId } = useChatState();
-  const { reset, append, update, setSessionId, setStreaming } = useChatActions();
+  const { items, streaming, sessionId: ctxSessionId, pendingSubmit } = useChatState();
+  const {
+    reset,
+    append,
+    update,
+    setSessionId,
+    setStreaming,
+    clearPendingSubmit,
+  } = useChatActions();
   const [historyOpen, setHistoryOpen] = useState(false);
   const greeting = useMemo(() => getGreeting(profileName ?? undefined), [profileName]);
   // AbortController for the active SSE stream. Replaced each submission.
@@ -245,6 +252,20 @@ export const ChatView = ({ sessionId, initialMessages }: Props): JSX.Element => 
     },
     [streaming, ctxSessionId, append, update, setSessionId, setStreaming, setAgentState],
   );
+
+  // Auto-submit a queued seed (e.g. from Insight "Discuss"). A ref guards
+  // against re-entry — clearPendingSubmit is an async setState, so without
+  // this guard React 18 strict-mode double-invoke (or any re-render that
+  // re-runs the effect before the state flushes) would submit twice.
+  const submittedSeedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pendingSubmit || streaming) return;
+    if (submittedSeedRef.current === pendingSubmit) return;
+    submittedSeedRef.current = pendingSubmit;
+    const text = pendingSubmit;
+    clearPendingSubmit();
+    void handleSubmit(text);
+  }, [pendingSubmit, streaming, clearPendingSubmit, handleSubmit]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">

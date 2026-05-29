@@ -94,20 +94,17 @@ export function InsightCard({ insight }: { insight: InsightRow }): JSX.Element {
   const isSnoozed = !!(insight.snoozedUntil && insight.snoozedUntil > Date.now());
 
   const handleDiscuss = (): void => {
-    // Pre-seed a fresh chat session with the insight context.
+    // Queue the insight context as a pending user submission so ChatView
+    // actually sends it to the backend on mount. Previously this was placed
+    // into items as a fake user message, which only existed client-side —
+    // the agent never saw it and the user's reply landed without context.
     const seed = `Let's discuss this insight: **${insight.topic}**\n\n${insight.body}${
       insight.rationale ? `\n\n_${insight.rationale}_` : ""
     }`;
     reset({
       sessionId: undefined,
-      items: [
-        {
-          kind: "message",
-          id: `seed-${insight.id}`,
-          role: "user",
-          content: seed,
-        },
-      ],
+      items: [],
+      pendingSubmit: seed,
     });
     void navigate({ to: "/" });
   };
