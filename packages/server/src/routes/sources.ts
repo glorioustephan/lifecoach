@@ -159,7 +159,24 @@ export const sourceRoutes = (lc: Lifecoach) => {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       recordMonarchError(lc.storage, message);
-      return c.json({ error: message }, 500);
+      // Classify so the client can show a useful message + decide whether
+      // to retry on its own. The `code` field on LifecoachError surfaces
+      // upstream taxonomy (MONARCH_TRANSIENT / MONARCH_NOT_AUTHENTICATED /
+      // MONARCH_*_FAILED) — see packages/core/src/integrations/monarch/client.ts.
+      const code =
+        err instanceof Error && "code" in err && typeof err.code === "string"
+          ? err.code
+          : undefined;
+      if (code === "MONARCH_TRANSIENT") {
+        // Monarch backend hiccup — already retried 3× inside the client;
+        // 503 + Retry-After tells the UI to ask the user to retry shortly.
+        c.header("Retry-After", "30");
+        return c.json({ error: message, code, retryable: true }, 503);
+      }
+      if (code === "MONARCH_NOT_AUTHENTICATED") {
+        return c.json({ error: message, code, retryable: false }, 401);
+      }
+      return c.json({ error: message, code, retryable: false }, 500);
     }
   });
 

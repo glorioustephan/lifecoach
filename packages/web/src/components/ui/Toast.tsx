@@ -138,7 +138,7 @@ export const Toaster = (): JSX.Element => {
       ))}
       <RadixToast.Viewport
         className={cn(
-          "pointer-events-none fixed z-[100] flex max-h-screen w-full flex-col-reverse gap-2 p-4 outline-none",
+          "pointer-events-none fixed z-[100] flex max-h-screen w-full flex-col-reverse gap-2 p-4 outline-none backdrop-blur-xs",
           "top-4 sm:top-auto sm:bottom-4 sm:right-4 sm:max-w-sm",
           "pt-[max(env(safe-area-inset-top),1rem)] sm:pt-0 sm:pb-[max(env(safe-area-inset-bottom),1rem)]",
         )}

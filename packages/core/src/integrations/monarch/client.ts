@@ -8,6 +8,47 @@ import {
 } from "monarch-money-ts";
 import type { AuthProvider, GetTransactionsOptions } from "monarch-money-ts";
 import { LifecoachError } from "../../util/errors.js";
+import { withRetry } from "../../util/retry.js";
+
+/**
+ * Monarch's GraphQL backend periodically returns the generic Python-shaped
+ * error `Something went wrong while processing: None on request_id: None`.
+ * The community-maintained `monarchmoney` Python lib documents this as
+ * transient — most retries within ~5s succeed. We pattern-match the string
+ * here so we can retry these without retrying genuine errors (auth, schema).
+ */
+const MONARCH_GENERIC_TRANSIENT = /something went wrong while processing/i;
+
+const isMonarchTransient = (err: unknown): boolean => {
+  if (!err) return false;
+  const message =
+    err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  if (MONARCH_GENERIC_TRANSIENT.test(message)) return true;
+  // Standard transient HTTP shapes (429, 5xx, socket hang up, timeout) —
+  // re-use the existing helper from util/retry. Imported lazily to avoid a
+  // cycle when the retry module evolves.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  return false;
+};
+
+/**
+ * Wrap a Monarch GraphQL call with a short retry loop sized for their
+ * backend's flaky behavior. 3 attempts, base 800ms, capped 5s — typical
+ * recovery for the transient generic error.
+ */
+const withMonarchRetry = <T>(op: () => Promise<T>): Promise<T> =>
+  withRetry(op, {
+    maxAttempts: 3,
+    baseDelayMs: 800,
+    maxDelayMs: 5_000,
+    isRetryable: isMonarchTransient,
+    onRetry: (attempt, delayMs, err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[monarch] transient backend error (attempt ${attempt}); retrying in ${delayMs}ms — ${message}`,
+      );
+    },
+  });
 
 // The library's typed API methods (getAccounts/getTransactions/getPortfolio)
 // validate responses against STRICT zod schemas that reject null fields Monarch
@@ -412,17 +453,17 @@ export class MonarchClient {
   async listAccounts(): Promise<MonarchAccount[]> {
     const { auth, graphql } = this.ensureAuth();
     try {
-      const response = await graphql.request(
-        GET_ACCOUNTS_QUERY,
-        auth,
-        looseAccountsResponse,
-        { filters: {} },
+      const response = await withMonarchRetry(() =>
+        graphql.request(GET_ACCOUNTS_QUERY, auth, looseAccountsResponse, { filters: {} }),
       );
       return response.accounts.map(mapMonarchAccount);
     } catch (err) {
       throw new LifecoachError(
         `Failed to list Monarch accounts: ${err instanceof Error ? err.message : String(err)}`,
-        "MONARCH_ACCOUNTS_FAILED",
+        // Tag the underlying transient signal so the route handler can map
+        // it to an appropriate HTTP status (503 + Retry-After) instead of
+        // a generic 500.
+        isMonarchTransient(err) ? "MONARCH_TRANSIENT" : "MONARCH_ACCOUNTS_FAILED",
       );
     }
   }
@@ -430,17 +471,19 @@ export class MonarchClient {
   async listTransactions(options?: Partial<GetTransactionsOptions>): Promise<MonarchTransaction[]> {
     const { auth, graphql } = this.ensureAuth();
     try {
-      const response = await graphql.request(GET_TRANSACTIONS_QUERY, auth, looseTransactionsResponse, {
-        offset: options?.offset,
-        limit: options?.limit,
-        orderBy: options?.orderBy,
-        filters: options?.filters ?? {},
-      });
+      const response = await withMonarchRetry(() =>
+        graphql.request(GET_TRANSACTIONS_QUERY, auth, looseTransactionsResponse, {
+          offset: options?.offset,
+          limit: options?.limit,
+          orderBy: options?.orderBy,
+          filters: options?.filters ?? {},
+        }),
+      );
       return response.allTransactions.results.map(mapMonarchTransaction);
     } catch (err) {
       throw new LifecoachError(
         `Failed to list Monarch transactions: ${err instanceof Error ? err.message : String(err)}`,
-        "MONARCH_TRANSACTIONS_FAILED",
+        isMonarchTransient(err) ? "MONARCH_TRANSIENT" : "MONARCH_TRANSACTIONS_FAILED",
       );
     }
   }
@@ -462,14 +505,16 @@ export class MonarchClient {
   async getHoldings(): Promise<MonarchHolding[]> {
     const { auth, graphql } = this.ensureAuth();
     try {
-      const response = await graphql.request(GET_PORTFOLIO_QUERY, auth, loosePortfolioResponse, {
-        portfolioInput: {},
-      });
+      const response = await withMonarchRetry(() =>
+        graphql.request(GET_PORTFOLIO_QUERY, auth, loosePortfolioResponse, {
+          portfolioInput: {},
+        }),
+      );
       return (response.portfolio?.aggregateHoldings?.edges ?? []).map(mapMonarchHolding);
     } catch (err) {
       throw new LifecoachError(
         `Failed to get Monarch holdings: ${err instanceof Error ? err.message : String(err)}`,
-        "MONARCH_HOLDINGS_FAILED",
+        isMonarchTransient(err) ? "MONARCH_TRANSIENT" : "MONARCH_HOLDINGS_FAILED",
       );
     }
   }

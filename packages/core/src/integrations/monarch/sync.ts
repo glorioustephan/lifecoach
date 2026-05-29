@@ -22,7 +22,11 @@ export interface MonarchSyncResult {
 
 /** Page size for transaction pagination. Monarch's default is small (~25-30); */
 /** we page until a short result so a 90-day sweep returns everything.        */
-const TRANSACTIONS_PAGE_SIZE = 200;
+// Monarch's GraphQL backend chokes on pages of 200 for users with many
+// accounts/transactions — symptom is the generic "Something went wrong while
+// processing" error. The monarchmoney Python community has converged on 100
+// as the documented safe limit. Drop further if errors persist.
+const TRANSACTIONS_PAGE_SIZE = 100;
 
 /**
  * syncMonarch: Three-phase idempotent sync from Monarch to Life Coach storage.
