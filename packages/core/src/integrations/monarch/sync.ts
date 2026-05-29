@@ -260,8 +260,15 @@ export async function syncMonarch(
   } catch (error) {
     result.completedAt = now();
     result.success = false;
+    // Preserve the upstream LifecoachError code (e.g. MONARCH_TRANSIENT,
+    // MONARCH_NOT_AUTHENTICATED) so the route handler can map the failure
+    // to the right HTTP status + retryable flag instead of defaulting to a
+    // generic 500.
+    const code =
+      error instanceof LifecoachError ? error.code : undefined;
     throw new LifecoachError(
       `Monarch sync failed: ${error instanceof Error ? error.message : String(error)}`,
+      code,
     );
   }
 }
