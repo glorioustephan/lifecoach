@@ -184,6 +184,16 @@ export class HabitRepository {
       .run(ts, id);
   }
 
+  /**
+   * Hard-delete a habit. `habit_completions` cascade via the FK; this method
+   * is destructive and intended for cases where archive isn't enough (test
+   * data, accidental creates, etc.). Use `archive()` for routine "I'm done
+   * with this for now" behavior to preserve history.
+   */
+  delete(id: string): void {
+    this.db.prepare("DELETE FROM habits WHERE id = ?").run(id);
+  }
+
   /** Stamp the `last_completed_at` column — called after logging a completion. */
   setLastCompleted(habitId: string, ts: number): void {
     const nowTs = now();

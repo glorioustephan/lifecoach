@@ -100,6 +100,19 @@ function OverviewTab({
     },
   });
 
+  const deleteMut = useMutation({
+    mutationFn: () => api.deleteHabit(habit.id),
+    onSuccess: () => {
+      toast.success("Deleted", habit.title);
+      void qc.invalidateQueries({ queryKey: ["habits"] });
+      void qc.invalidateQueries({ queryKey: ["habits", "month-batch"] });
+      onClose();
+    },
+    onError: (err: unknown) => {
+      toast.error("Couldn't delete", err instanceof Error ? err.message : String(err));
+    },
+  });
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || saveMut.isPending) return;
@@ -184,22 +197,42 @@ function OverviewTab({
         />
       </div>
 
-      {/* Actions */}
+      {/* Actions — Archive preserves history; Delete is destructive. */}
       <div className="flex items-center justify-between pt-2">
-        <Button
-          type="button"
-          variant="destructive"
-          size="sm"
-          onClick={() => {
-            if (window.confirm("Archive this habit? You can unarchive it from the All tab.")) {
-              archiveMut.mutate();
-            }
-          }}
-          disabled={archiveMut.isPending}
-          loading={archiveMut.isPending}
-        >
-          Archive
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              if (window.confirm("Archive this habit? You can unarchive it from the All tab.")) {
+                archiveMut.mutate();
+              }
+            }}
+            disabled={archiveMut.isPending || deleteMut.isPending}
+            loading={archiveMut.isPending}
+          >
+            Archive
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => {
+              if (
+                window.confirm(
+                  `Delete "${habit.title}" permanently? This removes the habit and every completion log for it. Cannot be undone.`,
+                )
+              ) {
+                deleteMut.mutate();
+              }
+            }}
+            disabled={archiveMut.isPending || deleteMut.isPending}
+            loading={deleteMut.isPending}
+          >
+            Delete
+          </Button>
+        </div>
         <div className="flex gap-2">
           <Button
             type="button"

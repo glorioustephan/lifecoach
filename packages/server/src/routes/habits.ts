@@ -200,11 +200,21 @@ export const habitRoutes = (lc: Lifecoach): Hono => {
     return c.json({ year, month, completions: Object.fromEntries(days) });
   });
 
-  // DELETE /api/habits/:id — soft archive
+  // DELETE /api/habits/:id — soft archive (preserves completion history).
   app.delete("/:id", (c) => {
     const id = c.req.param("id");
     if (!lc.storage.habits.get(id)) return c.json({ error: "not_found" }, 404);
     lc.storage.habits.archive(id);
+    return c.json({ ok: true });
+  });
+
+  // POST /api/habits/:id/hard-delete — destructive. Removes the row and
+  // cascades habit_completions via the FK. Distinct verb so it can't fire
+  // by accident on a casual DELETE click.
+  app.post("/:id/hard-delete", (c) => {
+    const id = c.req.param("id");
+    if (!lc.storage.habits.get(id)) return c.json({ error: "not_found" }, 404);
+    lc.storage.habits.delete(id);
     return c.json({ ok: true });
   });
 

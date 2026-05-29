@@ -413,6 +413,10 @@ export const api = {
     postJson<{ goal: GoalRow }>(`/api/goals/${encodeURIComponent(id)}/archive`, {}),
   unarchiveGoal: (id: string) =>
     postJson<{ goal: GoalRow }>(`/api/goals/${encodeURIComponent(id)}/unarchive`, {}),
+  /** Destructive: removes the goal row + embeddings; cascades milestones,
+   *  signals, evidence. Tasks lose their goal link (FK ON DELETE SET NULL).
+   *  Use only when archive isn't enough (test data, mis-creates). */
+  deleteGoal: (id: string) => del<{ ok: true }>(`/api/goals/${encodeURIComponent(id)}`),
   // Milestones nested under goals
   goalMilestones: (goalId: string) =>
     get<{ milestones: MilestoneRow[] }>(
@@ -870,6 +874,11 @@ export const api = {
 
   archiveHabit: (id: string) =>
     del<{ ok: true }>(`/api/habits/${encodeURIComponent(id)}`),
+
+  /** Destructive: removes the habit row and cascades all completions.
+   *  Use only when archive isn't enough (test data, mis-creates). */
+  deleteHabit: (id: string) =>
+    postJson<{ ok: true }>(`/api/habits/${encodeURIComponent(id)}/hard-delete`, {}),
 
   completeHabit: (id: string, opts: { date?: string; notes?: string } = {}) =>
     postJson<{ completion: HabitCompletionRow }>(

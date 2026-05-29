@@ -2,7 +2,8 @@
  * /habits route — three-tab Habits surface.
  *
  * Today (default) — HabitCard list grouped by parent goal.
- * Calendar        — HabitGrid (Arch•a•Track) with optimistic cell-toggle.
+ * Calendar        — stacked per-habit HabitCalendars; full-width month grids
+ *                    that scale vertically instead of forcing horizontal scroll.
  * All             — full list including paused/archived with status filter.
  *
  * Pattern: mirrors memory.tsx three-view container (Wave 5c).
@@ -23,7 +24,7 @@ import { toast } from "~/lib/use-toast";
 import { api, type HabitRow } from "~/lib/api";
 import { dateKey, computeStreak, isCadenceDueOn } from "~/lib/habit";
 import { HabitCard } from "~/components/habits/HabitCard";
-import { HabitGrid } from "~/components/habits/HabitGrid";
+import { HabitCalendar } from "~/components/habits/HabitCalendar";
 import { HabitDetailSheet } from "~/components/habits/HabitDetailSheet";
 import { MonthNav } from "~/components/habits/MonthNav";
 import { NewHabitDialog } from "~/components/habits/NewHabitDialog";
@@ -372,15 +373,52 @@ function CalendarTab({
         </p>
       )}
 
+      {/*
+       * Per-habit stacked calendars, not the multi-habit grid.
+       *
+       * The grid layout (rows × month-days) forces a horizontal scroll that
+       * gets unusable as habit count grows. Stacked single-habit calendars
+       * scale vertically — each habit gets a full-width month grid, easy to
+       * scan top-to-bottom. ADHD-1: every habit fully visible at a glance,
+       * no chasing a sticky column. ADHD-10: same cell tap semantics as the
+       * Today view.
+       *
+       * Tap a habit's title to open its detail sheet for the History tab.
+       */}
       {!isLoading && habits.length > 0 && (
-        <HabitGrid
-          habits={habits}
-          year={year}
-          month={month}
-          byHabit={byHabit}
-          onCellClick={handleCellClick}
-          todayKey={today}
-        />
+        <div className="space-y-6">
+          {habits.map((habit) => {
+            const completions = byHabit.get(habit.id) ?? new Map<string, number>();
+            return (
+              <section
+                key={habit.id}
+                className="rounded-md border border-border-subtle bg-surface p-4"
+              >
+                <button
+                  type="button"
+                  onClick={() => _onOpenDetail(habit)}
+                  className="mb-3 flex w-full items-baseline justify-between gap-3 text-left"
+                  aria-label={`Open details for ${habit.title}`}
+                >
+                  <h3 className="truncate text-sm font-medium text-fg">
+                    {habit.title}
+                  </h3>
+                  <span className="shrink-0 text-[10px] uppercase tracking-wide text-fg-faint">
+                    {habit.cadence}
+                  </span>
+                </button>
+                <HabitCalendar
+                  year={year}
+                  month={month}
+                  completions={completions}
+                  todayKey={today}
+                  habitTitle={habit.title}
+                  onCellClick={(key) => handleCellClick(habit.id, key)}
+                />
+              </section>
+            );
+          })}
+        </div>
       )}
     </div>
   );

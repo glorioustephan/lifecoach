@@ -91,6 +91,20 @@ export function OverviewTab({
     },
   });
 
+  const deleteMut = useMutation({
+    mutationFn: () => api.deleteGoal(goal.id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["goals"] });
+      void qc.invalidateQueries({ queryKey: ["habits"] }); // linked habits' parentGoalId may have detached
+      void qc.invalidateQueries({ queryKey: ["tasks"] }); // linked tasks' goalId may have detached
+      toast.success("Goal deleted", goal.title);
+      onClose();
+    },
+    onError: (err: unknown) => {
+      toast.error("Delete failed", err instanceof Error ? err.message : String(err));
+    },
+  });
+
   return (
     <>
       <form
@@ -230,14 +244,14 @@ export function OverviewTab({
           </Field>
         )}
 
-        <div className="flex items-center justify-between gap-2 border-t border-border-subtle pt-4">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-subtle pt-4">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
               size="sm"
               type="button"
               onClick={() => archiveMut.mutate()}
-              disabled={archiveMut.isPending}
+              disabled={archiveMut.isPending || deleteMut.isPending}
             >
               Archive
             </Button>
@@ -246,9 +260,27 @@ export function OverviewTab({
               size="sm"
               type="button"
               onClick={() => completeMut.mutate()}
-              disabled={completeMut.isPending}
+              disabled={completeMut.isPending || deleteMut.isPending}
             >
               Mark done
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              type="button"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Delete "${goal.title}" permanently? Milestones, signals, and evidence for this goal will be removed. Linked tasks will be unlinked but not deleted. Cannot be undone.`,
+                  )
+                ) {
+                  deleteMut.mutate();
+                }
+              }}
+              disabled={deleteMut.isPending}
+              loading={deleteMut.isPending}
+            >
+              Delete
             </Button>
           </div>
           <Button
