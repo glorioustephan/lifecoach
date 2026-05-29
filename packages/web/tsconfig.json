@@ -15,7 +15,7 @@
     "outDir": "dist",
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "types": ["vite/client"],
+    "types": ["vite/client", "@testing-library/jest-dom"],
     "paths": {
       "~/*": ["./src/*"],
       "@/*": ["./src/*"]
@@ -23,6 +23,6 @@
     "exactOptionalPropertyTypes": false,
     "verbatimModuleSyntax": false
   },
-  "include": ["src/**/*", "vite.config.ts"],
+  "include": ["src/**/*", "vite.config.ts", "vitest.config.ts"],
   "exclude": ["src/stories/**/*"]
 }
