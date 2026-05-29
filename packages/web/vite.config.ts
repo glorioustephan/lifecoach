@@ -24,9 +24,13 @@ export default defineConfig({
     port: 3718,
     strictPort: true,
     proxy: {
-      // Forward API + health to the Hono server during dev.
-      "/api": "http://localhost:3717",
-      "/health": "http://localhost:3717",
+      // Forward API + health to the Hono server during dev. Use 127.0.0.1
+      // explicitly — `localhost` resolves to IPv6 (::1) first on newer Node,
+      // and the Hono server only binds IPv4, producing noisy
+      // `AggregateError [ECONNREFUSED]` logs even though the IPv4 retry
+      // succeeds. Pinning to 127.0.0.1 skips the IPv6 attempt entirely.
+      "/api": "http://127.0.0.1:3717",
+      "/health": "http://127.0.0.1:3717",
     },
   },
   build: {
