@@ -100,14 +100,23 @@ export const HabitCell = ({
           // ADHD-1 + ADHD-7: done uses both color (bg-success) AND shape (filled+check).
           variant === "done" && "bg-success-500/80",
           variant === "today-done" && "bg-success-500/80 ring-2 ring-accent ring-offset-2 ring-offset-bg",
-          variant === "empty-past" && "border border-border-subtle hover:border-border hover:bg-surface-elevated",
+          // ADHD-7: empty-past circles sit on bg-surface inside the calendar
+          // card — `border-border-subtle` was effectively same-on-same and
+          // failed WCAG 3:1 contrast for non-text UI. Stepping up to
+          // `border-border` (higher contrast) and adding a faint inner fill
+          // so the circle reads as a *shape* without competing with the
+          // filled done state.
+          variant === "empty-past" &&
+            "border border-border bg-surface-elevated/60 hover:border-fg-faint hover:bg-surface-elevated",
           variant === "today-empty" && [
-            "border border-border-subtle",
+            "border border-border bg-surface-elevated/60",
             "ring-2 ring-accent ring-offset-2 ring-offset-bg",
             "hover:bg-surface-elevated",
           ],
-          variant === "future" && "opacity-40",
-          variant === "disabled" && "bg-surface-elevated opacity-30",
+          // Future days are visible (faint dotted outline) so the calendar
+          // grid reads as a complete shape — but clearly non-actionable.
+          variant === "future" && "border border-dashed border-border-subtle opacity-60",
+          variant === "disabled" && "border border-border-subtle bg-surface-elevated opacity-50",
         )}
       >
         {/* ADHD-1: Check glyph is the primary done signal (not just a color). */}
