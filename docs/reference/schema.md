@@ -5,7 +5,7 @@ audience: [agents, humans]
 owner: memory-systems-engineer
 status: ready
 created: 2026-05-28
-updated: 2026-05-28
+updated: 2026-05-29
 source: authored
 code_paths:
   - packages/core/src/storage/migrations/**
@@ -203,6 +203,8 @@ Inbox-style insights surfaced to the user. Not to be confused with `financial_in
 | `snoozed_until` | INTEGER | Nullable. Added migration `004_insights_extras.sql`. Hidden until this timestamp passes. |
 | `priority` | INTEGER | Default `1`. Added migration `004_insights_extras.sql`. 1 = normal, 2 = worth noticing, 3 = needs attention. |
 | `evidence_refs` | TEXT | JSON array. Default `'[]'`. Added migration `009_engine_enhancements.sql`. |
+| `acted_entity_type` | TEXT | Nullable. Added migration `1780051448_add_insight_acted_entity.sql`. `'goal' \| 'task' \| 'habit'` — what was created when acting on the card via the create-from-card flow. |
+| `acted_entity_id` | TEXT | Nullable. Added migration `1780051448_add_insight_acted_entity.sql`. FK-by-convention to the created entity. Both columns NULL for insights acted without a concrete entity, or dismissed. |
 
 **Indexes:**
 - `idx_insights_topic` on `(topic)`

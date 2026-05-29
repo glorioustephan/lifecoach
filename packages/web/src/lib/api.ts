@@ -185,7 +185,22 @@ export interface InsightRow {
   actedOnAt?: number | null;
   dismissedAt?: number | null;
   snoozedUntil?: number | null;
+  /** Provenance when the card was acted by creating an entity from it. */
+  actedEntityType?: "goal" | "task" | "habit" | null;
+  actedEntityId?: string | null;
 }
+
+/** Request body for creating an entity directly from an inbox card. */
+export type CreateEntityFromInsightBody =
+  | { type: "goal"; title: string; kind?: GoalKind; outcome?: string }
+  | { type: "habit"; title: string; cadence: HabitRow["cadence"] }
+  | { type: "task"; title: string; dueAt?: number; notes?: string };
+
+/** Response from POST /api/inbox/:id/create-entity. */
+export type CreateEntityFromInsightResult =
+  | { type: "goal"; entity: GoalRow }
+  | { type: "habit"; entity: HabitRow }
+  | { type: "task"; entity: TaskRow };
 
 // `"all"` is a query-filter sentinel, not a row state, so we widen the
 // canonical schema type rather than redeclare it.
@@ -367,6 +382,15 @@ export const api = {
     postJson<{ ok: true; until: number }>(`/api/inbox/${encodeURIComponent(id)}/snooze`, { until }),
   reactivateInsight: (id: string) =>
     postJson<{ ok: true }>(`/api/inbox/${encodeURIComponent(id)}/reactivate`, {}),
+  /**
+   * Create a goal/habit/task from an inbox card. Server-side this atomically
+   * creates the entity and marks the insight acted with provenance.
+   */
+  createEntityFromInsight: (id: string, body: CreateEntityFromInsightBody) =>
+    postJson<CreateEntityFromInsightResult>(
+      `/api/inbox/${encodeURIComponent(id)}/create-entity`,
+      body,
+    ),
   goals: (status: "active" | "paused" | "done" | "abandoned" | "all" = "active") =>
     get<{ goals: GoalRow[] }>(`/api/goals?status=${encodeURIComponent(status)}`),
   projects: (status: "active" | "paused" | "done" | "abandoned" | "all" = "active") =>

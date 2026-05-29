@@ -12,14 +12,22 @@ import {
   CheckCircle2,
   Clock,
   MessageCircle,
+  Plus,
   XCircle,
 } from "lucide-react";
 import { api, type InsightRow } from "~/lib/api";
 import { Markdown } from "~/components/chat/Markdown";
 import { useChatActions } from "~/components/chat/chat-state";
+import { CreateFromInsightDialog } from "~/components/inbox/CreateFromInsightDialog";
 import { formatRelative } from "~/lib/time";
 import { cn } from "~/lib/cn";
 import { toast } from "~/lib/use-toast";
+
+const ENTITY_LABEL: Record<NonNullable<InsightRow["actedEntityType"]>, string> = {
+  goal: "Created goal",
+  habit: "Created habit",
+  task: "Created task",
+};
 
 export const PRIORITY_LABEL: Record<number, string> = {
   1: "Notice",
@@ -43,6 +51,7 @@ export function InsightCard({ insight }: { insight: InsightRow }): JSX.Element {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { reset } = useChatActions();
+  const [createOpen, setCreateOpen] = useState(false);
 
   // Both the Inbox (queryKey ["inbox", …]) and the Finances page
   // (queryKey ["finances", "insights"]) render insights through this card.
@@ -168,32 +177,76 @@ export function InsightCard({ insight }: { insight: InsightRow }): JSX.Element {
               onClick={handleDiscuss}
               variant="primary"
             />
+            {/* Hidden once this insight has already produced an entity (it stays
+                stamped through a reactivate) so a reactivated card can't spawn a
+                duplicate — the server also enforces this with a 409. */}
+            {!insight.actedEntityId && (
+              <ActionButton
+                icon={<Plus className="size-3.5" strokeWidth={1.75} />}
+                label="Create"
+                onClick={() => setCreateOpen(true)}
+                title="Create a goal, habit, or task from this"
+              />
+            )}
+            {/* Acted vs Dismiss read as distinct gestures: Acted is positive
+                closure (success tone), Dismiss is a soft reject (faint). */}
             <ActionButton
               icon={<CheckCircle2 className="size-3.5" strokeWidth={1.75} />}
               label="Acted"
               onClick={() => act.mutate()}
               pending={act.isPending}
+              tone="success"
+              title="I took action on this"
             />
             <ActionButton
               icon={<XCircle className="size-3.5" strokeWidth={1.75} />}
               label="Dismiss"
               onClick={() => dismiss.mutate()}
               pending={dismiss.isPending}
+              tone="faint"
+              title="Not worth pursuing — hide this"
             />
             <SnoozeMenu onSnooze={(until) => snooze.mutate(until)} pending={snooze.isPending} />
           </>
         ) : (
-          <ActionButton
-            icon={<AlertCircle className="size-3.5" strokeWidth={1.75} />}
-            label="Reactivate"
-            onClick={() => reactivate.mutate()}
-            pending={reactivate.isPending}
-          />
+          <>
+            {insight.actedEntityType && (
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] uppercase tracking-wide",
+                  "bg-success-500/10 text-success-500",
+                )}
+              >
+                {ENTITY_LABEL[insight.actedEntityType]}
+              </span>
+            )}
+            <ActionButton
+              icon={<AlertCircle className="size-3.5" strokeWidth={1.75} />}
+              label="Reactivate"
+              onClick={() => reactivate.mutate()}
+              pending={reactivate.isPending}
+            />
+          </>
         )}
       </footer>
+
+      {/* Mounted only while open: avoids N idle dialog instances across a long
+          inbox list, and re-seeds form state fresh from the insight on each open. */}
+      {createOpen && (
+        <CreateFromInsightDialog
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          insight={insight}
+        />
+      )}
     </li>
   );
 }
+
+const TONE_CLASS: Record<"success" | "faint", string> = {
+  success: "text-success-500 hover:bg-success-500/10",
+  faint: "text-fg-faint hover:bg-surface-elevated/60 hover:text-fg-muted",
+};
 
 const ActionButton = ({
   icon,
@@ -201,22 +254,30 @@ const ActionButton = ({
   onClick,
   pending,
   variant,
+  tone,
+  title,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
   pending?: boolean;
   variant?: "primary";
+  /** Semantic accent distinguishing positive closure (success) from soft reject (faint). */
+  tone?: "success" | "faint";
+  title?: string;
 }): JSX.Element => (
   <button
     type="button"
     onClick={onClick}
     disabled={pending}
+    title={title}
     className={cn(
       "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs transition-colors",
       variant === "primary"
         ? "text-accent hover:bg-accent/10"
-        : "text-fg-muted hover:bg-surface-elevated/60 hover:text-fg",
+        : tone
+          ? TONE_CLASS[tone]
+          : "text-fg-muted hover:bg-surface-elevated/60 hover:text-fg",
       pending && "opacity-60",
     )}
   >

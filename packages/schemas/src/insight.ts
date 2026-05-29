@@ -45,6 +45,14 @@ export const insightSchema = z.object({
   actedOnAt: z.number().int().nullable().optional(),
   dismissedAt: z.number().int().nullable().optional(),
   snoozedUntil: z.number().int().nullable().optional(),
+  /**
+   * Provenance for the "acted" state: when the user creates an entity directly
+   * from the inbox card, these record what was created. NULL for insights acted
+   * on without a concrete entity (or dismissed). See migration
+   * 1780051448_add_insight_acted_entity.
+   */
+  actedEntityType: z.enum(["goal", "task", "habit"]).nullable().optional(),
+  actedEntityId: z.string().nullable().optional(),
 });
 export type Insight = z.infer<typeof insightSchema>;
 
@@ -54,6 +62,8 @@ export const newInsightSchema = insightSchema.omit({
   actedOnAt: true,
   dismissedAt: true,
   snoozedUntil: true,
+  actedEntityType: true,
+  actedEntityId: true,
 });
 export type NewInsight = z.input<typeof newInsightSchema>;
 

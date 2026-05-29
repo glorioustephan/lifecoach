@@ -15,10 +15,12 @@ interface InsightRow {
   acted_on_at: number | null;
   dismissed_at: number | null;
   snoozed_until: number | null;
+  acted_entity_type: string | null;
+  acted_entity_id: string | null;
 }
 
 const FULL =
-  "id, topic, body, rationale, source_fact_ids, evidence_refs, priority, created_at, acted_on_at, dismissed_at, snoozed_until";
+  "id, topic, body, rationale, source_fact_ids, evidence_refs, priority, created_at, acted_on_at, dismissed_at, snoozed_until, acted_entity_type, acted_entity_id";
 
 const rowToInsight = (row: InsightRow): Insight => ({
   id: row.id,
@@ -32,6 +34,8 @@ const rowToInsight = (row: InsightRow): Insight => ({
   actedOnAt: row.acted_on_at,
   dismissedAt: row.dismissed_at,
   snoozedUntil: row.snoozed_until,
+  actedEntityType: (row.acted_entity_type as Insight["actedEntityType"]) ?? null,
+  actedEntityId: row.acted_entity_id,
 });
 
 export interface InsightListFilter {
@@ -110,6 +114,8 @@ export class InsightRepository {
       actedOnAt: null,
       dismissedAt: null,
       snoozedUntil: null,
+      actedEntityType: null,
+      actedEntityId: null,
     };
   }
 
@@ -155,6 +161,19 @@ export class InsightRepository {
 
   markActed(id: string): void {
     this.db.prepare("UPDATE insights SET acted_on_at = ? WHERE id = ?").run(now(), id);
+  }
+
+  /**
+   * Mark an insight acted AND record the entity created from it (provenance).
+   * Used by the create-from-card flow so the closed card can show "Created
+   * {type}" and the Acted state carries concrete meaning vs. Dismissed.
+   */
+  markActedWithEntity(id: string, entityType: "goal" | "task" | "habit", entityId: string): void {
+    this.db
+      .prepare(
+        "UPDATE insights SET acted_on_at = ?, acted_entity_type = ?, acted_entity_id = ? WHERE id = ?",
+      )
+      .run(now(), entityType, entityId, id);
   }
 
   markDismissed(id: string): void {
@@ -233,7 +252,14 @@ export class InsightRepository {
     return row !== undefined;
   }
 
-  /** Clear acted/dismissed/snoozed flags. Useful for undo. */
+  /**
+   * Clear acted/dismissed/snoozed flags so the card returns to the active list.
+   * Provenance (acted_entity_type/id) is intentionally PRESERVED: the goal/habit/
+   * task created from this insight still exists, so the record that it spawned
+   * one must outlive an undo. This is what lets the create-entity endpoint reject
+   * a second create (no duplicate / no orphan) and keeps the UI's Create
+   * affordance hidden on a reactivated card that already produced an entity.
+   */
   reactivate(id: string): void {
     this.db
       .prepare(
