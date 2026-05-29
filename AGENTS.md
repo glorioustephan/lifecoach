@@ -32,6 +32,8 @@ lifecoach/
 **Read `docs/ui-design-system.md` and `docs/prompt-kit-parity.md` before
 creating any UI.** These are the single source of truth.
 
+- `docs/ui-design-principles.md` — ADHD-aware UX constraints; cite by principle number in code comments.
+
 ### Rule 1 — prompt-kit is the base layer
 
 For any chat/AI/agent UI surface (messages, composer, loaders, tool calls,

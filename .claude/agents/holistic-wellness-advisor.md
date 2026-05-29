@@ -169,3 +169,6 @@ Named downstream consumers:
 - `docs/briefs/wellness/` — existing wellness briefs
 - `docs/taxonomies/wellness/dosha.md` — dosha controlled vocabulary
 - `docs/architecture/data-flow.md` — how wellness data enters the system
+- `docs/ui-design-principles.md` — ADHD-aware UX constraints (the 10 principles). ADHD-aware UX
+  is non-negotiable for any lifecoach surface — see this document for the codified principles.
+  Cite by principle number when reasoning about a design choice in a brief.

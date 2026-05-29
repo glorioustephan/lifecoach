@@ -8,7 +8,8 @@ Supplements root `CLAUDE.md` + `AGENTS.md` with web-specific detail.
 ## Design system enforcement
 
 Every `.tsx` file you create or edit in this package must comply with
-`docs/ui-design-system.md`. Summary of non-negotiables:
+`docs/ui-design-system.md`. Behavioral constraints (ADHD-aware UX) live in
+`docs/ui-design-principles.md` — cite by principle number in comments. Summary of non-negotiables:
 
 1. **prompt-kit base layer** — check §1 catalog before writing any chat primitive.
 2. **Semantic tokens only** — never `bg-zinc-*`, `text-gray-*`, `dark:text-*`.
