@@ -17,6 +17,8 @@ interface HabitCardProps {
   streak: number;
   lastCompletedKey: string | null;
   todayKey: string;
+  /** Optional: actual title of the parent goal, when resolved by the caller. */
+  parentGoalTitle?: string | undefined;
   onToggle: () => void;
   onOpenDetail: () => void;
 }
@@ -27,6 +29,7 @@ export const HabitCard = ({
   streak,
   lastCompletedKey,
   todayKey,
+  parentGoalTitle,
   onToggle,
   onOpenDetail,
 }: HabitCardProps): JSX.Element => {
@@ -59,7 +62,9 @@ export const HabitCard = ({
             todayKey={todayKey}
           />
           {habit.parentGoalId && (
-            <span className="text-[10px] text-fg-muted">linked to goal</span>
+            <span className="truncate text-[10px] text-fg-muted">
+              {parentGoalTitle ? `→ ${parentGoalTitle}` : "linked to goal"}
+            </span>
           )}
         </div>
       </button>

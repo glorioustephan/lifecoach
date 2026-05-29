@@ -5,15 +5,17 @@
  *
  * ADHD-3: Visible next action — each HabitCard shows today's cell.
  */
-import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link2, Plus } from "lucide-react";
 import { Button } from "~/components/ui/Button";
+import { compactFormControlClass } from "~/components/ui/formStyles";
 import { api, type GoalRow, type HabitRow } from "~/lib/api";
 import { dateKey, computeStreak, isCadenceDueOn } from "~/lib/habit";
 import { HabitCard } from "~/components/habits/HabitCard";
 import { HabitDetailSheet } from "~/components/habits/HabitDetailSheet";
 import { NewHabitDialog } from "~/components/habits/NewHabitDialog";
+import { toast } from "~/lib/use-toast";
 
 export function GoalHabitsTab({ goal }: { goal: GoalRow }): JSX.Element {
   const qc = useQueryClient();
@@ -60,10 +62,67 @@ export function GoalHabitsTab({ goal }: { goal: GoalRow }): JSX.Element {
     void qc.invalidateQueries({ queryKey: ["habits"] });
   };
 
+  // "Link existing habit" — fetch all active habits and offer those that
+  // aren't already linked to a goal as a single-select.
+  const { data: allHabitsData } = useQuery({
+    queryKey: ["habits", "active"],
+    queryFn: () => api.habits({ status: "active" }),
+    staleTime: 30_000,
+  });
+  const linkableHabits = useMemo(
+    () => (allHabitsData?.habits ?? []).filter((h) => !h.parentGoalId),
+    [allHabitsData],
+  );
+  const [pickedHabitId, setPickedHabitId] = useState("");
+  const linkMut = useMutation({
+    mutationFn: (habitId: string) =>
+      api.updateHabit(habitId, { parentGoalId: goal.id }),
+    onSuccess: (_data, habitId) => {
+      const linked = linkableHabits.find((h) => h.id === habitId);
+      toast.success("Habit linked", linked?.title);
+      setPickedHabitId("");
+      void qc.invalidateQueries({ queryKey: ["habits"] });
+    },
+    onError: (err: unknown) => {
+      toast.error("Couldn't link", err instanceof Error ? err.message : String(err));
+    },
+  });
+
   return (
     <div className="space-y-4 p-4 md:p-6">
-      {/* Create new habit linked to this goal */}
-      <div className="flex justify-end">
+      {/* Top actions row: link existing OR create new. */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {linkableHabits.length > 0 && (
+          <>
+            <label htmlFor="link-habit-picker" className="sr-only">
+              Link an existing habit to this goal
+            </label>
+            <select
+              id="link-habit-picker"
+              value={pickedHabitId}
+              onChange={(e) => setPickedHabitId(e.target.value)}
+              className={compactFormControlClass("max-w-[14rem]")}
+              disabled={linkMut.isPending}
+            >
+              <option value="">Link existing habit…</option>
+              {linkableHabits.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.title}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!pickedHabitId || linkMut.isPending}
+              loading={linkMut.isPending}
+              onClick={() => linkMut.mutate(pickedHabitId)}
+            >
+              <Link2 className="size-3.5" strokeWidth={1.75} />
+              Link
+            </Button>
+          </>
+        )}
         <Button
           variant="secondary"
           size="sm"
@@ -84,8 +143,8 @@ export function GoalHabitsTab({ goal }: { goal: GoalRow }): JSX.Element {
 
       {!isLoading && habits.length === 0 && (
         <p className="text-xs text-fg-faint">
-          No habits linked to this goal yet. Create one above, or link an existing habit
-          from its detail sheet.
+          No habits linked to this goal yet. Create one above, or pick an
+          existing unlinked habit from the dropdown.
         </p>
       )}
 

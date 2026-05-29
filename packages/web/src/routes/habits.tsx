@@ -117,6 +117,19 @@ function TodayTab({ today, onOpenDetail, onNewHabit }: TodayTabProps): JSX.Eleme
     staleTime: 30_000,
   });
 
+  // Resolve parent goal IDs to titles for group headers. Active goals are
+  // already prefetched by /goals; we hit the cache when available.
+  const { data: goalsData } = useQuery({
+    queryKey: ["goals", "active"],
+    queryFn: () => api.goals("active"),
+    staleTime: 30_000,
+  });
+  const goalTitleById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const g of goalsData?.goals ?? []) m.set(g.id, g.title);
+    return m;
+  }, [goalsData]);
+
   const habits = data?.habits ?? [];
   const todayDate = new Date(today + "T00:00:00");
 
@@ -213,9 +226,12 @@ function TodayTab({ today, onOpenDetail, onNewHabit }: TodayTabProps): JSX.Eleme
     <div className="space-y-6">
       {Array.from(groups.entries()).map(([goalId, groupHabits]) => (
         <section key={goalId ?? "__standalone"}>
-          {/* Group header */}
+          {/* Group header — show the actual goal title; fall back to a
+              short id only if the goal hasn't loaded yet (cache miss). */}
           <h2 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-fg-faint">
-            {goalId ? `Goal: ${goalId.slice(0, 8)}…` : "Independent habits"}
+            {goalId
+              ? (goalTitleById.get(goalId) ?? `Goal: ${goalId.slice(0, 8)}…`)
+              : "Independent habits"}
           </h2>
           <div className="space-y-2">
             {groupHabits.map((habit) => {
@@ -238,6 +254,11 @@ function TodayTab({ today, onOpenDetail, onNewHabit }: TodayTabProps): JSX.Eleme
                   streak={current}
                   lastCompletedKey={lastCompletedKey}
                   todayKey={today}
+                  parentGoalTitle={
+                    habit.parentGoalId
+                      ? goalTitleById.get(habit.parentGoalId)
+                      : undefined
+                  }
                   onToggle={() => completeMut.mutate({ habitId: habit.id })}
                   onOpenDetail={() => onOpenDetail(habit)}
                 />
