@@ -12,16 +12,14 @@
  *  ADHD-6: Quick reversal — success toast includes a "View" CTA.
  *  ADHD-9: One required field — title is the only required input; kind/cadence
  *          default so the CTA is reachable immediately.
- *  ADHD-10: Predictable surfaces — mirrors NewHabitDialog's structure exactly.
  */
 import { useState } from "react";
-import * as Dialog from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "~/components/ui/Button";
+import { ModalShell } from "~/components/ui/ModalShell";
+import { PillGroup, type PillOption } from "~/components/ui/PillGroup";
 import { formControlClass } from "~/components/ui/formStyles";
-import { cn } from "~/lib/cn";
 import { toast } from "~/lib/use-toast";
 import {
   api,
@@ -33,19 +31,23 @@ import {
 
 type EntityType = "goal" | "habit" | "task";
 
-const TYPE_OPTIONS: Array<{ value: EntityType; label: string }> = [
+const TYPE_OPTIONS: ReadonlyArray<PillOption<EntityType>> = [
   { value: "goal", label: "Goal" },
   { value: "habit", label: "Habit" },
   { value: "task", label: "Task" },
 ];
 
-const GOAL_KINDS: Array<{ value: GoalKind; label: string }> = [
+const GOAL_KINDS: ReadonlyArray<PillOption<GoalKind>> = [
   { value: "outcome", label: "Outcome" },
   { value: "process", label: "Process" },
   { value: "identity", label: "Identity" },
 ];
 
-const CADENCES: Array<HabitRow["cadence"]> = ["daily", "weekly", "monthly"];
+const CADENCE_OPTIONS: ReadonlyArray<PillOption<HabitRow["cadence"]>> = [
+  { value: "daily", label: "daily" },
+  { value: "weekly", label: "weekly" },
+  { value: "monthly", label: "monthly" },
+];
 
 const ROUTE_BY_TYPE: Record<EntityType, "/goals" | "/habits" | "/tasks"> = {
   goal: "/goals",
@@ -131,172 +133,70 @@ export const CreateFromInsightDialog = ({
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={(o) => !o && handleClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-bg/80 backdrop-blur-[1px]" />
-        <Dialog.Content
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 outline-none"
-          onClick={handleClose}
-        >
-          <form
-            onSubmit={handleSubmit}
-            onClick={(e) => e.stopPropagation()}
-            className={cn(
-              "flex w-full max-w-md flex-col rounded-xl",
-              "border border-border bg-surface shadow-2xl",
-            )}
+    <ModalShell
+      open={open}
+      onClose={handleClose}
+      title="Create from this insight"
+      description="Create a goal, habit, or task seeded from this inbox insight. The insight is marked acted once the item is created."
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={handleClose}
+            disabled={createMut.isPending}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-border px-5 py-4">
-              <Dialog.Title className="text-base font-semibold text-fg">
-                Create from this insight
-              </Dialog.Title>
-              <Dialog.Description className="sr-only">
-                Create a goal, habit, or task seeded from this inbox insight. The
-                insight is marked acted once the item is created.
-              </Dialog.Description>
-              <button
-                type="button"
-                onClick={handleClose}
-                aria-label="Close"
-                className="flex size-7 items-center justify-center rounded-md text-fg-faint hover:bg-surface-elevated hover:text-fg"
-              >
-                <X className="size-4" strokeWidth={1.75} />
-              </button>
-            </div>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" size="sm" disabled={!canSubmit} loading={createMut.isPending}>
+            Create {type}
+          </Button>
+        </>
+      }
+    >
+      <PillGroup label="Type" options={TYPE_OPTIONS} value={type} onChange={setType} />
 
-            {/* Body */}
-            <div className="space-y-4 px-5 py-4">
-              {/* Type selector */}
-              <div className="space-y-1.5">
-                <span className="block text-xs font-medium text-fg-muted">Type</span>
-                <div className="flex gap-2">
-                  {TYPE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setType(opt.value)}
-                      aria-pressed={type === opt.value}
-                      className={cn(
-                        "flex-1 rounded-md border py-2 text-xs transition-colors",
-                        type === opt.value
-                          ? "border-accent bg-accent/10 text-accent"
-                          : "border-border-subtle text-fg-muted hover:bg-surface-elevated hover:text-fg",
-                      )}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+      {/* Title — the one required field (ADHD-9). */}
+      <div className="space-y-1.5">
+        <label className="block text-xs font-medium text-fg-muted" htmlFor="create-insight-title">
+          Title
+        </label>
+        <input
+          id="create-insight-title"
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="What do you want to create?"
+          // eslint-disable-next-line jsx-a11y/no-autofocus
+          autoFocus
+          required
+          className={formControlClass("w-full px-3 py-2 text-sm")}
+        />
+      </div>
 
-              {/* Title — the one required field (ADHD-9). */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-fg-muted" htmlFor="create-insight-title">
-                  Title
-                </label>
-                <input
-                  id="create-insight-title"
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="What do you want to create?"
-                  // eslint-disable-next-line jsx-a11y/no-autofocus
-                  autoFocus
-                  required
-                  className={formControlClass("w-full px-3 py-2 text-sm")}
-                />
-              </div>
-
-              {/* Type-specific field */}
-              {type === "goal" && (
-                <div className="space-y-1.5">
-                  <span className="block text-xs font-medium text-fg-muted">Kind</span>
-                  <div className="flex gap-2">
-                    {GOAL_KINDS.map((k) => (
-                      <button
-                        key={k.value}
-                        type="button"
-                        onClick={() => setKind(k.value)}
-                        aria-pressed={kind === k.value}
-                        className={cn(
-                          "flex-1 rounded-md border py-2 text-xs transition-colors",
-                          kind === k.value
-                            ? "border-accent bg-accent/10 text-accent"
-                            : "border-border-subtle text-fg-muted hover:bg-surface-elevated hover:text-fg",
-                        )}
-                      >
-                        {k.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {type === "habit" && (
-                <div className="space-y-1.5">
-                  <span className="block text-xs font-medium text-fg-muted">Cadence</span>
-                  <div className="flex gap-2">
-                    {CADENCES.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setCadence(c)}
-                        aria-pressed={cadence === c}
-                        className={cn(
-                          "flex-1 rounded-md border py-2 text-xs capitalize transition-colors",
-                          cadence === c
-                            ? "border-accent bg-accent/10 text-accent"
-                            : "border-border-subtle text-fg-muted hover:bg-surface-elevated hover:text-fg",
-                        )}
-                      >
-                        {c}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {type === "task" && (
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-medium text-fg-muted" htmlFor="create-insight-due">
-                    Due date (optional)
-                  </label>
-                  <input
-                    id="create-insight-due"
-                    type="date"
-                    value={dueAt}
-                    onChange={(e) => setDueAt(e.target.value)}
-                    className={formControlClass("w-full px-3 py-2 text-sm")}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={handleClose}
-                disabled={createMut.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                disabled={!canSubmit}
-                loading={createMut.isPending}
-              >
-                Create {type}
-              </Button>
-            </div>
-          </form>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+      {/* Type-specific field */}
+      {type === "goal" && (
+        <PillGroup label="Kind" options={GOAL_KINDS} value={kind} onChange={setKind} />
+      )}
+      {type === "habit" && (
+        <PillGroup label="Cadence" options={CADENCE_OPTIONS} value={cadence} onChange={setCadence} capitalize />
+      )}
+      {type === "task" && (
+        <div className="space-y-1.5">
+          <label className="block text-xs font-medium text-fg-muted" htmlFor="create-insight-due">
+            Due date (optional)
+          </label>
+          <input
+            id="create-insight-due"
+            type="date"
+            value={dueAt}
+            onChange={(e) => setDueAt(e.target.value)}
+            className={formControlClass("w-full px-3 py-2 text-sm")}
+          />
+        </div>
+      )}
+    </ModalShell>
   );
 };

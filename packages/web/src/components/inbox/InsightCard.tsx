@@ -175,7 +175,7 @@ export function InsightCard({ insight }: { insight: InsightRow }): JSX.Element {
               icon={<MessageCircle className="size-3.5" strokeWidth={1.75} />}
               label="Discuss"
               onClick={handleDiscuss}
-              variant="primary"
+              tone="primary"
             />
             {/* Hidden once this insight has already produced an entity (it stays
                 stamped through a reactivate) so a reactivated card can't spawn a
@@ -243,9 +243,16 @@ export function InsightCard({ insight }: { insight: InsightRow }): JSX.Element {
   );
 }
 
-const TONE_CLASS: Record<"success" | "faint", string> = {
+type ActionTone = "primary" | "success" | "faint" | "default";
+
+// Single semantic axis: primary (accent CTA), success (positive closure),
+// faint (soft reject), default (neutral). One prop, one lookup — no overlapping
+// variant/tone props that could be passed together.
+const TONE_CLASS: Record<ActionTone, string> = {
+  primary: "text-accent hover:bg-accent/10",
   success: "text-success-500 hover:bg-success-500/10",
   faint: "text-fg-faint hover:bg-surface-elevated/60 hover:text-fg-muted",
+  default: "text-fg-muted hover:bg-surface-elevated/60 hover:text-fg",
 };
 
 const ActionButton = ({
@@ -253,17 +260,14 @@ const ActionButton = ({
   label,
   onClick,
   pending,
-  variant,
-  tone,
+  tone = "default",
   title,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
   pending?: boolean;
-  variant?: "primary";
-  /** Semantic accent distinguishing positive closure (success) from soft reject (faint). */
-  tone?: "success" | "faint";
+  tone?: ActionTone;
   title?: string;
 }): JSX.Element => (
   <button
@@ -273,11 +277,7 @@ const ActionButton = ({
     title={title}
     className={cn(
       "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs transition-colors",
-      variant === "primary"
-        ? "text-accent hover:bg-accent/10"
-        : tone
-          ? TONE_CLASS[tone]
-          : "text-fg-muted hover:bg-surface-elevated/60 hover:text-fg",
+      TONE_CLASS[tone],
       pending && "opacity-60",
     )}
   >

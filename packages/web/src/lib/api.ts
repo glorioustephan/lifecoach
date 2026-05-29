@@ -14,6 +14,7 @@ import type {
   GoalCadence,
   GoalReviewCadence,
   InsightState as SchemaInsightState,
+  CreateEntityFromInsightInput,
   Habit,
   HabitCompletion,
 } from "@lifecoach/schemas";
@@ -190,11 +191,13 @@ export interface InsightRow {
   actedEntityId?: string | null;
 }
 
-/** Request body for creating an entity directly from an inbox card. */
-export type CreateEntityFromInsightBody =
-  | { type: "goal"; title: string; kind?: GoalKind; outcome?: string }
-  | { type: "habit"; title: string; cadence: HabitRow["cadence"] }
-  | { type: "task"; title: string; dueAt?: number; notes?: string };
+/**
+ * Request body for creating an entity directly from an inbox card. Derived from
+ * the canonical zod schema in @lifecoach/schemas (type-only import — no runtime
+ * zod is pulled into the web bundle) so it can't drift from what the server
+ * actually validates.
+ */
+export type CreateEntityFromInsightBody = CreateEntityFromInsightInput;
 
 /** Response from POST /api/inbox/:id/create-entity. */
 export type CreateEntityFromInsightResult =

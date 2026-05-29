@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { goalKind } from "./goal.js";
+import { habitCadence } from "./habit.js";
 
 export const insightPriority = z.union([
   z.literal(1),
@@ -66,5 +68,35 @@ export const newInsightSchema = insightSchema.omit({
   actedEntityId: true,
 });
 export type NewInsight = z.input<typeof newInsightSchema>;
+
+/**
+ * Request contract for creating an entity directly from an inbox card
+ * (POST /api/inbox/:id/create-entity). One source of truth shared by the server
+ * route (parses it) and the web client (derives its request body type via
+ * z.input, so the goal `kind` default stays optional for callers).
+ */
+export const createEntityFromInsightInput = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("goal"),
+    title: z.string().min(1),
+    kind: goalKind.default("outcome"),
+    outcome: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("habit"),
+    title: z.string().min(1),
+    cadence: habitCadence,
+  }),
+  z.object({
+    type: z.literal("task"),
+    title: z.string().min(1),
+    dueAt: z.number().int().optional().describe("Epoch milliseconds"),
+    notes: z.string().optional(),
+  }),
+]);
+/** Caller-facing request body (goal `kind` optional — server applies the default). */
+export type CreateEntityFromInsightInput = z.input<typeof createEntityFromInsightInput>;
+/** Parsed/validated input (goal `kind` resolved to its default). */
+export type CreateEntityFromInsightParsed = z.infer<typeof createEntityFromInsightInput>;
 
 export type InsightState = "active" | "acted" | "dismissed" | "snoozed";

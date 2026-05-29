@@ -1,41 +1,20 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Lifecoach } from "@lifecoach/core";
-import { goalKind, habitCadence } from "@lifecoach/schemas";
+import {
+  createEntityFromInsightInput,
+  type CreateEntityFromInsightParsed,
+} from "@lifecoach/schemas";
 import { parseEnumQuery, parsePagination } from "../lib/query.js";
 
 const snoozeSchema = z.object({
   until: z.union([z.number().int(), z.string()]),
 });
 
-// Create-from-card: one entity per card, type-discriminated. Mirrors the create
-// payloads proven in routes/propose.ts so the floor stays minimal (title only).
-const createEntitySchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("goal"),
-    title: z.string().min(1),
-    kind: goalKind.default("outcome"),
-    outcome: z.string().optional(),
-  }),
-  z.object({
-    type: z.literal("habit"),
-    title: z.string().min(1),
-    cadence: habitCadence,
-  }),
-  z.object({
-    type: z.literal("task"),
-    title: z.string().min(1),
-    dueAt: z.number().int().optional().describe("Epoch milliseconds"),
-    notes: z.string().optional(),
-  }),
-]);
-
-type CreateEntityInput = z.infer<typeof createEntitySchema>;
-
 // Single create site keyed on the discriminator — the markActedWithEntity stamp
 // then has exactly one call site, so a future entity type can't be added with
 // the create but without the provenance stamp.
-const createEntityFromInput = (lc: Lifecoach, input: CreateEntityInput) => {
+const createEntityFromInput = (lc: Lifecoach, input: CreateEntityFromInsightParsed) => {
   switch (input.type) {
     case "goal":
       return {
@@ -147,7 +126,7 @@ export const inboxRoutes = (lc: Lifecoach) => {
     }
 
     const body = await c.req.json().catch(() => null);
-    const parsed = createEntitySchema.safeParse(body);
+    const parsed = createEntityFromInsightInput.safeParse(body);
     if (!parsed.success) {
       return c.json({ error: "invalid_input", issues: parsed.error.issues }, 400);
     }
