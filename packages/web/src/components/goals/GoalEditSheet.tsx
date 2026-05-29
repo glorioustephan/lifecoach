@@ -4,6 +4,7 @@ import { TabNav } from "~/components/ui/TabNav";
 import { type GoalRow } from "~/lib/api";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { MilestonesTab } from "./tabs/MilestonesTab";
+import { GoalHabitsTab } from "./tabs/GoalHabitsTab";
 import { TasksTab } from "./tabs/TasksTab";
 import { EvidenceTab } from "./tabs/EvidenceTab";
 
@@ -12,7 +13,7 @@ interface GoalEditSheetProps {
   onClose: () => void;
 }
 
-type Tab = "overview" | "milestones" | "tasks" | "evidence";
+type Tab = "overview" | "milestones" | "habits" | "tasks" | "evidence";
 
 /**
  * Sheet-based goal editor. Thin router that switches between four tabs;
@@ -51,6 +52,7 @@ export function GoalEditSheet({ goal, onClose }: GoalEditSheetProps): JSX.Elemen
         tabs={[
           { id: "overview", label: "Overview" },
           { id: "milestones", label: "Milestones" },
+          { id: "habits", label: "Habits" },
           { id: "tasks", label: "Tasks" },
           { id: "evidence", label: "Evidence" },
         ]}
@@ -62,6 +64,7 @@ export function GoalEditSheet({ goal, onClose }: GoalEditSheetProps): JSX.Elemen
       <SheetBody>
         {tab === "overview" && <OverviewTab goal={goal} onClose={onClose} />}
         {tab === "milestones" && <MilestonesTab goal={goal} />}
+        {tab === "habits" && <GoalHabitsTab goal={goal} />}
         {tab === "tasks" && <TasksTab goal={goal} />}
         {tab === "evidence" && <EvidenceTab goal={goal} />}
       </SheetBody>

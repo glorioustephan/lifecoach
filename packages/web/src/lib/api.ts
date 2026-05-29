@@ -14,6 +14,8 @@ import type {
   GoalCadence,
   GoalReviewCadence,
   InsightState as SchemaInsightState,
+  Habit,
+  HabitCompletion,
 } from "@lifecoach/schemas";
 
 export type { GoalKind, GoalCadence, GoalReviewCadence } from "@lifecoach/schemas";
@@ -830,6 +832,74 @@ export const api = {
     >;
   }) => postJson<ProposeBulkResult>("/api/propose/bulk", body),
 
+  // ─── Habits API ─────────────────────────────────────────────────────────────
+
+  habits: (opts: { status?: HabitRow["status"]; parentGoalId?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (opts.status) params.set("status", opts.status);
+    if (opts.parentGoalId) params.set("parentGoalId", opts.parentGoalId);
+    const qs = params.toString();
+    return get<{ habits: HabitRow[] }>(`/api/habits${qs ? `?${qs}` : ""}`);
+  },
+
+  habit: (id: string) =>
+    get<{ habit: HabitRow; recentCompletions: HabitCompletionRow[] }>(
+      `/api/habits/${encodeURIComponent(id)}`,
+    ),
+
+  createHabit: (input: {
+    title: string;
+    cadence: HabitRow["cadence"];
+    parentGoalId?: string;
+    parentMilestoneId?: string;
+    notes?: string;
+    status?: HabitRow["status"];
+  }) => postJson<{ habit: HabitRow }>("/api/habits", input),
+
+  updateHabit: (
+    id: string,
+    patch: Partial<{
+      title: string;
+      cadence: HabitRow["cadence"];
+      status: HabitRow["status"];
+      parentGoalId: string | null;
+      parentMilestoneId: string | null;
+      notes: string | null;
+    }>,
+  ) => patchJson<{ habit: HabitRow }>(`/api/habits/${encodeURIComponent(id)}`, patch),
+
+  archiveHabit: (id: string) =>
+    del<{ ok: true }>(`/api/habits/${encodeURIComponent(id)}`),
+
+  completeHabit: (id: string, opts: { date?: string; notes?: string } = {}) =>
+    postJson<{ completion: HabitCompletionRow }>(
+      `/api/habits/${encodeURIComponent(id)}/complete`,
+      opts,
+    ),
+
+  uncompleteHabit: (id: string, completionId: string) =>
+    del<{ ok: true }>(
+      `/api/habits/${encodeURIComponent(id)}/completions/${encodeURIComponent(completionId)}`,
+    ),
+
+  habitMonth: (id: string, year: number, month: number) => {
+    const params = new URLSearchParams({ year: String(year), month: String(month) });
+    return get<{ completions: Record<string, number> }>(
+      `/api/habits/${encodeURIComponent(id)}/month?${params.toString()}`,
+    );
+  },
+
+  habitMonthBatch: (habitIds: string[], year: number, month: number) => {
+    const params = new URLSearchParams({
+      habitIds: habitIds.map(encodeURIComponent).join(","),
+      year: String(year),
+      month: String(month),
+    });
+    return get<{ byHabit: Record<string, Record<string, number>> }>(
+      `/api/habits/month-batch?${params.toString()}`,
+    );
+  },
+
   backfillMonarchCsv: async (file: File): Promise<MonarchBackfillResponse> => {
     const form = new FormData();
     form.append("file", file);
@@ -846,19 +916,27 @@ export const api = {
 };
 
 // ─── Habits ───────────────────────────────────────────────────────────────────
+// Pick<> projections of canonical @lifecoach/schemas types.
+// Adding a field upstream will surface here as a TS error rather than silent drift.
 
-export interface HabitRow {
-  id: string;
-  title: string;
-  cadence: "daily" | "weekly" | "monthly";
-  status: "active" | "paused" | "archived";
-  parentGoalId: string | null;
-  parentMilestoneId: string | null;
-  notes: string | null;
-  lastCompletedAt: number | null;
-  createdAt: number;
-  updatedAt: number;
-}
+export type HabitRow = Pick<
+  Habit,
+  | "id"
+  | "title"
+  | "cadence"
+  | "status"
+  | "parentGoalId"
+  | "parentMilestoneId"
+  | "notes"
+  | "lastCompletedAt"
+  | "createdAt"
+  | "updatedAt"
+>;
+
+export type HabitCompletionRow = Pick<
+  HabitCompletion,
+  "id" | "habitId" | "completedAt" | "notes" | "origin" | "createdAt"
+>;
 
 // ─── Propose bulk-create ──────────────────────────────────────────────────────
 

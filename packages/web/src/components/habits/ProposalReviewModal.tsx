@@ -292,13 +292,12 @@ export const ProposalReviewModal = ({
       const goalName = result.goal?.title;
 
       // ADHD-6: quick reversal — toast includes a View CTA.
-      // Navigate to /goals until the /habits route lands (W-B).
       toast({
         title: `Created ${summary}${goalName ? ` under "${goalName}"` : ""}`,
         variant: "success",
         action: {
           label: "View",
-          onClick: () => void navigate({ to: "/goals" }),
+          onClick: () => void navigate({ to: "/habits" }),
         },
       });
 
