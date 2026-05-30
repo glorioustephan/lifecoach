@@ -29,5 +29,5 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "memory", label: "Memory", to: "/memory", icon: Brain, inTabBar: true },
   { id: "artifacts", label: "Artifacts", to: "/artifacts", icon: FileStack, inTabBar: false },
   { id: "tasks", label: "Tasks", to: "/tasks", icon: CheckCircle2, inTabBar: true },
-  { id: "settings", label: "Settings", to: "/settings", icon: Settings, inTabBar: true },
+  { id: "settings", label: "Settings", to: "/settings", icon: Settings, inTabBar: false },
 ];
