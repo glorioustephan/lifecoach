@@ -18,7 +18,12 @@ import { useToast, type ToastVariant } from "~/lib/use-toast";
 const toastVariants = cva(
   cn(
     "pointer-events-auto relative flex w-full items-start gap-3 overflow-hidden rounded-lg border p-4 pr-10 shadow-lg",
-    "bg-surface-elevated text-fg",
+    // Frosted backing lives on the toast itself (not the viewport), so the blur
+    // only appears behind a visible toast. The translucent surface keeps text
+    // legible over arbitrary page content; variant identity comes from the
+    // border + icon color. (Note: a per-variant bg-*/5 tint would be collapsed
+    // by tailwind-merge and replace this surface, so variants only set border.)
+    "bg-surface-elevated/80 text-fg backdrop-blur-md",
     "data-[state=open]:animate-in data-[state=open]:slide-in-from-right-full data-[state=open]:fade-in-0",
     "data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right-full data-[state=closed]:fade-out-80",
     "data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none",
@@ -29,10 +34,10 @@ const toastVariants = cva(
     variants: {
       variant: {
         default: "border-border",
-        success: "border-success-500/40 bg-success-500/5",
-        error: "border-destructive-500/40 bg-destructive-500/5",
-        warning: "border-warning-500/40 bg-warning-500/5",
-        info: "border-accent/40 bg-accent/5",
+        success: "border-success-500/40",
+        error: "border-destructive-500/40",
+        warning: "border-warning-500/40",
+        info: "border-accent/40",
       },
     },
     defaultVariants: { variant: "default" },
@@ -136,9 +141,14 @@ export const Toaster = (): JSX.Element => {
           }}
         />
       ))}
+      {/* No backdrop-blur on the viewport: it's an always-present, full-width
+          fixed strip, so a backdrop filter here blurs the content behind it (the
+          ViewHeader) even with zero toasts — visible on mobile portrait where the
+          viewport is pinned top/full-width. The frosted backing lives on each
+          ToastRoot instead, so the blur only appears under an actual toast. */}
       <RadixToast.Viewport
         className={cn(
-          "pointer-events-none fixed z-[100] flex max-h-screen w-full flex-col-reverse gap-2 p-4 outline-none backdrop-blur-xs",
+          "pointer-events-none fixed z-[100] flex max-h-screen w-full flex-col-reverse gap-2 p-4 outline-none",
           "top-4 sm:top-auto sm:bottom-4 sm:right-4 sm:max-w-sm",
           "pt-[max(env(safe-area-inset-top),1rem)] sm:pt-0 sm:pb-[max(env(safe-area-inset-bottom),1rem)]",
         )}
