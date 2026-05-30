@@ -470,17 +470,38 @@ export class MonarchClient {
 
   async listTransactions(options?: Partial<GetTransactionsOptions>): Promise<MonarchTransaction[]> {
     const { auth, graphql } = this.ensureAuth();
+    const variables: Record<string, unknown> = {
+      offset: options?.offset,
+      limit: options?.limit,
+      orderBy: options?.orderBy,
+      filters: options?.filters ?? {},
+    };
+    // Diagnostic: log outgoing variables so we can see exactly what is sent on
+    // failure. Token/auth fields are never in variables — they go in headers.
+    console.debug(
+      "[monarch] listTransactions → GraphQL variables:",
+      JSON.stringify(variables),
+    );
     try {
       const response = await withMonarchRetry(() =>
-        graphql.request(GET_TRANSACTIONS_QUERY, auth, looseTransactionsResponse, {
-          offset: options?.offset,
-          limit: options?.limit,
-          orderBy: options?.orderBy,
-          filters: options?.filters ?? {},
-        }),
+        graphql.request(GET_TRANSACTIONS_QUERY, auth, looseTransactionsResponse, variables),
       );
       return response.allTransactions.results.map(mapMonarchTransaction);
     } catch (err) {
+      // Diagnostic: surface the full raw error shape so we can distinguish
+      // a GraphQL errors[] response from a network/HTTP error. The `err` here
+      // is already wrapped by MonarchGraphQLClient.wrapError(), which flattens
+      // errors[] into the .message. Peek at the original response if present.
+      const anyErr = err as Record<string, unknown> | null;
+      const rawResponse = anyErr?.["response"] ?? anyErr?.["cause"] ?? null;
+      console.error(
+        "[monarch] listTransactions FAILED — operation: Web_GetTransactionsList",
+        "\n  variables:", JSON.stringify(variables),
+        "\n  error.message:", err instanceof Error ? err.message : String(err),
+        "\n  error.name:", err instanceof Error ? err.name : typeof err,
+        "\n  raw response (if any):", rawResponse ? JSON.stringify(rawResponse) : "(none — error did not carry a response body)",
+        "\n  isMonarchTransient:", isMonarchTransient(err),
+      );
       throw new LifecoachError(
         `Failed to list Monarch transactions: ${err instanceof Error ? err.message : String(err)}`,
         isMonarchTransient(err) ? "MONARCH_TRANSIENT" : "MONARCH_TRANSACTIONS_FAILED",
